@@ -1,0 +1,18 @@
+# secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# dependencies and build output
+node_modules/
+.venv/
+__pycache__/
+dist/
+build/
+.next/
+
+# local
+.DS_Store
+.staging/
