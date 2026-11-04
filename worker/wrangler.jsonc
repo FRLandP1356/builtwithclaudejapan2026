@@ -22,6 +22,8 @@
     // "DAILY_TOTAL_LIMIT": "300",
     // "DAILY_IP_LIMIT": "20"
   }
-  // The key is a secret, not a var: `wrangler secret put ANTHROPIC_API_KEY` at deploy time.
-  // For local development put it in worker/.dev.vars (git-ignored); see worker/.dev.vars.example.
+  // The key and the IP hashing secret are secrets, not vars: `wrangler secret put ANTHROPIC_API_KEY` and
+  // `wrangler secret put IP_HASH_SECRET` at deploy time.
+  // For local development put them in worker/.dev.vars (git-ignored); see worker/.dev.vars.example.
+  // Before deploying, work through the checklist in worker/README.md (spend limit first).
 }

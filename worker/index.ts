@@ -10,6 +10,8 @@ import { MAX_BODY_BYTES, validateChatBody } from './validate';
 export interface Env {
   /** Secret. Set with `wrangler secret put ANTHROPIC_API_KEY`; never in config, code, logs or responses. */
   ANTHROPIC_API_KEY: string;
+  /** Secret. Set with `wrangler secret put IP_HASH_SECRET`; keys the HMAC that hides client IPs in KV. */
+  IP_HASH_SECRET: string;
   /** KV namespace holding the daily counters. */
   RATE_KV: KVNamespace;
   /** Comma-separated list of page origins that may call this Worker (exact match). */
@@ -84,13 +86,13 @@ async function readTextCapped(request: Request, maxBytes: number): Promise<strin
   return new TextDecoder().decode(bytes);
 }
 
-/**
- * Upstream statuses that are passed through to the page: success, and request-level errors (400, 404, 413, 422 ...).
- * Auth problems with our own key (401, 403), rate limits (429) and server errors become a generic 502.
- */
-function isPassThroughStatus(status: number): boolean {
-  if (status === 200) return true;
-  return status >= 400 && status < 500 && status !== 401 && status !== 403 && status !== 429;
+/** Releases the connection for a response we are not going to read. */
+async function discardBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Nothing useful to do if the stream is already closed or errored.
+  }
 }
 
 async function callAnthropic(
@@ -111,6 +113,7 @@ async function callAnthropic(
         'content-type': 'application/json',
       },
       body: JSON.stringify(payload),
+      redirect: 'error',
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
   } catch {
@@ -119,7 +122,10 @@ async function callAnthropic(
     return upstreamError();
   }
 
-  if (!isPassThroughStatus(upstream.status)) {
+  // Only a 200 is relayed. Every other status, 4xx included, becomes the same generic 502 and the upstream
+  // body is never returned: error text can describe our account (billing state, key problems) to a stranger.
+  if (upstream.status !== 200) {
+    await discardBody(upstream);
     console.warn(`upstream responded ${upstream.status}`);
     return upstreamError();
   }
@@ -187,20 +193,21 @@ export async function handleRequest(
   }
   const { messages, tools } = validation.value;
 
-  if (!env.ANTHROPIC_API_KEY) {
-    console.error('ANTHROPIC_API_KEY is not configured');
-    return jsonResponse({ error: 'server_misconfigured' }, 500, origin);
+  // Fail closed when a secret is missing, before any quota is charged. Names only; values are never logged.
+  if (!env.ANTHROPIC_API_KEY || !env.IP_HASH_SECRET) {
+    console.error(`server secret not configured: ${!env.ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY' : 'IP_HASH_SECRET'}`);
+    return jsonResponse({ error: 'server_misconfigured' }, 503, origin);
   }
 
   // Quota is charged only for requests that will actually reach the API.
-  const ip = request.headers.get('cf-connecting-ip') ?? 'unknown';
+  const clientIp = request.headers.get('cf-connecting-ip') ?? '';
   const limits = {
     perIp: parseLimit(env.DAILY_IP_LIMIT, DEFAULT_IP_LIMIT),
     total: parseLimit(env.DAILY_TOTAL_LIMIT, DEFAULT_TOTAL_LIMIT),
   };
   let allowed: boolean;
   try {
-    allowed = await consumeQuota(env.RATE_KV, ip, limits);
+    allowed = await consumeQuota(env.RATE_KV, clientIp, limits, env.IP_HASH_SECRET);
   } catch {
     // Fail closed: without the counters the spending cap cannot be enforced.
     console.error('rate limit store unavailable');

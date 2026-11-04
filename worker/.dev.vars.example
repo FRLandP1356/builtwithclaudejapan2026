@@ -1,2 +1,3 @@
-# Copy to worker/.dev.vars (git-ignored) for local `wrangler dev`. Never commit a real key.
+# Copy to worker/.dev.vars (git-ignored) for local `wrangler dev`. Never commit real values.
 ANTHROPIC_API_KEY=sk-ant-REPLACE_ME
+IP_HASH_SECRET=REPLACE_WITH_A_LONG_RANDOM_STRING
