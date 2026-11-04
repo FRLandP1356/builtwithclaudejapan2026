@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "answers": [
+    {
+      "id": "q1",
+      "question": "日本の人口が減り出してから、東京はどうなっていますか？",
+      "answer": "",
+      "trace": [],
+      "status": "pending",
+      "note": "Generated from real Claude answers after the API credit is granted; see docs"
+    },
+    {
+      "id": "q2",
+      "question": "田辺市の2100年の子どもの数は、何人くらいですか？",
+      "answer": "",
+      "trace": [],
+      "status": "pending",
+      "note": "Generated from real Claude answers after the API credit is granted; see docs"
+    },
+    {
+      "id": "q3",
+      "question": "和歌山県の人口を10%増やすと、ほかの地域はどうなりますか？",
+      "answer": "",
+      "trace": [],
+      "status": "pending",
+      "note": "Generated from real Claude answers after the API credit is granted; see docs"
+    },
+    {
+      "id": "q4",
+      "question": "人口が3,000人を下回る町は、2100年に何町ありますか？",
+      "answer": "",
+      "trace": [],
+      "status": "pending",
+      "note": "Generated from real Claude answers after the API credit is granted; see docs"
+    },
+    {
+      "id": "q5",
+      "question": "公式の推計と、このアプリの試算は、どう違いますか？",
+      "answer": "",
+      "trace": [],
+      "status": "pending",
+      "note": "Generated from real Claude answers after the API credit is granted; see docs"
+    }
+  ]
+}
