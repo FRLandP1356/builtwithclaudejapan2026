@@ -15,6 +15,28 @@
 - 応答は上流が 200 のときだけそのまま返します。上流が 200 以外（4xx も含む）、ネットワークの失敗は、中身を見せずに 502 `{ "error": "upstream_error" }` です。
 - 呼び出せる出どころは `ALLOWED_ORIGINS`（カンマ区切り、完全一致）だけです。`Origin` が無い、または違う場合は 403 です。**これは認証ではありません。** 他のウェブサイトのページの中からブラウザ経由でこの Worker を使わせない、という程度の仕組みです。`curl` などのブラウザ以外の道具は `Origin` に好きな値を付けられるので、これでは止まりません。
 
+## 応答コード（Response codes）
+
+エラーの応答の本文は `{ "error": "<コード>" }` です（429 だけ `"cached": true` が付きます）。コードと HTTP ステータスは `worker/index.ts` と `worker/validate.ts` のとおりです。画面側の動きは `src/ai/client.ts` の `ask()` が決めています。
+
+| コード | HTTP | 意味 | 画面の動き |
+|---|---|---|---|
+| `invalid_body` | 400 | 本文が JSON のオブジェクトではない（配列や文字列など） | 汎用のエラー表示。画面は常に `{ messages }` を送るので、通常は起きません |
+| `invalid_json` | 400 | 本文が JSON として読めない | 同上 |
+| `invalid_messages` | 400 | `messages` が無い・空・41 件以上、またはブロックの形・道具名・長さが決まりに合わない | 同上。会話が長くなる（テキストの合計が 48,000 文字を超える）と起きます |
+| `body_too_large` | 413 | 本文が 64KB を超えた | 「質問が長すぎます。」 |
+| `origin_not_allowed` | 403 | `Origin` が許可リストに無い、または無い | 汎用のエラー表示（保存済みの答えには切り替えません） |
+| `rate_limited` | 429（`cached: true` 付き） | 1 日の回数の上限（IP ごと、または全体）に達した | 同じ質問の保存済みの答えがあればそれを表示（「保存済み」と明示）。無ければ「いまはAIに接続できません。保存済みの質問を試してください。」 |
+| `service_unavailable` | 503 | 回数を数える KV が使えない（通さずに止める） | 429 と同じ |
+| `server_misconfigured` | 503 | `ANTHROPIC_API_KEY` か `IP_HASH_SECRET` が未設定 | 429 と同じ |
+| `upstream_error` | 502 | 上流（Anthropic）が 200 以外、通信の失敗、本文が読めない | 429 と同じ |
+| `not_found` | 404 | `/api/chat` 以外のパス | 汎用のエラー表示 |
+| `method_not_allowed` | 405 | `POST`・`OPTIONS` 以外のメソッド（`allow` ヘッダー付き） | 汎用のエラー表示 |
+
+- 上流が 200 のときは、上流の応答（`{ content, stop_reason, ... }`）をそのまま返します。
+- 画面は、上の表にない 5xx も、ネットワークの失敗も、429 と同じ扱いにします。
+- **毎回の要求には、約 11.8KB（11,801 バイト）の道具の定義が、Worker の側で付きます**（`TOOL_DEFS` を JSON にした大きさ）。画面は道具の定義を送らず、`messages` だけを送ります（ヘッダーは `content-type: application/json` だけ、`credentials: 'omit'`）。
+
 ## 制限は「できるだけ」の仕組みです（Limits are best-effort）
 
 1 日の上限（1 つの IP あたり 20 回、全体で 300 回。`DAILY_IP_LIMIT`・`DAILY_TOTAL_LIMIT` で変えられます）は、Workers KV の数え上げで実装しています。これは**防御の最後の砦ではなく、通常の使い方での目安**です。
