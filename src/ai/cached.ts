@@ -57,13 +57,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** A trace item is `{ tool: string, input, result }`; input and result may be any JSON (null included) but must be there. */
+function readTrace(raw: unknown): TraceItem[] | null {
+  if (!Array.isArray(raw)) return null;
+  const items: TraceItem[] = [];
+  for (const item of raw) {
+    if (!isRecord(item) || typeof item.tool !== 'string' || !('input' in item) || !('result' in item)) return null;
+    items.push({ tool: item.tool, input: item.input, result: item.result });
+  }
+  return items;
+}
+
 /** Keeps only the fields we know, so a hand-edited or stale file cannot put anything else into the page. */
 function readEntry(raw: unknown): CachedAnswer | null {
   if (!isRecord(raw)) return null;
-  const { id, question, answer, trace, status, generatedAt, note } = raw;
+  const { id, question, answer, trace: rawTrace, status, generatedAt, note } = raw;
   if (typeof id !== 'string' || typeof question !== 'string' || typeof answer !== 'string') return null;
-  if (!Array.isArray(trace) || (status !== 'pending' && status !== 'verified')) return null;
-  const entry: CachedAnswer = { id, question, answer, trace: trace as TraceItem[], status };
+  const trace = readTrace(rawTrace);
+  if (trace === null || (status !== 'pending' && status !== 'verified')) return null;
+  const entry: CachedAnswer = { id, question, answer, trace, status };
   if (typeof generatedAt === 'string') entry.generatedAt = generatedAt;
   if (typeof note === 'string') entry.note = note;
   return entry;

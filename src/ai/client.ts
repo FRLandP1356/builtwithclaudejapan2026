@@ -5,11 +5,15 @@
 //   2. Otherwise a tool loop: POST { messages } to the Worker; if the model stopped to use tools, run EVERY requested
 //      tool here with runTool, send the results back, and repeat. The Worker owns the model, the system prompt and the
 //      tool definitions, so the body is `{ messages }` and nothing else.
-//   3. checkNumbers compares the numbers in the answer with the numbers the tools returned in this ask. If some are
-//      missing, the model is asked ONCE to restate the answer using only numbers from the results (its own round budget).
+//   3. checkNumbers compares the numbers in the answer with ALL the numbers the tools returned in this ask. If some are
+//      missing, the model is asked ONCE to restate the answer using only numbers from the results (at most 3 requests).
 //      Still unchecked: the answer comes back with status 'unverified_numbers' and the numbers, for the UI to warn.
+//      Most upstream requests one ask can make: maxRounds + min(3, maxRounds) = 9 at the defaults.
 //   4. If the AI cannot be reached (limit, outage, network) the saved answer for the same question is used when there
 //      is one; otherwise status 'unavailable'. A user abort is never converted: ask() rejects with the AbortError.
+//   5. Before EVERY request the size is measured against the Worker's limits (with a margin). The oldest whole
+//      question-and-answer exchanges of `history` are dropped until it fits (result.trimmed); if even the current
+//      question and tool loop do not fit, nothing is sent (status 'unavailable', needsNewConversation).
 //
 // No DOM. The engine is reached only through EngineContext / runTool.
 import { findCached } from './cached';
@@ -65,7 +69,16 @@ export interface AskOptions {
   /** Most model requests in one pass of the tool loop (the regeneration pass has its own budget). Default 6. */
   maxRounds?: number;
   signal?: AbortSignal;
-  /** The conversation so far: the `messages` of the previous AskResult. */
+  /**
+   * The conversation so far: the `messages` of the previous AskResult.
+   *
+   * The Worker refuses a request with more than 40 messages, more than 48,000 characters of text (counting message
+   * text, tool inputs, tool results and thinking) or a body over 64 KB (Japanese is 3 bytes a character, so the byte
+   * cap is reached first, at roughly 21,000 characters). ask() therefore keeps every request under CLIENT_LIMITS
+   * (36 messages, 40,000 characters, 56,000 bytes): it drops the OLDEST whole exchanges from `history` (a user text
+   * message and everything up to the next user text message, so a tool_use is never separated from its tool_result)
+   * and reports it as `trimmed` / `trimmedExchanges`. The result's `messages` is the trimmed conversation.
+   */
   history?: Message[];
   cache?: CachedAnswers | null;
 }
@@ -79,8 +92,14 @@ export interface AskResult {
   status: 'ok' | 'unverified_numbers' | 'unavailable' | 'error';
   /** A short Japanese note for the user, when there is something to say. */
   message?: string;
-  /** The conversation to pass as `history` next time. After a failure it is the history as it was. */
+  /** The conversation to pass as `history` next time. After a failure it is the history as it was (trimmed, if it was). */
   messages: Message[];
+  /** True when old exchanges had to be dropped from `history` to keep the request inside the Worker's limits. */
+  trimmed?: boolean;
+  /** How many whole exchanges were dropped (present with `trimmed`). */
+  trimmedExchanges?: number;
+  /** True when nothing could be sent because even the current question (and tool loop) is too big. The UI should offer a new conversation. */
+  needsNewConversation?: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -91,6 +110,14 @@ export const DEFAULT_ENDPOINT = '/api/chat';
 export const DEFAULT_MAX_ROUNDS = 6;
 /** A tool result longer than this (as JSON text) is cut before it goes back to the model. */
 export const MAX_TOOL_RESULT_CHARS = 20_000;
+/** The regeneration pass (restating an answer with unverified numbers) makes at most this many requests. */
+export const REGENERATION_MAX_ROUNDS = 3;
+/**
+ * What one request may hold, kept under the Worker's limits (worker/validate.ts: MAX_MESSAGES 40,
+ * MAX_TOTAL_TEXT_CHARS 48,000, MAX_BODY_BYTES 64 KB) so a request the Worker is sure to refuse is never sent.
+ * A test checks these stay inside the real constants.
+ */
+export const CLIENT_LIMITS = { maxMessages: 36, maxChars: 40_000, maxBytes: 56_000 } as const;
 
 const TRUNCATION_MARKER = '…（結果が長すぎるため、ここから先は省略しました）';
 
@@ -101,6 +128,8 @@ const MSG_REJECTED = 'AIへの問い合わせでエラーが起きました。�
 const MSG_TOO_MANY_STEPS = 'この質問は、調べる手順が多すぎて答えを出せませんでした。質問を短くするか、分けてたずねてください。';
 const MSG_EMPTY = 'AIから答えが返ってきませんでした。もう一度お試しください。';
 const MSG_CUT_OFF = '答えが長くなりすぎて、途中で終わっている可能性があります。';
+const MSG_REFUSED = 'この質問にはお答えできません。';
+const MSG_NEW_CONVERSATION = '会話が長くなりすぎました。新しい質問を始めてください。';
 const MSG_UNVERIFIED = '答えの中の一部の数字を、計算の結果と照らし合わせて確かめられませんでした。';
 const MSG_REGENERATION_FAILED = '数字を言い直してもらえなかったため、確かめられていない数字を含む答えを表示しています。';
 const MSG_TOOL_CRASHED = '計算中に問題が起きました。';
@@ -115,6 +144,69 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const isToolUse = (block: Block): block is ToolUseBlock => block.type === 'tool_use';
 const isText = (block: Block): block is TextBlock => block.type === 'text';
+
+/** A plain-data copy, so what the UI gets back shares no objects with the conversation or the saved answers. */
+function cloneData<T>(value: T): T {
+  try {
+    return structuredClone(value);
+  } catch {
+    return value;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Request size (the Worker's limits, measured before every request)
+// ---------------------------------------------------------------------------------------------------------------
+
+export interface RequestSize {
+  messages: number;
+  /** Counted the way worker/validate.ts counts: message text, text blocks, tool inputs (as JSON), tool results, thinking. */
+  chars: number;
+  /** UTF-8 bytes of the JSON body that would be sent. */
+  bytes: number;
+}
+
+function charsOf(message: Message): number {
+  if (typeof message.content === 'string') return message.content.length;
+  let chars = 0;
+  for (const block of message.content) {
+    switch (block.type) {
+      case 'text':
+        chars += block.text.length;
+        break;
+      case 'tool_use':
+        chars += JSON.stringify(block.input).length;
+        break;
+      case 'tool_result':
+        chars += block.content.length;
+        break;
+      case 'thinking':
+        chars += block.thinking.length + block.signature.length;
+        break;
+      case 'redacted_thinking':
+        chars += block.data.length;
+        break;
+    }
+  }
+  return chars;
+}
+
+export function measureRequest(messages: Message[]): RequestSize {
+  return {
+    messages: messages.length,
+    chars: messages.reduce((sum, message) => sum + charsOf(message), 0),
+    bytes: new TextEncoder().encode(JSON.stringify({ messages })).length,
+  };
+}
+
+function withinLimits(size: RequestSize): boolean {
+  return size.messages <= CLIENT_LIMITS.maxMessages && size.chars <= CLIENT_LIMITS.maxChars && size.bytes <= CLIENT_LIMITS.maxBytes;
+}
+
+/** A user message that starts an exchange (the question), as opposed to one that only carries tool results. */
+function startsExchange(message: Message): boolean {
+  return message.role === 'user' && (typeof message.content === 'string' || !message.content.some((block) => block.type === 'tool_result'));
+}
 
 /** True when `end` would cut a surrogate pair in half. */
 function splitsSurrogatePair(text: string, end: number): boolean {
@@ -255,16 +347,51 @@ async function callModel(messages: Message[], env: Env): Promise<ModelTurn> {
 // ---------------------------------------------------------------------------------------------------------------
 
 interface Conversation {
+  /** The history (trimmable), then this ask's question, then the tool loop so far. */
   messages: Message[];
+  /** How many leading messages of `messages` are history. Only these may be dropped. */
+  historyCount: number;
+  /** Whole exchanges dropped from the history so far. */
+  trimmedExchanges: number;
   trace: TraceItem[];
   /** The tool results of this ask, as the model saw them (JSON text). checkNumbers checks the answer against these. */
   seen: string[];
 }
 
 type PassOutcome =
-  | { kind: 'answer'; text: string; cutOff: boolean }
+  | { kind: 'answer'; text: string; note?: string }
   | { kind: 'too_many_steps'; text: string }
-  | { kind: 'empty' };
+  | { kind: 'empty'; refused: boolean };
+
+/** Even the current question and tool loop, with all the history dropped, do not fit in one request. */
+class ConversationTooLong extends Error {
+  constructor() {
+    super('conversation too long for one request');
+    this.name = 'ConversationTooLong';
+  }
+}
+
+/** Drops the oldest whole exchange of the history. False when there is no history left to drop. */
+function dropOldestExchange(conversation: Conversation): boolean {
+  if (conversation.historyCount === 0) return false;
+  let end = 1;
+  while (end < conversation.historyCount && !startsExchange(conversation.messages[end]!)) end++;
+  conversation.messages.splice(0, end);
+  conversation.historyCount -= end;
+  conversation.trimmedExchanges += 1;
+  return true;
+}
+
+/** Makes the next request fit the Worker's limits: trims old exchanges, or throws when that cannot be enough. */
+function fitRequest(conversation: Conversation): void {
+  while (!withinLimits(measureRequest(conversation.messages))) {
+    if (!dropOldestExchange(conversation)) throw new ConversationTooLong();
+  }
+}
+
+function currentHistory(conversation: Conversation): Message[] {
+  return conversation.messages.slice(0, conversation.historyCount);
+}
 
 function executeCall(call: ToolUseBlock, conversation: Conversation, ctx: EngineContext): ToolResultBlock {
   let result: unknown;
@@ -274,7 +401,7 @@ function executeCall(call: ToolUseBlock, conversation: Conversation, ctx: Engine
     // runTool reports bad model input as an { error } object; this is only a bug guard.
     result = { error: 'internal_error', message: MSG_TOOL_CRASHED };
   }
-  conversation.trace.push({ tool: call.name, input: call.input, result });
+  conversation.trace.push({ tool: call.name, input: cloneData(call.input), result });
 
   const formatted = formatToolResult(result);
   conversation.seen.push(formatted.content);
@@ -287,25 +414,28 @@ function executeCall(call: ToolUseBlock, conversation: Conversation, ctx: Engine
  * Talks to the model until it gives a final answer, running its tools in between. At most `maxRounds` requests.
  * Appends to `conversation.messages` as it goes; on success the last message is the assistant's final answer.
  */
-async function runPass(conversation: Conversation, env: Env): Promise<PassOutcome> {
+async function runPass(conversation: Conversation, env: Env, maxRounds: number): Promise<PassOutcome> {
   const earlierText: string[] = [];
-  for (let round = 1; round <= env.maxRounds; round++) {
+  for (let round = 1; round <= maxRounds; round++) {
+    fitRequest(conversation);
     const turn = await callModel(conversation.messages, env);
     const calls = turn.content.filter(isToolUse);
     const text = turn.content.filter(isText).map((block) => block.text).join('');
 
     if (turn.stopReason === 'tool_use' && calls.length > 0) {
       if (text.trim() !== '') earlierText.push(text);
-      if (round === env.maxRounds) return { kind: 'too_many_steps', text: earlierText.join('\n\n') };
+      if (round === maxRounds) return { kind: 'too_many_steps', text: earlierText.join('\n\n') };
       conversation.messages.push({ role: 'assistant', content: turn.content });
       conversation.messages.push({ role: 'user', content: calls.map((call) => executeCall(call, conversation, env.ctx)) });
       continue;
     }
 
-    if (text.trim() === '') return { kind: 'empty' };
-    // A tool_use here (the reply was cut off by max_tokens) has no result to go with it, so it is not kept.
+    const refused = turn.stopReason === 'refusal';
+    if (text.trim() === '') return { kind: 'empty', refused };
+    // A tool_use here (the reply was cut off) has no result to go with it, so it is not kept.
     conversation.messages.push({ role: 'assistant', content: turn.content.filter((block) => !isToolUse(block)) });
-    return { kind: 'answer', text, cutOff: turn.stopReason === 'max_tokens' };
+    const cutOff = turn.stopReason === 'max_tokens' || turn.stopReason === 'model_context_window_exceeded';
+    return { kind: 'answer', text, ...(cutOff ? { note: MSG_CUT_OFF } : refused ? { note: MSG_REFUSED } : {}) };
   }
   return { kind: 'too_many_steps', text: earlierText.join('\n\n') };
 }
@@ -321,7 +451,7 @@ function regenerationRequest(unverified: string[]): string {
 function savedAnswerResult(saved: CachedAnswer, history: Message[], question: string, message?: string): AskResult {
   const result: AskResult = {
     answer: saved.answer,
-    trace: [...saved.trace],
+    trace: saved.trace.map((item) => ({ tool: item.tool, input: cloneData(item.input), result: cloneData(item.result) })),
     unverified: [],
     fromCache: true,
     status: 'ok',
@@ -336,8 +466,21 @@ function savedAnswerResult(saved: CachedAnswer, history: Message[], question: st
 }
 
 /** Nothing usable came back. The conversation is left as it was so the failed question is not part of it. */
-function failureResult(status: 'unavailable' | 'error', message: string, answer: string, trace: TraceItem[], history: Message[]): AskResult {
-  return { answer, trace, unverified: [], fromCache: false, status, message, messages: [...history] };
+function failureResult(
+  status: 'unavailable' | 'error',
+  message: string,
+  answer: string,
+  conversation: Conversation,
+): AskResult {
+  return {
+    answer,
+    trace: conversation.trace,
+    unverified: [],
+    fromCache: false,
+    status,
+    message,
+    messages: currentHistory(conversation),
+  };
 }
 
 function messageForFailure(kind: FailureKind): string {
@@ -349,6 +492,38 @@ function messageForFailure(kind: FailureKind): string {
     default:
       return MSG_UNAVAILABLE;
   }
+}
+
+function okResult(answer: string, note: string | undefined, conversation: Conversation): AskResult {
+  const result: AskResult = {
+    answer,
+    trace: conversation.trace,
+    unverified: [],
+    fromCache: false,
+    status: 'ok',
+    messages: conversation.messages,
+  };
+  if (note !== undefined) result.message = note;
+  return result;
+}
+
+function unverifiedResult(
+  answer: string,
+  unverified: string[],
+  message: string,
+  messages: Message[],
+  conversation: Conversation,
+): AskResult {
+  return { answer, trace: conversation.trace, unverified, fromCache: false, status: 'unverified_numbers', message, messages };
+}
+
+/** Says that old exchanges were dropped, when they were. */
+function withTrimInfo(result: AskResult, conversation: Conversation): AskResult {
+  if (conversation.trimmedExchanges > 0) {
+    result.trimmed = true;
+    result.trimmedExchanges = conversation.trimmedExchanges;
+  }
+  return result;
 }
 
 export async function ask(question: string, ctx: EngineContext, opts: AskOptions = {}): Promise<AskResult> {
@@ -371,59 +546,54 @@ export async function ask(question: string, ctx: EngineContext, opts: AskOptions
   };
   const conversation: Conversation = {
     messages: [...history, { role: 'user', content: question }],
+    historyCount: history.length,
+    trimmedExchanges: 0,
     trace: [],
     seen: [],
   };
+  return withTrimInfo(await converse(question, cache, conversation, env), conversation);
+}
 
+async function converse(question: string, cache: CachedAnswers | null, conversation: Conversation, env: Env): Promise<AskResult> {
   try {
-    const first = await runPass(conversation, env);
-    if (first.kind === 'too_many_steps') return failureResult('error', MSG_TOO_MANY_STEPS, first.text, conversation.trace, history);
-    if (first.kind === 'empty') return failureResult('error', MSG_EMPTY, '', conversation.trace, history);
+    const first = await runPass(conversation, env, env.maxRounds);
+    if (first.kind === 'too_many_steps') return failureResult('error', MSG_TOO_MANY_STEPS, first.text, conversation);
+    if (first.kind === 'empty') return failureResult('error', first.refused ? MSG_REFUSED : MSG_EMPTY, '', conversation);
 
     const firstUnverified = checkNumbers(first.text, conversation.seen).unverified;
-    if (firstUnverified.length === 0) return okResult(first.text, first.cutOff, conversation);
+    if (firstUnverified.length === 0) return okResult(first.text, first.note, conversation);
 
-    // Some numbers are not in the tool results: ask once for a restatement, with a round budget of its own.
+    // Some numbers are not in the tool results: ask once for a restatement, with a smaller budget of its own.
     const afterFirstAnswer = [...conversation.messages];
+    const trimmedBeforeRestatement = conversation.trimmedExchanges;
     conversation.messages.push({ role: 'user', content: regenerationRequest(firstUnverified) });
     let second: PassOutcome | null = null;
     try {
-      second = await runPass(conversation, env);
+      second = await runPass(conversation, env, Math.min(REGENERATION_MAX_ROUNDS, env.maxRounds));
     } catch (error) {
-      if (!(error instanceof RequestFailure)) throw error;
+      if (!(error instanceof RequestFailure) && !(error instanceof ConversationTooLong)) throw error;
     }
     if (second?.kind !== 'answer') {
-      // The restatement did not happen (request failed, too many steps, nothing came back): the first answer is
-      // still the best thing we have, and it goes out flagged.
-      return unverifiedResult(first.text, firstUnverified, MSG_REGENERATION_FAILED, afterFirstAnswer, conversation.trace);
+      // The restatement did not happen (request failed or did not fit, too many steps, nothing came back): the first
+      // answer is still the best thing we have, and it goes out flagged. The conversation is the one after that answer.
+      conversation.trimmedExchanges = trimmedBeforeRestatement;
+      return unverifiedResult(first.text, firstUnverified, MSG_REGENERATION_FAILED, afterFirstAnswer, conversation);
     }
 
     const secondUnverified = checkNumbers(second.text, conversation.seen).unverified;
-    if (secondUnverified.length === 0) return okResult(second.text, second.cutOff, conversation);
-    return unverifiedResult(second.text, secondUnverified, MSG_UNVERIFIED, conversation.messages, conversation.trace);
+    if (secondUnverified.length === 0) return okResult(second.text, second.note, conversation);
+    return unverifiedResult(second.text, secondUnverified, MSG_UNVERIFIED, conversation.messages, conversation);
   } catch (error) {
+    if (error instanceof ConversationTooLong) {
+      const result = failureResult('unavailable', MSG_NEW_CONVERSATION, '', conversation);
+      result.needsNewConversation = true;
+      return result;
+    }
     if (!(error instanceof RequestFailure)) throw error; // a user abort, or a bug: not for us to hide
     if (error.kind === 'unreachable') {
       const saved = findCached(cache, question);
-      if (saved) return savedAnswerResult(saved, history, question, MSG_SAVED);
+      if (saved) return savedAnswerResult(saved, currentHistory(conversation), question, MSG_SAVED);
     }
-    return failureResult('unavailable', messageForFailure(error.kind), '', conversation.trace, history);
+    return failureResult('unavailable', messageForFailure(error.kind), '', conversation);
   }
-}
-
-function okResult(answer: string, cutOff: boolean, conversation: Conversation): AskResult {
-  const result: AskResult = {
-    answer,
-    trace: conversation.trace,
-    unverified: [],
-    fromCache: false,
-    status: 'ok',
-    messages: conversation.messages,
-  };
-  if (cutOff) result.message = MSG_CUT_OFF;
-  return result;
-}
-
-function unverifiedResult(answer: string, unverified: string[], message: string, messages: Message[], trace: TraceItem[]): AskResult {
-  return { answer, trace, unverified, fromCache: false, status: 'unverified_numbers', message, messages };
 }

@@ -175,3 +175,33 @@ describe('SAMPLE_QUESTIONS and public/data/cached_answers.json', () => {
     expect(loaded?.answers.map((a) => a.id)).toEqual(['q1', 'q2', 'q3', 'q4', 'q5']);
   });
 });
+
+describe('loadCachedAnswers: trace items', () => {
+  const respond = (body: unknown): typeof fetch => vi.fn<typeof fetch>(async () => new Response(JSON.stringify(body)));
+
+  it('keeps_a_well_formed_trace', async () => {
+    const trace = [{ tool: 'get_series', input: { areaCode: '13' }, result: { rows: [{ year: 2020 }] } }];
+    const loaded = await loadCachedAnswers(respond({ version: 1, answers: [entry({ trace })] }));
+    expect(loaded?.answers[0]?.trace).toEqual(trace);
+  });
+
+  it('drops_an_entry_whose_trace_has_a_malformed_item', async () => {
+    const answers = [
+      entry({ id: 'a', trace: [{ tool: 'get_series', input: {}, result: {} }] }),
+      entry({ id: 'b', trace: [{ tool: 5, input: {}, result: {} }] as never }),
+      entry({ id: 'c', trace: [{ input: {}, result: {} }] as never }),
+      entry({ id: 'd', trace: [{ tool: 'x', result: {} }] as never }),
+      entry({ id: 'e', trace: [{ tool: 'x', input: {} }] as never }),
+      entry({ id: 'f', trace: ['get_series'] as never }),
+      entry({ id: 'g', trace: [null] as never }),
+    ];
+    const loaded = await loadCachedAnswers(respond({ version: 1, answers }));
+    expect(loaded?.answers.map((a) => a.id)).toEqual(['a']);
+  });
+
+  it('accepts_null_input_and_result_values', async () => {
+    const trace = [{ tool: 'count_areas', input: null, result: null }];
+    const loaded = await loadCachedAnswers(respond({ version: 1, answers: [entry({ trace })] }));
+    expect(loaded?.answers[0]?.trace).toEqual(trace);
+  });
+});

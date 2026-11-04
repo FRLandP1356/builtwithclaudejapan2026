@@ -1,11 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-import { validateChatBody } from '../../worker/validate';
+import { MAX_BODY_BYTES, MAX_MESSAGES, MAX_TOTAL_TEXT_CHARS, validateChatBody } from '../../worker/validate';
 import { makeEngineContext } from '../../test/helpers/engineContext';
-import { ask, formatToolResult, MAX_TOOL_RESULT_CHARS } from './client';
-import type { AskOptions, AskResult, Message } from './client';
+import { ask, CLIENT_LIMITS, formatToolResult, MAX_TOOL_RESULT_CHARS, measureRequest } from './client';
+import type { AskOptions, AskResult, Block, Message } from './client';
 import type { CachedAnswer, CachedAnswers } from './cached';
 import { checkNumbers } from './numberCheck';
 import { runTool } from './tools';
+
+// runTool stays the real thing; one test makes it throw once to prove the client contains the failure.
+vi.mock('./tools', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./tools')>();
+  return { ...actual, runTool: vi.fn(actual.runTool) };
+});
 
 const ctx = makeEngineContext();
 
@@ -382,13 +388,14 @@ describe('tool result size', () => {
 
   it('ask: a huge real tool result is truncated in the request, with the marker', async () => {
     // find_area over areas with very long names: the real tool, the real client, a result far over the cap.
-    const longNames = ctx.areas.slice(0, 40).map((a) => ({ ...a, name: `${'あ'.repeat(4000)}${a.code}` }));
+    // (ASCII names: 20,000 Japanese characters would be ~60 KB, which cannot go in one request at all; see the size guard tests.)
+    const longNames = ctx.areas.slice(0, 40).map((a) => ({ ...a, name: `${'x'.repeat(4000)}${a.code}` }));
     const bigCtx = { ...ctx, areas: longNames };
-    const s = script(toolUseResponse(toolUse('toolu_1', 'find_area', { query: 'あ' })), textResponse('長い結果でした。'));
-    const result = await ask('あ', bigCtx, { fetchFn: s.fetchFn });
+    const s = script(toolUseResponse(toolUse('toolu_1', 'find_area', { query: 'x' })), textResponse('長い結果でした。'));
+    const result = await ask('x', bigCtx, { fetchFn: s.fetchFn });
 
-    const [block] = s.body(1).messages[2]!.content as Array<{ content: string }>;
-    expect(JSON.stringify(runTool('find_area', { query: 'あ' }, bigCtx)).length).toBeGreaterThan(MAX_TOOL_RESULT_CHARS);
+    const [block] = s.body(1).messages[2]!.content as unknown as Array<{ content: string }>;
+    expect(JSON.stringify(runTool('find_area', { query: 'x' }, bigCtx)).length).toBeGreaterThan(MAX_TOOL_RESULT_CHARS);
     expect(block!.content.length).toBeLessThanOrEqual(MAX_TOOL_RESULT_CHARS);
     expect(block!.content).toContain('省略しました');
     expect(result.status).toBe('ok');
@@ -794,5 +801,361 @@ describe('module boundaries', () => {
     const options: AskOptions = { endpoint: '/api/chat', fetchFn: script(textResponse('はい。')).fetchFn, maxRounds: 3, history: [], cache: null };
     const result: AskResult = await ask('こんにちは', ctx, options);
     expect(Object.keys(result).sort()).toEqual(['answer', 'fromCache', 'messages', 'status', 'trace', 'unverified']);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fix round 1
+// ---------------------------------------------------------------------------------------------------------------
+
+const NEW_CONVERSATION = '会話が長くなりすぎました。新しい質問を始めてください。';
+
+const isToolResultBlock = (b: Block): b is Extract<Block, { type: 'tool_result' }> => b.type === 'tool_result';
+const isToolUseBlock = (b: Block): b is Extract<Block, { type: 'tool_use' }> => b.type === 'tool_use';
+
+function isUserTextMessage(m: Message): boolean {
+  return m.role === 'user' && (typeof m.content === 'string' || !m.content.some(isToolResultBlock));
+}
+
+/** The first message is the user's, and no tool_use / tool_result pair is split (each is answered by the next message). */
+function expectWholeExchanges(messages: Message[]): void {
+  expect(messages.length).toBeGreaterThan(0);
+  expect(isUserTextMessage(messages[0]!)).toBe(true);
+  messages.forEach((m, i) => {
+    if (typeof m.content === 'string') return;
+    const uses = m.content.filter(isToolUseBlock).map((b) => b.id);
+    if (m.role === 'assistant' && uses.length > 0) {
+      const next = messages[i + 1];
+      const answered = next && typeof next.content !== 'string' ? next.content.filter(isToolResultBlock).map((b) => b.tool_use_id) : [];
+      expect(answered).toEqual(uses);
+    }
+    const results = m.content.filter(isToolResultBlock).map((b) => b.tool_use_id);
+    if (m.role === 'user' && results.length > 0) {
+      const prev = messages[i - 1];
+      const asked = prev && typeof prev.content !== 'string' ? prev.content.filter(isToolUseBlock).map((b) => b.id) : [];
+      expect(results).toEqual(asked);
+    }
+  });
+}
+
+/** One finished question-and-answer with a tool call in it: 4 messages. `pad` makes the answer longer. */
+function exchange(i: number, pad = ''): Message[] {
+  const id = `toolu_h${i}`;
+  return [
+    { role: 'user', content: `質問${i}` },
+    { role: 'assistant', content: [{ type: 'tool_use', id, name: 'find_area', input: { query: '東京' } }] },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: '{"matches":[]}' }] },
+    { role: 'assistant', content: [{ type: 'text', text: `答え${i}${pad}` }] },
+  ];
+}
+
+/** A question and a text answer only: 2 messages. */
+function plainExchange(i: number, pad = ''): Message[] {
+  return [
+    { role: 'user', content: `質問${i}` },
+    { role: 'assistant', content: [{ type: 'text', text: `答え${i}${pad}` }] },
+  ];
+}
+
+describe('the size guard (the Worker must never be sent a request it will refuse)', () => {
+  it('the_client_limits_are_inside_the_workers_limits_with_a_margin', () => {
+    expect(CLIENT_LIMITS).toEqual({ maxMessages: 36, maxChars: 40_000, maxBytes: 56_000 });
+    expect(CLIENT_LIMITS.maxMessages).toBeLessThan(MAX_MESSAGES);
+    expect(CLIENT_LIMITS.maxChars).toBeLessThan(MAX_TOTAL_TEXT_CHARS);
+    expect(CLIENT_LIMITS.maxBytes).toBeLessThan(MAX_BODY_BYTES);
+  });
+
+  it('measureRequest: counts messages, text the way the Worker counts it, and the UTF-8 bytes of the body', () => {
+    const messages: Message[] = [
+      { role: 'user', content: 'あい' }, // 2
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'abc' }, // 3
+          { type: 'tool_use', id: 'toolu_1', name: 'find_area', input: { a: 1 } }, // JSON '{"a":1}' = 7
+        ],
+      },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'xyz' }] }, // 3
+      { role: 'assistant', content: [{ type: 'thinking', thinking: 'ab', signature: 'cde' }, { type: 'redacted_thinking', data: 'fgh' }] }, // 2 + 3 + 3
+    ];
+    const size = measureRequest(messages);
+    expect(size.messages).toBe(4);
+    expect(size.chars).toBe(2 + 3 + 7 + 3 + 2 + 3 + 3);
+    expect(size.bytes).toBe(new TextEncoder().encode(JSON.stringify({ messages })).length);
+    expect(size.bytes).toBeGreaterThan(JSON.stringify({ messages }).length); // あ and い are 3 bytes each
+  });
+
+  it('twelve_questions_in_a_row_with_facility_check_sized_results_never_make_a_request_the_worker_refuses', async () => {
+    const replies: Step[] = [];
+    for (let q = 0; q < 12; q++) {
+      replies.push(toolUseResponse(toolUse(`toolu_q${q}`, 'facility_check', { areaCode: '30206', year: 2100 })));
+      replies.push(textResponse('田辺市の施設を、人口の目安との比べ方で確かめました。'));
+    }
+    const s = script(...replies);
+
+    let history: Message[] = [];
+    let trimmedAtLeastOnce = false;
+    for (let q = 0; q < 12; q++) {
+      const result = await ask('田辺市の施設は？', ctx, { fetchFn: s.fetchFn, history });
+      expect(result.status, `question ${q + 1}`).toBe('ok');
+      expect(result.trace.map((t) => t.tool)).toEqual(['facility_check']);
+      expect(result.messages.length).toBeLessThanOrEqual(CLIENT_LIMITS.maxMessages);
+      if (result.trimmed) {
+        trimmedAtLeastOnce = true;
+        expect(result.trimmedExchanges).toBeGreaterThan(0);
+      }
+      history = result.messages;
+    }
+
+    expect(trimmedAtLeastOnce).toBe(true);
+    expect(s.mock).toHaveBeenCalledTimes(24); // never a refused request that was retried or skipped
+    expectWorkerAccepts(s); // the real validator, on every body
+    for (let n = 0; n < 24; n++) {
+      expectWholeExchanges(s.body(n).messages);
+      const size = measureRequest(s.body(n).messages);
+      expect(size.chars).toBeLessThanOrEqual(CLIENT_LIMITS.maxChars);
+      expect(size.bytes).toBeLessThanOrEqual(CLIENT_LIMITS.maxBytes);
+      expect(size.bytes).toBeLessThanOrEqual(MAX_BODY_BYTES);
+    }
+  });
+
+  it('trims_the_oldest_whole_exchanges_when_the_history_has_too_many_messages', async () => {
+    const history = Array.from({ length: 20 }, (_, i) => exchange(i)).flat(); // 80 messages
+    const s = script(textResponse('はい。'));
+    const result = await ask('次の質問', ctx, { fetchFn: s.fetchFn, history });
+
+    // 8 exchanges (32 messages) + the new question = 33 <= 36; a ninth would make 37
+    const sent = s.body(0).messages;
+    expect(sent).toEqual([...history.slice(48), { role: 'user', content: '次の質問' }]);
+    expectWholeExchanges(sent);
+    expectWorkerAccepts(s);
+    expect(result.trimmed).toBe(true);
+    expect(result.trimmedExchanges).toBe(12);
+    expect(result.status).toBe('ok');
+    // the conversation handed back is the trimmed one plus this exchange
+    expect(result.messages).toEqual([...history.slice(48), { role: 'user', content: '次の質問' }, { role: 'assistant', content: [{ type: 'text', text: 'はい。' }] }]);
+  });
+
+  it('a_history_that_fits_is_left_alone_and_the_result_carries_no_trim_fields', async () => {
+    const history = exchange(1);
+    const s = script(textResponse('はい。'));
+    const result = await ask('次の質問', ctx, { fetchFn: s.fetchFn, history });
+    expect(s.body(0).messages.slice(0, 4)).toEqual(history);
+    expect(result).not.toHaveProperty('trimmed');
+    expect(result).not.toHaveProperty('trimmedExchanges');
+    expect(result).not.toHaveProperty('needsNewConversation');
+  });
+
+  it('trims_on_the_text_cap_and_on_the_byte_cap_separately', async () => {
+    // 15 two-message exchanges of ASCII: 36,000 characters, 36 KB: fits. Add one more question: still fits.
+    const ascii = Array.from({ length: 15 }, (_, i) => plainExchange(i, 'a'.repeat(2_400))).flat();
+    const fits = script(textResponse('はい。'));
+    const first = await ask('次の質問', ctx, { fetchFn: fits.fetchFn, history: ascii });
+    expect(first.trimmed).toBeUndefined();
+    expect(fits.body(0).messages).toHaveLength(31);
+
+    // the same amount of Japanese text is about three times the bytes, so the byte cap makes it trim
+    const japanese = Array.from({ length: 15 }, (_, i) => plainExchange(i, 'あ'.repeat(1_300))).flat(); // ~19,700 chars, ~60 KB
+    expect(measureRequest(japanese).chars).toBeLessThan(CLIENT_LIMITS.maxChars); // so it is the bytes that force the trim
+    expect(measureRequest(japanese).bytes).toBeGreaterThan(CLIENT_LIMITS.maxBytes);
+    const bytes = script(textResponse('はい。'));
+    const second = await ask('次の質問です', ctx, { fetchFn: bytes.fetchFn, history: japanese });
+    expect(second.trimmed).toBe(true);
+    expect(measureRequest(bytes.body(0).messages).bytes).toBeLessThanOrEqual(CLIENT_LIMITS.maxBytes);
+    expectWorkerAccepts(bytes);
+  });
+
+  it('every_round_is_checked: results that grow the request in the tool loop trim the oldest history before the next request', async () => {
+    const history = Array.from({ length: 15 }, (_, i) => plainExchange(i, 'a'.repeat(2_400))).flat(); // ~36,000 chars
+    const s = script(
+      toolUseResponse(toolUse('toolu_big', 'facility_check', { areaCode: '30206', year: 2100 })), // adds ~5,000 characters
+      textResponse('田辺市の施設を確かめました。'),
+    );
+    const result = await ask('田辺市の施設は？', ctx, { fetchFn: s.fetchFn, history });
+
+    expect(s.body(0).messages).toHaveLength(31); // request 1 still carried the whole history
+    const second = s.body(1).messages;
+    expect(second.length).toBeLessThan(31 + 2);
+    expect(second[0]).not.toEqual(history[0]); // the oldest exchange went
+    expect(second.at(-3)).toEqual({ role: 'user', content: '田辺市の施設は？' }); // the new question and its tool exchange are intact
+    expectWholeExchanges(second);
+    expectWorkerAccepts(s);
+    expect(result.trimmed).toBe(true);
+    expect(result.status).toBe('ok');
+  });
+
+  it('one_oversize_question_is_not_sent: needsNewConversation, no fetch call', async () => {
+    const s = script(textResponse('should not be reached'));
+    const result = await ask('あ'.repeat(45_000), ctx, { fetchFn: s.fetchFn });
+    expect(s.mock).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: 'unavailable',
+      message: NEW_CONVERSATION,
+      needsNewConversation: true,
+      answer: '',
+      fromCache: false,
+      unverified: [],
+    });
+  });
+
+  it('a_question_under_the_text_cap_but_over_the_byte_cap_is_not_sent_either', async () => {
+    const s = script(textResponse('should not be reached'));
+    const question = 'あ'.repeat(20_000); // 20,000 characters, ~60,000 bytes
+    expect(question.length).toBeLessThan(CLIENT_LIMITS.maxChars);
+    const result = await ask(question, ctx, { fetchFn: s.fetchFn, history: exchange(1) });
+    expect(s.mock).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ status: 'unavailable', needsNewConversation: true, message: NEW_CONVERSATION });
+    expect(result.messages).toEqual([]); // the history was dropped to make room and it still did not fit
+  });
+
+  it('a_tool_loop_that_outgrows_the_limits_by_itself_stops_without_sending_the_next_request', async () => {
+    const longNames = ctx.areas.slice(0, 40).map((a) => ({ ...a, name: `${'あ'.repeat(4000)}${a.code}` }));
+    const bigCtx = { ...ctx, areas: longNames };
+    const s = script(
+      toolUseResponse(
+        toolUse('toolu_1', 'find_area', { query: 'あ' }),
+        toolUse('toolu_2', 'find_area', { query: 'あ' }),
+        toolUse('toolu_3', 'find_area', { query: 'あ' }),
+      ), // three results of 20,000 characters
+      textResponse('should not be reached'),
+    );
+    const result = await ask('あ', bigCtx, { fetchFn: s.fetchFn, history: exchange(1) });
+    expect(s.mock).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ status: 'unavailable', needsNewConversation: true, message: NEW_CONVERSATION });
+    expect(result.trace).toHaveLength(3);
+  });
+
+  it('a_regeneration_request_that_cannot_fit_returns_the_first_answer_flagged_instead', async () => {
+    const long = `${'あ'.repeat(39_980)}2,500万人`; // an answer so long that question + answer + correction is over the cap
+    const s = script(textResponse(long), textResponse('should not be reached'));
+    const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: s.fetchFn });
+    expect(s.mock).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe('unverified_numbers');
+    expect(result.answer).toBe(long);
+    expect(result.unverified).toEqual(['2,500万']);
+    expect(result).not.toHaveProperty('needsNewConversation');
+  });
+});
+
+describe('the number check uses ALL the tool results of the ask', () => {
+  it('a_number_that_only_the_earlier_result_contains_is_verified', async () => {
+    const s = script(
+      toolUseResponse(toolUse('toolu_1', 'get_series', { areaCode: '13', years: [2020] })),
+      toolUseResponse(toolUse('toolu_2', 'find_area', { query: '大阪' })), // contains no population at all
+      textResponse('東京都の2020年の人口は、約1,405万人です。大阪を探しました。'),
+    );
+    const result = await ask('東京と大阪', ctx, { fetchFn: s.fetchFn });
+    expect(result.trace.map((t) => t.tool)).toEqual(['get_series', 'find_area']);
+    expect(s.mock).toHaveBeenCalledTimes(3); // no regeneration
+    expect(result.status).toBe('ok');
+    expect(result.unverified).toEqual([]);
+  });
+
+  it('numbers_from_the_first_and_the_last_result_are_both_verified', async () => {
+    const osaka = runTool('get_series', { areaCode: '27', years: [2020] }, ctx) as { rows: Array<{ population: number }> };
+    const osakaMan = Math.round(osaka.rows[0]!.population / 10_000).toLocaleString('en-US');
+    const s = script(
+      toolUseResponse(toolUse('toolu_1', 'get_series', { areaCode: '13', years: [2020] })),
+      toolUseResponse(toolUse('toolu_2', 'get_series', { areaCode: '27', years: [2020] })),
+      textResponse(`2020年は、東京都が約1,405万人、大阪府が約${osakaMan}万人です。`),
+    );
+    const result = await ask('東京と大阪', ctx, { fetchFn: s.fetchFn });
+    expect(s.mock).toHaveBeenCalledTimes(3);
+    expect(result.status).toBe('ok');
+    expect(result.unverified).toEqual([]);
+  });
+
+  it('negative_twin: a number that no result contains is flagged, even with two tools having run', async () => {
+    const bad = '東京都の2020年の人口は、約2,500万人です。';
+    const s = script(
+      toolUseResponse(toolUse('toolu_1', 'get_series', { areaCode: '13', years: [2020] })),
+      toolUseResponse(toolUse('toolu_2', 'find_area', { query: '大阪' })),
+      textResponse(bad),
+      textResponse(bad),
+    );
+    const result = await ask('東京と大阪', ctx, { fetchFn: s.fetchFn });
+    expect(s.mock).toHaveBeenCalledTimes(4); // regenerated once
+    expect(result.status).toBe('unverified_numbers');
+    expect(result.unverified).toEqual(['2,500万']);
+  });
+});
+
+describe('the regeneration pass has a smaller budget', () => {
+  it('uses_at_most_three_requests_even_when_maxRounds_is_larger', async () => {
+    const s = script(
+      textResponse('東京都は約2,500万人です。'),
+      ...Array.from({ length: 6 }, (_, i) => toolUseResponse(toolUse(`toolu_${i}`, 'find_area', { query: '東京' }))),
+    );
+    const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: s.fetchFn }); // maxRounds 6
+    expect(s.mock).toHaveBeenCalledTimes(1 + 3); // 6 + min(3, 6) = 9 is the most a single ask can make
+    expect(result.status).toBe('unverified_numbers');
+    expect(result.answer).toBe('東京都は約2,500万人です。');
+  });
+
+  it('never_exceeds_maxRounds_when_that_is_smaller_than_three', async () => {
+    const s = script(
+      textResponse('東京都は約2,500万人です。'),
+      ...Array.from({ length: 6 }, (_, i) => toolUseResponse(toolUse(`toolu_${i}`, 'find_area', { query: '東京' }))),
+    );
+    await ask(TOKYO_QUESTION, ctx, { fetchFn: s.fetchFn, maxRounds: 1 });
+    expect(s.mock).toHaveBeenCalledTimes(1 + 1);
+  });
+});
+
+describe('stop reasons', () => {
+  it('refusal_with_no_text: an error with the short refusal message', async () => {
+    const s = script(modelResponse([], 'refusal'));
+    const result = await ask('よくない質問', ctx, { fetchFn: s.fetchFn });
+    expect(result).toMatchObject({ status: 'error', message: 'この質問にはお答えできません。', answer: '' });
+  });
+
+  it('refusal_with_text: the text is kept and the message is added', async () => {
+    const s = script(textResponse('その質問にはお答えできません。', 'refusal'));
+    const result = await ask('よくない質問', ctx, { fetchFn: s.fetchFn });
+    expect(result.status).toBe('ok');
+    expect(result.answer).toBe('その質問にはお答えできません。');
+    expect(result.message).toBe('この質問にはお答えできません。');
+  });
+
+  it('model_context_window_exceeded_is_treated_like_max_tokens', async () => {
+    const s = script(textResponse('東京都の人口は途中で', 'model_context_window_exceeded'));
+    const result = await ask('東京', ctx, { fetchFn: s.fetchFn });
+    expect(result.status).toBe('ok');
+    expect(result.message).toContain('途中');
+  });
+});
+
+describe('a tool that crashes', () => {
+  it('runTool_throwing_becomes_an_is_error_tool_result_without_the_exception_text', async () => {
+    vi.mocked(runTool).mockImplementationOnce(() => {
+      throw new Error('SECRET-INTERNAL-DETAIL at /Users/someone/src/engine.ts:42');
+    });
+    const s = script(toolUseResponse(toolUse('toolu_1', 'get_series', { areaCode: '13' })), textResponse('計算できませんでした。'));
+    const result = await ask('東京', ctx, { fetchFn: s.fetchFn });
+
+    const [block] = s.body(1).messages[2]!.content as unknown as Array<Record<string, unknown>>;
+    expect(block).toMatchObject({ tool_use_id: 'toolu_1', is_error: true });
+    expect(JSON.parse(block!.content as string)).toMatchObject({ error: 'internal_error' });
+    expect(JSON.stringify(s.body(1))).not.toContain('SECRET-INTERNAL-DETAIL');
+    expect(JSON.stringify(result)).not.toContain('SECRET-INTERNAL-DETAIL');
+    expect(result.trace[0]!.result).toMatchObject({ error: 'internal_error' });
+    expect(result.status).toBe('ok');
+  });
+});
+
+describe('results do not share references with the conversation or the cache', () => {
+  it('changing_trace_input_does_not_change_the_messages', async () => {
+    const s = script(toolUseResponse(toolUse('toolu_1', 'find_area', { query: '東京' })), textResponse('東京都です。'));
+    const result = await ask('東京', ctx, { fetchFn: s.fetchFn });
+    (result.trace[0]!.input as { query: string }).query = 'MUTATED';
+    expect(JSON.stringify(result.messages)).not.toContain('MUTATED');
+  });
+
+  it('changing_the_trace_of_a_saved_answer_does_not_change_the_cache', async () => {
+    const cache = cacheOf(verifiedEntry());
+    const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script().fetchFn, cache });
+    (result.trace[0]!.input as { areaCode: string }).areaCode = 'MUTATED';
+    result.trace.pop();
+    expect(cache.answers[0]!.trace).toEqual([{ tool: 'get_series', input: { areaCode: '13' }, result: { rows: [] } }]);
   });
 });
