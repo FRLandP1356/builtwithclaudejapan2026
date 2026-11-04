@@ -1,11 +1,11 @@
-import { isAllowedToolName, type ToolName } from './allowlist';
+// The tool names come from the one shared, data-only module that also holds the definitions the Worker sends.
+import { TOOL_NAMES } from '../src/ai/toolDefs';
 
 export const MAX_BODY_BYTES = 64 * 1024;
 export const MAX_MESSAGES = 40;
 /** Cap on all text the client can make us pay for: strings, text blocks, tool results, tool inputs, thinking. */
 export const MAX_TOTAL_TEXT_CHARS = 48_000;
-const MAX_TOOL_DESCRIPTION_CHARS = 4000;
-const MAX_SCHEMA_CHARS = 4000;
+const ALLOWED_TOOL_NAMES: ReadonlySet<string> = new Set(TOOL_NAMES);
 // The Messages API requires tool_use ids to match this pattern.
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -16,7 +16,7 @@ export interface TextBlock {
 export interface ToolUseBlock {
   type: 'tool_use';
   id: string;
-  name: ToolName;
+  name: string;
   input: Record<string, unknown>;
 }
 export interface ToolResultBlock {
@@ -41,15 +41,9 @@ export interface ChatMessage {
   content: string | ContentBlock[];
 }
 
-export interface ToolDef {
-  name: ToolName;
-  description: string;
-  input_schema: Record<string, unknown>;
-}
-
+/** The request body is `{ messages }` and nothing else. Tool definitions are server-owned (see index.ts). */
 export interface ChatRequest {
   messages: ChatMessage[];
-  tools: ToolDef[];
 }
 
 export type ValidationResult =
@@ -139,7 +133,7 @@ function rebuildBlock(role: 'user' | 'assistant', raw: unknown, budget: TextBudg
     case 'tool_use': {
       if (role !== 'assistant') return null;
       const id = readId(raw.id);
-      if (id === null || typeof raw.name !== 'string' || !isAllowedToolName(raw.name)) return null;
+      if (id === null || typeof raw.name !== 'string' || !ALLOWED_TOOL_NAMES.has(raw.name)) return null;
       if (!isPlainObject(raw.input)) return null;
       if (!budget.spend(JSON.stringify(raw.input).length)) return null;
       return { type: 'tool_use', id, name: raw.name, input: raw.input };
@@ -182,31 +176,16 @@ function rebuildMessage(raw: unknown, budget: TextBudget): ChatMessage | null {
   return { role, content: blocks };
 }
 
-type ToolValidation = { ok: true; tool: ToolDef } | { ok: false; error: string };
-
-function validateTool(raw: unknown): ToolValidation {
-  if (!isPlainObject(raw)) return fail('invalid_tools');
-  const { name, description, input_schema } = raw;
-  if (typeof name !== 'string') return fail('invalid_tools');
-  if (!isAllowedToolName(name)) return fail('unknown_tool');
-  if (typeof description !== 'string' || description.length === 0 || description.length > MAX_TOOL_DESCRIPTION_CHARS) {
-    return fail('invalid_tools');
-  }
-  if (!isPlainObject(input_schema) || JSON.stringify(input_schema).length > MAX_SCHEMA_CHARS) {
-    return fail('invalid_tools');
-  }
-  // Rebuilt from the three validated fields, so nothing else the client sent (type, cache_control, ...) survives.
-  return { ok: true, tool: { name, description, input_schema } };
-}
-
 /**
  * Validates the parsed JSON body and returns a copy rebuilt from known fields only:
- * every message, content block and tool is reconstructed, so unknown or nested client fields never leave this Worker.
+ * every message and content block is reconstructed, so unknown or nested client fields never leave this Worker.
+ * Only `messages` is read. A client `tools` field (or any other unknown top-level field) is ignored, not rejected:
+ * the tool definitions are sent from the shared module on every request.
  */
 export function validateChatBody(body: unknown): ValidationResult {
   if (!isPlainObject(body)) return fail('invalid_body');
 
-  const { messages: rawMessages, tools: rawTools } = body;
+  const { messages: rawMessages } = body;
 
   if (!Array.isArray(rawMessages) || rawMessages.length === 0 || rawMessages.length > MAX_MESSAGES) {
     return fail('invalid_messages');
@@ -219,16 +198,5 @@ export function validateChatBody(body: unknown): ValidationResult {
     messages.push(message);
   }
 
-  if (!Array.isArray(rawTools)) return fail('invalid_tools');
-  const tools: ToolDef[] = [];
-  const seen = new Set<string>();
-  for (const raw of rawTools) {
-    const result = validateTool(raw);
-    if (!result.ok) return fail(result.error);
-    if (seen.has(result.tool.name)) return fail('invalid_tools');
-    seen.add(result.tool.name);
-    tools.push(result.tool);
-  }
-
-  return { ok: true, value: { messages, tools } };
+  return { ok: true, value: { messages } };
 }
