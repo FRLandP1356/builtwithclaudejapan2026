@@ -1,0 +1,29 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "town-2100-api",
+  "main": "index.ts",
+  "compatibility_date": "2026-11-01",
+  "observability": {
+    "enabled": false
+  },
+  "kv_namespaces": [
+    {
+      "binding": "RATE_KV",
+      // PLACEHOLDER. The real namespace id is created at deploy time (after the owner approves
+      // publishing); this file is never deployed with the placeholder.
+      "id": "REPLACE_WITH_REAL_KV_NAMESPACE_ID"
+    }
+  ],
+  "vars": {
+    // Comma-separated page origins allowed to call the Worker (exact match).
+    // Replace with the public page's origin at deploy time. Local development only for now.
+    "ALLOWED_ORIGINS": "http://localhost:5173"
+    // Optional overrides; defaults are 300 a day in total and 20 a day per IP:
+    // "DAILY_TOTAL_LIMIT": "300",
+    // "DAILY_IP_LIMIT": "20"
+  }
+  // The key and the IP hashing secret are secrets, not vars: `wrangler secret put ANTHROPIC_API_KEY` and
+  // `wrangler secret put IP_HASH_SECRET` at deploy time.
+  // For local development put them in worker/.dev.vars (git-ignored); see worker/.dev.vars.example.
+  // Before deploying, work through the checklist in worker/README.md (spend limit first).
+}
