@@ -8,6 +8,8 @@ import { changeColor } from '../map/colors';
 import { mountLegend } from '../map/legend';
 import { mountNationalMap } from '../map/nationalMap';
 import { mountPrefectureMap } from '../map/prefectureMap';
+import { mountAllocation } from './allocationPanel';
+import { mountControls } from './controls';
 import { deriveTotals, ratioAt, yearIndex, type Totals } from './derive';
 import { formatPct, formatPop } from './format';
 import { breadcrumbs, buildSearchIndex, goUp, levelOf, pickArea, pickPref, prefOfArea, type Selection } from './nav';
@@ -51,8 +53,8 @@ const PANEL_TITLES: ReadonlyArray<{ key: keyof PanelSlots; id: string; title: st
 function mountPanels(ctx: PanelContext, slots: PanelSlots): void {
   void ctx;
   mountPlaceholder(slots.town, '町を選ぶと、ここに詳しい数字が出ます。'); // Task 9: mountTownPanel(slots.town, ctx)
-  mountPlaceholder(slots.controls, '2050年より後の出生率と人口移動の前提を、ここで動かせるようになります。'); // Task 10: mountControlsPanel(slots.controls, ctx)
-  mountPlaceholder(slots.allocation, '人口を割り振ると、ほかの地域がどう減るかをここで見られるようになります。'); // Task 10: mountAllocationPanel(slots.allocation, ctx)
+  mountControls(slots.controls, ctx);
+  mountAllocation(slots.allocation, ctx);
   mountPlaceholder(slots.ai, '日本語で質問すると、計算の結果をもとに答えます。'); // Task 13: mountAiPanel(slots.ai, ctx)
 }
 // -----------------------------------------------------------------------------------------------------------------
