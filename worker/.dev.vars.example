@@ -1,0 +1,2 @@
+# Copy to worker/.dev.vars (git-ignored) for local `wrangler dev`. Never commit a real key.
+ANTHROPIC_API_KEY=sk-ant-REPLACE_ME
