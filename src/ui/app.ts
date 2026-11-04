@@ -14,6 +14,7 @@ import { breadcrumbs, buildSearchIndex, goUp, levelOf, pickArea, pickPref, prefO
 import { mountSearch } from './search';
 import { APP_LEAD, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, SOURCES } from './sources';
 import { createAppStore, DEFAULT_YEAR, type AppState, type PanelContext, type Store } from './state';
+import { mountTownPanel } from './townPanel';
 import { mountYearSlider } from './yearSlider';
 
 export { DEFAULT_YEAR };
@@ -50,7 +51,7 @@ const PANEL_TITLES: ReadonlyArray<{ key: keyof PanelSlots; id: string; title: st
 // -----------------------------------------------------------------------------------------------------------------
 function mountPanels(ctx: PanelContext, slots: PanelSlots): void {
   void ctx;
-  mountPlaceholder(slots.town, '町を選ぶと、ここに詳しい数字が出ます。'); // Task 9: mountTownPanel(slots.town, ctx)
+  mountTownPanel(slots.town, ctx);
   mountPlaceholder(slots.controls, '2050年より後の出生率と人口移動の前提を、ここで動かせるようになります。'); // Task 10: mountControlsPanel(slots.controls, ctx)
   mountPlaceholder(slots.allocation, '人口を割り振ると、ほかの地域がどう減るかをここで見られるようになります。'); // Task 10: mountAllocationPanel(slots.allocation, ctx)
   mountPlaceholder(slots.ai, '日本語で質問すると、計算の結果をもとに答えます。'); // Task 13: mountAiPanel(slots.ai, ctx)
