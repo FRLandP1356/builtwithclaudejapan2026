@@ -1,0 +1,37 @@
+{
+  "note": "Original IPSS Excel files are NOT committed. fetch_sources.py downloads them to data/raw (git-ignored) and checks the SHA256 below. Run `python3 -m pipeline.fetch_sources --record` to (re)write the hashes after a deliberate source update.",
+  "publisher": "National Institute of Population and Social Security Research (IPSS)",
+  "title": "Regional Population Projections for Japan (2020-2050), 2023 estimate (reiwa 5)",
+  "license": "Public Data License PDL1.0 (data is processed by this project)",
+  "landing_page": "https://www.ipss.go.jp/pp-shicyoson/j/shicyoson23/t-page.asp",
+  "sources": [
+    {
+      "file": "suikei_kekka.xlsx",
+      "url": "https://www.ipss.go.jp/pp-shicyoson/j/shicyoson23/3kekka/suikei_kekka.xlsx",
+      "description": "Projection results by municipality, sex and 5-year age group (2020 census base, 2025-2050)",
+      "bytes": 7468240,
+      "sha256": "dc503ef87559db7f45d6baa754c8920de0be0d6073d00cef84705219ea9b2b92"
+    },
+    {
+      "file": "katei_suvr.xlsx",
+      "url": "https://www.ipss.go.jp/pp-shicyoson/j/shicyoson23/4shihyo/katei_suvr.xlsx",
+      "description": "Assumption: survival rates",
+      "bytes": 3099742,
+      "sha256": "b56c8713e6fce97050d17ed28ff66342d4a63783e7a6cf39c7aa6167bffba30b"
+    },
+    {
+      "file": "katei_nmigr.xlsx",
+      "url": "https://www.ipss.go.jp/pp-shicyoson/j/shicyoson23/4shihyo/katei_nmigr.xlsx",
+      "description": "Assumption: net migration rates",
+      "bytes": 4224410,
+      "sha256": "70f915d1d18b52b445197afb61fc1073fc22b432da829252d4bbbfec0cb7c018"
+    },
+    {
+      "file": "katei_cwr_0-4sr.xlsx",
+      "url": "https://www.ipss.go.jp/pp-shicyoson/j/shicyoson23/4shihyo/katei_cwr_0-4sr.xlsx",
+      "description": "Assumption: children-women ratio (age 0-4 / women 20-44) and sex ratio at age 0-4",
+      "bytes": 467958,
+      "sha256": "6a2d2ed28e453c9b4c2c20c8de357c380e56a519fe53ff281f295ce1b1f8a4f8"
+    }
+  ]
+}

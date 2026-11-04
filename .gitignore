@@ -8,3 +8,5 @@ data/raw/
 *.log
 .DS_Store
 __pycache__/
+coverage/
+.staging/
