@@ -121,7 +121,7 @@ export function legendStops(): LegendStop[] {
     [1 / 8, ''],
     [1 / 4, '4分の1'],
     [1 / 2, '半分'],
-    [NEUTRAL_RATIO, '2020年と同じ'],
+    [NEUTRAL_RATIO, '同じ'],
     [RATIO_MAX, '1.5倍'],
   ];
   return ticks.map(([ratio, label], i, all) => ({
