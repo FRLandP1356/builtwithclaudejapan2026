@@ -33,5 +33,297 @@
       "bytes": 467958,
       "sha256": "6a2d2ed28e453c9b4c2c20c8de357c380e56a519fe53ff281f295ce1b1f8a4f8"
     }
-  ]
+  ],
+  "n03": {
+    "note": "Municipal boundaries for the map. Raw zips are NOT committed: pipeline/build_geometry.py downloads them to data/raw/n03 (git-ignored) and checks the SHA256 below. Run `python3 -m pipeline.build_geometry --record` after a deliberate source update.",
+    "publisher": "Ministry of Land, Infrastructure, Transport and Tourism (MLIT), National Land Numerical Information",
+    "title": "Administrative Area Data (N03), 2021-01-01 edition",
+    "license": "Site terms for National Land Numerical Information (government standard terms, compatible with CC BY 4.0); attribution required, state that the data was processed. See docs/sources.d/geometry.md.",
+    "landing_page": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2021.html",
+    "terms_page": "https://nlftp.mlit.go.jp/ksj/other/agreement.html",
+    "sources": [
+      {
+        "file": "N03-20210101_01_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_01_GML.zip",
+        "bytes": 48886319,
+        "sha256": "02b1169d9a55269f046b1473ce11791e32e6bbae48f7a1dba336186309be738b"
+      },
+      {
+        "file": "N03-20210101_02_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_02_GML.zip",
+        "bytes": 8402336,
+        "sha256": "8573b899eee004fc8f07ff7dc6d62957071827486cfd7f6cfae6bd8cb16f00fb"
+      },
+      {
+        "file": "N03-20210101_03_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_03_GML.zip",
+        "bytes": 31141245,
+        "sha256": "f6fef2febb4f7335c8f6e38438b58f53e19b51723b886c11813fb4947a86d5c4"
+      },
+      {
+        "file": "N03-20210101_04_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_04_GML.zip",
+        "bytes": 27023154,
+        "sha256": "ee2555ad78efeb3a308552d025fcd89df903c1e3b1407a21b9f798af8e6bdf43"
+      },
+      {
+        "file": "N03-20210101_05_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_05_GML.zip",
+        "bytes": 7798630,
+        "sha256": "2854566086bfce40f09239efbad5ec971057b7d38e9585ff31c4f3cd5edb3f9d"
+      },
+      {
+        "file": "N03-20210101_06_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_06_GML.zip",
+        "bytes": 5153119,
+        "sha256": "fc4781465d8fa0cda882820701a1612b1644deffff35aa393ea00dcae726af10"
+      },
+      {
+        "file": "N03-20210101_07_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_07_GML.zip",
+        "bytes": 11887587,
+        "sha256": "c9ddb3a1f06ad475f75d063aaf58f7d34933894227f125f2bef175ef6114e3ee"
+      },
+      {
+        "file": "N03-20210101_08_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_08_GML.zip",
+        "bytes": 4316100,
+        "sha256": "6a1e0c48d316eaff60f5343af0a578394ded2566421946950a73ae3086f958e5"
+      },
+      {
+        "file": "N03-20210101_09_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_09_GML.zip",
+        "bytes": 3736257,
+        "sha256": "01757ab27474134bd2dec52329f96ebddc2d5b74f88652a4c339c092894bd713"
+      },
+      {
+        "file": "N03-20210101_10_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_10_GML.zip",
+        "bytes": 4357347,
+        "sha256": "6cd1ae393d378bc1e7a9fac38587d060e5d35ed48e9d0ca366b900e796e9d212"
+      },
+      {
+        "file": "N03-20210101_11_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_11_GML.zip",
+        "bytes": 4308680,
+        "sha256": "617977f5dff77b83e901332f4fb263dfac159d791bec434e96bad51cb003a959"
+      },
+      {
+        "file": "N03-20210101_12_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_12_GML.zip",
+        "bytes": 7554432,
+        "sha256": "51c521d8b92921b4c818e6253868825caa10f24d6a309f0678e584b6648b1f38"
+      },
+      {
+        "file": "N03-20210101_13_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_13_GML.zip",
+        "bytes": 14966242,
+        "sha256": "f79a5e63da2208c705311c5d5553bd8075d82746b582073d0bd1846875e4b020"
+      },
+      {
+        "file": "N03-20210101_14_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_14_GML.zip",
+        "bytes": 6590028,
+        "sha256": "60e1fb04ef844e0a4335b6a1627ee229de0f4cdbe3efb9be219a504396a82ecb"
+      },
+      {
+        "file": "N03-20210101_15_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_15_GML.zip",
+        "bytes": 9283129,
+        "sha256": "e48dee569b83b0f0bc41d7f85cb20d725ca6359bde6c796587410b6b53d4e437"
+      },
+      {
+        "file": "N03-20210101_16_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_16_GML.zip",
+        "bytes": 2468807,
+        "sha256": "cb4461c4c5383629f8327a1bf40d07dca3b613250d69c2a485251929b24442f8"
+      },
+      {
+        "file": "N03-20210101_17_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_17_GML.zip",
+        "bytes": 5694930,
+        "sha256": "0ce65b47bb48bdfd9ce332a805dd00c92ee9e78e757d6619be6115bfa9416826"
+      },
+      {
+        "file": "N03-20210101_18_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_18_GML.zip",
+        "bytes": 6876229,
+        "sha256": "c136deb2253498b1ad0a37c7f02923680784b0dfeefd3fe784a08dd4764d3c68"
+      },
+      {
+        "file": "N03-20210101_19_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_19_GML.zip",
+        "bytes": 4439239,
+        "sha256": "1ab07d86f58a5ade1c845c9b18d3c9e33ec04f5d10e601e5dc2dd49874edab0c"
+      },
+      {
+        "file": "N03-20210101_20_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_20_GML.zip",
+        "bytes": 9146020,
+        "sha256": "52ab9032e9f22d129898768627a7d9ccf97c2df61d63ff733738a7b6dc6f0fb3"
+      },
+      {
+        "file": "N03-20210101_21_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_21_GML.zip",
+        "bytes": 3983769,
+        "sha256": "1b7a1a7220758d4a39fb460209b9e9cb9bc47a69b9235f31a6495889d7e06288"
+      },
+      {
+        "file": "N03-20210101_22_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_22_GML.zip",
+        "bytes": 16101213,
+        "sha256": "82cd723147fab2062a2b9237645586d313e5893a41c36bc29ecd845b3bb0eaf6"
+      },
+      {
+        "file": "N03-20210101_23_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_23_GML.zip",
+        "bytes": 7841989,
+        "sha256": "9e30039c75b7086137327bab8738a2d9eaede8f99a53d96c8e4b638fae5729b8"
+      },
+      {
+        "file": "N03-20210101_24_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_24_GML.zip",
+        "bytes": 20362614,
+        "sha256": "e733821df423785bc29e6cc5236215b2409d21e9e7c311ac22bef1e2bb4df624"
+      },
+      {
+        "file": "N03-20210101_25_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_25_GML.zip",
+        "bytes": 1551895,
+        "sha256": "5955c3d4d0056a37af3ea988c921061b51646f2a29183a0546d7db58dd2bfbc2"
+      },
+      {
+        "file": "N03-20210101_26_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_26_GML.zip",
+        "bytes": 5872484,
+        "sha256": "a2aacb4a8a2fe8a13b972a94a8d1ba6e521adb0b659bc362505c3a8c5cbf9584"
+      },
+      {
+        "file": "N03-20210101_27_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_27_GML.zip",
+        "bytes": 2936164,
+        "sha256": "1542a3fa2b2629fb16bc0cbef1e07d501170cad111dbd2817a86d8a3dabdf2ef"
+      },
+      {
+        "file": "N03-20210101_28_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_28_GML.zip",
+        "bytes": 11531273,
+        "sha256": "619b8be57bfc5c22800a68f54eb751b35e9fdd1bc7fffd7e1bb9ef6574ef55be"
+      },
+      {
+        "file": "N03-20210101_29_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_29_GML.zip",
+        "bytes": 2958038,
+        "sha256": "37115e92c41d804e2bacf199fe668230aede0963731949a36575a2ea7bf1241f"
+      },
+      {
+        "file": "N03-20210101_30_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_30_GML.zip",
+        "bytes": 11427054,
+        "sha256": "9a1f23c707080a51e02445a3ad423b71535af5b77689b680529bc65fff272407"
+      },
+      {
+        "file": "N03-20210101_31_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_31_GML.zip",
+        "bytes": 3206643,
+        "sha256": "49856b38c78f667f3a3e8b8b6ff326468359465a73bdbe725501f10c63bf76f2"
+      },
+      {
+        "file": "N03-20210101_32_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_32_GML.zip",
+        "bytes": 11018016,
+        "sha256": "3f0e9809e731365a368232731680205ad203b38c6d508dc11f47da2084bf2a24"
+      },
+      {
+        "file": "N03-20210101_33_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_33_GML.zip",
+        "bytes": 5966898,
+        "sha256": "c7755f92355345a787442fb8d344c7995b004e8910a817a29690f54624244688"
+      },
+      {
+        "file": "N03-20210101_34_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_34_GML.zip",
+        "bytes": 8986097,
+        "sha256": "e2bcb4419eb852ee6b8fd2e5aa4934f0c28370d1b92efc67b65f532c78d45970"
+      },
+      {
+        "file": "N03-20210101_35_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_35_GML.zip",
+        "bytes": 10906336,
+        "sha256": "b3dbfcd3859995a8040cc8d85e0152f261934ea70bf5209524bba675829bd608"
+      },
+      {
+        "file": "N03-20210101_36_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_36_GML.zip",
+        "bytes": 8663618,
+        "sha256": "6c4eedc29b3926c1b231ca09e04bf82fcc20e0c379f4bec5565719cc752ca7cd"
+      },
+      {
+        "file": "N03-20210101_37_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_37_GML.zip",
+        "bytes": 6079691,
+        "sha256": "9a87f324658d1082623540801ae43d9763b51ef8f52b01017fde978bb2c1c96d"
+      },
+      {
+        "file": "N03-20210101_38_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_38_GML.zip",
+        "bytes": 14550007,
+        "sha256": "47440450c2f14324ca77cca6d8e0b034ffd3793ffe29343766bb7ed1b99c494b"
+      },
+      {
+        "file": "N03-20210101_39_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_39_GML.zip",
+        "bytes": 10848341,
+        "sha256": "076c676a6591e2cec94e0a3445d07e831041a5cb6d0c6b3646b18c34ab7fb06c"
+      },
+      {
+        "file": "N03-20210101_40_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_40_GML.zip",
+        "bytes": 10102692,
+        "sha256": "15029ce9d16a138a9b8e8680df4452bfc527a36e8ca8818cb7166706ea2c2942"
+      },
+      {
+        "file": "N03-20210101_41_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_41_GML.zip",
+        "bytes": 2934872,
+        "sha256": "e1ca18d2f86ae4fb3ed84e7b604538b11ffb9c41a7279733c911e12b941f40e5"
+      },
+      {
+        "file": "N03-20210101_42_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_42_GML.zip",
+        "bytes": 32280712,
+        "sha256": "fe9fdc98fad7650640a6e5eea717d568ecb2e552ee1e439c76c7df199f8e05fb"
+      },
+      {
+        "file": "N03-20210101_43_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_43_GML.zip",
+        "bytes": 8914483,
+        "sha256": "448002ca8e6e51c7ed77f3f946326e3c2b939580a366b9046fc45ccf6fa16d99"
+      },
+      {
+        "file": "N03-20210101_44_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_44_GML.zip",
+        "bytes": 7146291,
+        "sha256": "bb678d1cecb3c40fefa590cd8b999cf6634cb2759044d2a39c3a3035f72214c0"
+      },
+      {
+        "file": "N03-20210101_45_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_45_GML.zip",
+        "bytes": 9552068,
+        "sha256": "f0d490b3cec3eb6031b910489d6016856d05213d080eafce7186b85186ec57a5"
+      },
+      {
+        "file": "N03-20210101_46_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_46_GML.zip",
+        "bytes": 24364512,
+        "sha256": "1d9df5448939f9041f75b3812c34856336a50289c51becf84ebdc3f0a54c08b2"
+      },
+      {
+        "file": "N03-20210101_47_GML.zip",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2021/N03-20210101_47_GML.zip",
+        "bytes": 16177606,
+        "sha256": "3e77d316a01819f958d80616c832e2b161dcd475b862a7984df29bd963a1cdb4"
+      }
+    ]
+  }
 }
