@@ -1,0 +1,10 @@
+node_modules/
+dist/
+data/raw/
+.superpowers/
+.claude/
+.wrangler/
+.dev.vars
+*.log
+.DS_Store
+__pycache__/
