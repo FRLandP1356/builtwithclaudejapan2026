@@ -420,7 +420,7 @@
 }
 .year-range-wrap {
   position: relative;
-  height: 56px;
+  height: 68px; /* 44px input + the tick row below it; nothing else may sit inside this height */
   --thumb-w: 14px;
   --split: 37.5%;
 }
@@ -439,8 +439,8 @@
   position: absolute;
   left: calc(var(--thumb-w) / 2);
   right: calc(var(--thumb-w) / 2);
-  top: 36px;
-  height: 20px;
+  top: 42px;
+  height: 24px;
   font-size: var(--fs-12);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -551,7 +551,7 @@
   .year {
     grid-template-areas:
       'value controls'
-      'note note';
+      '. note';
     align-items: center;
     margin-top: var(--sp-2);
     padding-top: var(--sp-3);
@@ -560,7 +560,7 @@
     margin-top: 0;
   }
   .year-note {
-    margin-top: -4px;
+    margin-top: 0; /* its own grid row under the tick row; never overlaps the ticks */
   }
   .legend {
     padding-top: var(--sp-3);

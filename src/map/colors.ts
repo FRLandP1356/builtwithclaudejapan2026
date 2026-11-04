@@ -117,12 +117,12 @@ function offsetOf(ratio: number): number {
 /** Labelled ticks for the legend, from the strongest decline to the strongest growth. */
 export function legendStops(): LegendStop[] {
   const ticks: Array<[number, string]> = [
-    [RATIO_MIN, '16分の1'],
+    [RATIO_MIN, '16分の1以下'],
     [1 / 8, ''],
     [1 / 4, '4分の1'],
     [1 / 2, '半分'],
     [NEUTRAL_RATIO, '同じ'],
-    [RATIO_MAX, '1.5倍'],
+    [RATIO_MAX, '1.5倍以上'],
   ];
   return ticks.map(([ratio, label], i, all) => ({
     ratio,

@@ -17,23 +17,39 @@ export interface AppData {
 /** The 47 prefecture codes, "01".."47". */
 export const PREF_CODES: readonly string[] = Array.from({ length: 47 }, (_, i) => String(i + 1).padStart(2, '0'));
 
+export type LoadFailure = 'network' | 'timeout' | 'http' | 'parse' | 'shape';
+
 /** A data file could not be fetched or parsed. `message` is Japanese and names the file. */
 export class DataLoadError extends Error {
   readonly url: string;
   readonly status?: number;
-  constructor(url: string, status?: number, cause?: unknown) {
-    super(`データを読み込めませんでした（${url}${status ? `、HTTP ${status}` : ''}）`, { cause });
+  readonly reason: LoadFailure;
+  constructor(url: string, reason: LoadFailure, status?: number, cause?: unknown, detail?: string) {
+    const why =
+      reason === 'timeout'
+        ? `、${detail ?? '応答がありません'}`
+        : reason === 'http'
+          ? `、HTTP ${status}`
+          : reason === 'parse' || reason === 'shape'
+            ? '、内容を読めません'
+            : '';
+    super(`データを読み込めませんでした（${url}${why}）`, { cause });
     this.name = 'DataLoadError';
     this.url = url;
     this.status = status;
+    this.reason = reason;
   }
 }
+
+export const DEFAULT_TIMEOUT_MS = 20_000;
 
 export interface LoadOptions {
   /** Injectable fetch (tests). Defaults to the global fetch. */
   fetch?: typeof fetch;
   /** Base URL. Defaults to import.meta.env.BASE_URL. */
   base?: string;
+  /** Per-request timeout; a request that takes longer fails with reason 'timeout'. */
+  timeoutMs?: number;
 }
 
 /** Join the base URL and a data path: dataUrl('data/areas/01.json', '/town/') -> '/town/data/areas/01.json'. */
@@ -42,18 +58,25 @@ export function dataUrl(path: string, base: string = import.meta.env.BASE_URL): 
   return b + path.replace(/^\/+/, '');
 }
 
-async function fetchJson<T>(url: string, fetchImpl: typeof fetch): Promise<T> {
+async function fetchJson<T>(url: string, fetchImpl: typeof fetch, timeoutMs: number): Promise<T> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
   let res: Response;
   try {
-    res = await fetchImpl(url);
+    res = await fetchImpl(url, { signal: ac.signal });
   } catch (e) {
-    throw new DataLoadError(url, undefined, e);
+    clearTimeout(timer);
+    if (ac.signal.aborted) {
+      throw new DataLoadError(url, 'timeout', undefined, e, `${Math.round(timeoutMs / 1000)}秒たっても応答がありません`);
+    }
+    throw new DataLoadError(url, 'network', undefined, e);
   }
-  if (!res.ok) throw new DataLoadError(url, res.status);
+  clearTimeout(timer);
+  if (!res.ok) throw new DataLoadError(url, 'http', res.status);
   try {
     return (await res.json()) as T;
   } catch (e) {
-    throw new DataLoadError(url, res.status, e);
+    throw new DataLoadError(url, 'parse', res.status, e);
   }
 }
 
@@ -64,27 +87,28 @@ function resolveFetch(opts: LoadOptions): typeof fetch {
 /** Load everything the app needs to start: 47 area files, groups, facilities and the national boundaries, in parallel. */
 export async function loadAll(opts: LoadOptions = {}): Promise<AppData> {
   const f = resolveFetch(opts);
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const url = (p: string) => (opts.base === undefined ? dataUrl(p) : dataUrl(p, opts.base));
 
-  const areaFiles = PREF_CODES.map((pp) => fetchJson<Area[]>(url(`data/areas/${pp}.json`), f));
+  const areaFiles = PREF_CODES.map((pp) => fetchJson<Area[]>(url(`data/areas/${pp}.json`), f, timeoutMs));
   const [groups, facilities, japanTopo, ...areaLists] = await Promise.all([
-    fetchJson<Groups>(url('data/groups.json'), f),
-    fetchJson<Facility[]>(url('data/facilities.json'), f),
-    fetchJson<Topology>(url('data/geo/japan.topo.json'), f),
+    fetchJson<Groups>(url('data/groups.json'), f, timeoutMs),
+    fetchJson<Facility[]>(url('data/facilities.json'), f, timeoutMs),
+    fetchJson<Topology>(url('data/geo/japan.topo.json'), f, timeoutMs),
     ...areaFiles,
   ]);
 
   const areas: Area[] = [];
   const prefNames = new Map<string, string>();
   areaLists.forEach((list, i) => {
-    if (!Array.isArray(list)) throw new DataLoadError(url(`data/areas/${PREF_CODES[i]}.json`));
+    if (!Array.isArray(list)) throw new DataLoadError(url(`data/areas/${PREF_CODES[i]}.json`), 'shape');
     for (const a of list) {
       areas.push(a);
       if (!prefNames.has(a.prefCode)) prefNames.set(a.prefCode, a.prefName);
     }
   });
   if (!japanTopo || typeof japanTopo !== 'object' || !('objects' in japanTopo)) {
-    throw new DataLoadError(url('data/geo/japan.topo.json'));
+    throw new DataLoadError(url('data/geo/japan.topo.json'), 'shape');
   }
   return { areas, groups, facilities, japanTopo, prefNames };
 }
@@ -107,7 +131,7 @@ export function loadPrefGeo(prefCode: string, opts: PrefGeoOptions = {}): Promis
   if (hit) return hit;
   const path = `data/geo/pref/${prefCode}.topo.json`;
   const url = opts.base === undefined ? dataUrl(path) : dataUrl(path, opts.base);
-  const p = fetchJson<Topology>(url, resolveFetch(opts)).catch((e: unknown) => {
+  const p = fetchJson<Topology>(url, resolveFetch(opts), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS).catch((e: unknown) => {
     cache.delete(prefCode);
     throw e;
   });

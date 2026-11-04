@@ -1,5 +1,8 @@
 // The year control: a large mincho year, the official/estimate note, a range input over a two-part track
 // (solid to 2050, dashed after) and a play button that steps through the years.
+//
+// Screen readers: the range input carries the year through aria-valuetext (「2055年」), so the big numeral is
+// aria-live="off" and the note is a role="status" region that is rewritten only when the year crosses 2050.
 import { ESTIMATE_BADGE, ESTIMATE_NOTE, OFFICIAL_END_YEAR, OFFICIAL_NOTE } from './sources';
 
 export interface YearSliderOptions {
@@ -32,8 +35,8 @@ export function mountYearSlider(el: HTMLElement, opts: YearSliderOptions): YearS
 
   el.className = 'year';
   el.innerHTML = `
-    <output class="year-value" id="year-value" for="year-range"><span class="year-num">${opts.year}</span><span class="unit">年</span></output>
-    <p class="year-note" id="year-note" aria-live="polite"></p>
+    <output class="year-value" id="year-value" for="year-range" aria-live="off"><span class="year-num">${opts.year}</span><span class="unit">年</span></output>
+    <p class="year-note" id="year-note" role="status"></p>
     <div class="year-controls">
       <button type="button" class="btn btn-icon year-play" aria-pressed="false" aria-label="年を自動で進める">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="${PLAY_PATH}"></path></svg>
@@ -59,22 +62,28 @@ export function mountYearSlider(el: HTMLElement, opts: YearSliderOptions): YearS
   let current = opts.year;
   let timer: number | undefined;
   let playing = false;
+  let noteIsEstimate: boolean | undefined; // undefined until the first render
 
-  function render(year: number): void {
-    current = year;
-    input.value = String(year);
-    num.textContent = String(year);
-    input.setAttribute('aria-valuetext', `${year}年`);
-    if (year > OFFICIAL_END_YEAR) {
-      note.dataset.estimate = 'true';
+  function renderNote(estimate: boolean): void {
+    if (estimate === noteIsEstimate) return; // only rewrite the live region when the meaning flips
+    noteIsEstimate = estimate;
+    note.dataset.estimate = String(estimate);
+    if (estimate) {
       const badge = document.createElement('span');
       badge.className = 'badge-estimate';
       badge.textContent = ESTIMATE_BADGE;
       note.replaceChildren(badge, document.createTextNode(ESTIMATE_NOTE));
     } else {
-      note.dataset.estimate = 'false';
       note.textContent = OFFICIAL_NOTE;
     }
+  }
+
+  function render(year: number): void {
+    current = year;
+    if (input.value !== String(year)) input.value = String(year);
+    if (num.textContent !== String(year)) num.textContent = String(year);
+    input.setAttribute('aria-valuetext', `${year}年`);
+    renderNote(year > OFFICIAL_END_YEAR);
   }
 
   function stop(): void {

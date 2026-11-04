@@ -65,6 +65,8 @@ export interface Choropleth {
   /** Outline one area persistently (or none). */
   setSelected(code?: string): void;
   focusArea(code: string): void;
+  /** Drop the hover state and hide the tooltip (call when the map is hidden or replaced). */
+  clearHover(): void;
   /** Re-read aria labels and the open tooltip (after the year or the data changed). */
   refresh(): void;
   destroy(): void;
@@ -440,7 +442,7 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
   function placeTipAt(code: string, el: Element): void {
     const r = container.getBoundingClientRect();
     const anchor = anchorByCode.get(code);
-    const ctm = svg.getScreenCTM();
+    const ctm = typeof DOMPoint === 'function' ? svg.getScreenCTM?.() : null; // absent in jsdom
     if (anchor && ctm) {
       const p = new DOMPoint(anchor[0], anchor[1]).matrixTransform(ctm);
       placeTip(p.x - r.left, p.y - r.top - 8);
@@ -475,14 +477,16 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
     const r = container.getBoundingClientRect();
     placeTip(e.clientX - r.left, e.clientY - r.top);
   });
-  on('pointerleave', () => {
+  function clearHover(): void {
     hoverCode = undefined;
     setHoverRing('');
     if (focusCode) {
       renderTip(focusCode);
       placeTipAt(focusCode, pathByCode.get(focusCode)!);
     } else tip.hidden = true;
-  });
+  }
+
+  on('pointerleave', clearHover);
   on('click', (e) => {
     const code = codeFromEvent(e);
     if (code) opts.onPick(code);
@@ -525,6 +529,7 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
     focusArea(code) {
       pathByCode.get(code)?.focus({ preventScroll: true });
     },
+    clearHover,
     refresh() {
       for (const [code, p] of pathByCode) p.setAttribute('aria-label', opts.ariaLabel(code, nameByCode.get(code) ?? code));
       const open = hoverCode ?? focusCode;
@@ -532,6 +537,8 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
     },
     destroy() {
       ac.abort();
+      hoverCode = undefined;
+      focusCode = undefined;
       svg.remove();
       tip.remove();
     },

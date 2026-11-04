@@ -1,9 +1,9 @@
 // Test-only helper that reads the facility thresholds from disk (the app itself loads them over HTTP).
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import type { Facility } from '../../src/engine/types';
+import { repoPath } from './paths';
 
-const FACILITIES_FILE = fileURLToPath(new URL('../../public/data/facilities.json', import.meta.url));
+const FACILITIES_FILE = repoPath('public/data/facilities.json');
 
 /** All 48 rows of public/data/facilities.json. */
 export function loadFacilities(): Facility[] {

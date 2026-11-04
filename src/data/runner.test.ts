@@ -86,6 +86,29 @@ describe('createRunner', () => {
     expect(total(hold.get(code)![2100])).toBeGreaterThan(total(low.get(code)![2100]));
   });
 
+  test('every scenario field changes the memo key and produces a different result', () => {
+    const areas = loadAllAreas();
+    const runner = createRunner({ areas, facilities: loadFacilities() });
+    const base = runner.run(DEFAULT_SCENARIO);
+    const variants: Array<[keyof typeof DEFAULT_SCENARIO, Partial<typeof DEFAULT_SCENARIO>]> = [
+      ['cwrMult', { cwrMult: 1.2 }],
+      ['migMode', { migMode: 'fade' }],
+      ['migScale', { migScale: 0.5 }],
+      ['infraStrength', { infraStrength: 0.005 }],
+    ];
+    for (const [field, patch] of variants) {
+      const s = { ...DEFAULT_SCENARIO, ...patch };
+      expect(scenarioKey(s), field).not.toBe(scenarioKey(DEFAULT_SCENARIO));
+      const out = runner.run(s);
+      expect(out, field).not.toBe(base);
+      expect(out.size).toBe(1884);
+      const differing = areas.filter((a) => Math.abs(total(out.get(a.code)![2100]) - total(base.get(a.code)![2100])) > 1e-6);
+      expect(differing.length, `${field} changes the 2100 result of some areas`).toBeGreaterThan(0);
+      // 2020-2050 are official and never move
+      expect(total(out.get('30206')![2050])).toBeCloseTo(total(base.get('30206')![2050]), 6);
+    }
+  });
+
   test('a scenario with infra feedback runs with the facility list', () => {
     const runner = createRunner({ areas: loadSampleAreas(), facilities: loadFacilities() });
     const out = runner.run({ ...DEFAULT_SCENARIO, infraStrength: 0.005 });

@@ -13,6 +13,11 @@ export interface Search {
 
 let uid = 0;
 
+/** True while a Japanese IME is composing: the key event belongs to the IME, not to the list. */
+function isComposing(e: KeyboardEvent): boolean {
+  return e.isComposing || e.keyCode === 229;
+}
+
 export function mountSearch(el: HTMLElement, opts: SearchOptions): Search {
   const id = `place-search-${++uid}`;
   const limit = opts.limit ?? 8;
@@ -22,16 +27,20 @@ export function mountSearch(el: HTMLElement, opts: SearchOptions): Search {
     <input id="${id}" type="search" class="search-input" placeholder="町名・県名で探す" autocomplete="off"
       role="combobox" aria-expanded="false" aria-controls="${id}-list" aria-autocomplete="list" aria-haspopup="listbox"
       enterkeyhint="search" />
-    <ul id="${id}-list" class="search-list" role="listbox" aria-label="候補" hidden></ul>`;
+    <ul id="${id}-list" class="search-list" role="listbox" aria-label="候補" hidden></ul>
+    <p class="search-empty" role="status" hidden></p>`;
 
   const input = el.querySelector<HTMLInputElement>('input')!;
   const list = el.querySelector<HTMLUListElement>('ul')!;
+  const empty = el.querySelector<HTMLParagraphElement>('.search-empty')!;
   let results: SearchEntry[] = [];
   let active = -1;
 
   function close(): void {
     list.hidden = true;
     list.replaceChildren();
+    empty.hidden = true;
+    empty.textContent = '';
     input.setAttribute('aria-expanded', 'false');
     input.removeAttribute('aria-activedescendant');
     results = [];
@@ -45,7 +54,7 @@ export function mountSearch(el: HTMLElement, opts: SearchOptions): Search {
     });
     if (i >= 0) {
       input.setAttribute('aria-activedescendant', `${id}-opt-${i}`);
-      list.children[i]?.scrollIntoView({ block: 'nearest' });
+      list.children[i]?.scrollIntoView?.({ block: 'nearest' });
     } else input.removeAttribute('aria-activedescendant');
   }
 
@@ -62,28 +71,35 @@ export function mountSearch(el: HTMLElement, opts: SearchOptions): Search {
       close();
       return;
     }
-    const items: HTMLElement[] = results.map((r, i) => {
-      const li = document.createElement('li');
-      li.className = 'search-item';
-      li.id = `${id}-opt-${i}`;
-      li.setAttribute('role', 'option');
-      li.setAttribute('aria-selected', 'false');
-      li.dataset.idx = String(i);
-      const name = document.createElement('span');
-      name.textContent = r.name;
-      const where = document.createElement('span');
-      where.className = 'search-item-where';
-      where.textContent = r.kind === 'pref' ? '都道府県' : (r.prefName ?? '');
-      li.append(name, where);
-      return li;
-    });
-    if (!items.length) {
-      const li = document.createElement('li');
-      li.className = 'search-empty';
-      li.textContent = '見つかりませんでした';
-      items.push(li);
+    if (!results.length) {
+      list.hidden = true;
+      list.replaceChildren();
+      input.setAttribute('aria-expanded', 'false');
+      input.removeAttribute('aria-activedescendant');
+      empty.textContent = '見つかりませんでした';
+      empty.hidden = false;
+      active = -1;
+      return;
     }
-    list.replaceChildren(...items);
+    empty.hidden = true;
+    empty.textContent = '';
+    list.replaceChildren(
+      ...results.map((r, i) => {
+        const li = document.createElement('li');
+        li.className = 'search-item';
+        li.id = `${id}-opt-${i}`;
+        li.setAttribute('role', 'option');
+        li.setAttribute('aria-selected', 'false');
+        li.dataset.idx = String(i);
+        const name = document.createElement('span');
+        name.textContent = r.name;
+        const where = document.createElement('span');
+        where.className = 'search-item-where';
+        where.textContent = r.kind === 'pref' ? '都道府県' : (r.prefName ?? '');
+        li.append(name, where);
+        return li;
+      }),
+    );
     list.hidden = false;
     input.setAttribute('aria-expanded', 'true');
     setActive(-1);
@@ -95,6 +111,7 @@ export function mountSearch(el: HTMLElement, opts: SearchOptions): Search {
   input.addEventListener(
     'keydown',
     (e) => {
+      if (isComposing(e)) return; // the IME owns Enter, arrows and Escape until the conversion is committed
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         if (list.hidden) render();
         if (!results.length) return;
@@ -107,7 +124,7 @@ export function mountSearch(el: HTMLElement, opts: SearchOptions): Search {
         pick(results[active >= 0 ? active : 0]);
       } else if (e.key === 'Escape') {
         if (list.hidden) input.value = '';
-        else close();
+        close();
       }
     },
     sig,

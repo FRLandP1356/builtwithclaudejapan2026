@@ -1,10 +1,11 @@
 // Test-only helpers that read area data from disk (the app itself loads it over HTTP).
 import { readdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import type { Area } from '../../src/engine/types';
+import { repoPath } from './paths';
 
-const AREAS_DIR = fileURLToPath(new URL('../../public/data/areas/', import.meta.url));
-const SAMPLE_FILE = fileURLToPath(new URL('../fixtures/sample_areas.json', import.meta.url));
+const AREAS_DIR = repoPath('public/data/areas');
+const SAMPLE_FILE = repoPath('test/fixtures/sample_areas.json');
 
 /** All 1,884 areas from public/data/areas/<prefCode>.json, ordered by prefecture file then by file order. */
 export function loadAllAreas(): Area[] {
@@ -13,7 +14,7 @@ export function loadAllAreas(): Area[] {
     .sort();
   const areas: Area[] = [];
   for (const f of files) {
-    areas.push(...(JSON.parse(readFileSync(AREAS_DIR + f, 'utf8')) as Area[]));
+    areas.push(...(JSON.parse(readFileSync(join(AREAS_DIR, f), 'utf8')) as Area[]));
   }
   return areas;
 }

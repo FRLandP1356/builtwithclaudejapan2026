@@ -40,6 +40,7 @@
 - 390px：1 列。上から 見出し → 場所の行（パンくず・戻る・検索）→ 場所の数字 → 地図 → 凡例 → 年 → `#panel-town` → `#panel-controls` → `#panel-allocation` → `#panel-ai` → 出典。
 - 1024px 以上：2 列（地図 3 : パネル 2）。左の地図の列は `position: sticky` で、地図・凡例・年が 1 画面に収まる。右の列にパネルが縦に並ぶ。
 - パネルは `(el: HTMLElement, ctx: PanelContext)` で `el`（既にある `<section class="panel" id="panel-…">`）の中身を置き換える。`el` 自体の class と id は変えない。見出しは `h2.panel-title` を 1 つ残す。
+- 取り付けは `src/ui/app.ts` の `mountPanels(ctx, slots)`（「Panel registry」の印の付いた 4 行）。Task 9 は `slots.town` の行、Task 10 は `slots.controls` と `slots.allocation` の行、Task 13 は `slots.ai` の行を、それぞれ自分の `mountXxxPanel(slots.xxx, ctx)` に置き換える。app.ts のほかの所は触らない。
 - 横スクロールを出さない。横長の表は `.table-wrap` に入れる。
 
 ## 部品（class 名）
@@ -79,8 +80,10 @@
 
 ## 状態と更新
 
-- 状態は `store`（`src/ui/state.ts`）。`store.get()` で `year`・`scenario`・`series`・`selectedPref`・`selectedArea` を読み、`store.subscribe((s, prev) => …)` で描き直す。`store.set({ scenario })` を呼ぶと、`series` が同じ通知の中で更新されて届く（自分で runner を呼ばない）。
-- 範囲外の scenario は捨てられ、前の値が残る（console.warn が出る）。スライダーの min/max は `SCENARIO_LIMITS`（`src/data/runner.ts`）に合わせる。
+- 状態は `store`（`src/ui/state.ts` の `createAppStore`）。`store.get()` で `year`・`scenario`・`series`・`selectedPref`・`selectedArea` を読み、`store.subscribe((s, prev) => …)` で描き直す。`store.set(patch)` は適用されたら `true`、何も変わらない・拒否されたら `false` を返す。
+- 町を選ぶ時は `store.set({ selectedArea: code })` だけでよい。store が `selectedPref` をその町の県にそろえる（県の地図・パンくず・戻るボタンも付いてくる）。`store.set({ selectedPref })` で県を変えると、その県に属さない町の選択は消える。`selectedPref: undefined` で日本に戻る（町の選択も消える）。無い地域コード・県コードは拒否される（状態は変わらず、通知も無く、console.warn が出る）。`src/ui/nav.ts` の `pickArea`・`pickPref`・`goUp`・`toJapan` は同じ patch を作る便利関数。
+- `store.set({ scenario })` を呼ぶと、`series` が同じ通知の中で更新されて届く（自分で runner を呼ばない）。範囲外・NaN・未知の migMode は拒否され、前の値が残る（通知なし・console.warn）。値が同じ scenario を入れ直しても通知は無い。スライダーの min/max は `SCENARIO_LIMITS`（`src/data/runner.ts`）に合わせる。
+- `year` は 2020〜2100 の 5 年刻みだけ受け付ける（それ以外は拒否）。
 - 年ごとの合計は `deriveTotals(series, data.groups)`（`src/ui/derive.ts`）。`series` が同じ間は同じ結果が返るので、呼ぶたびに計算し直さない。
 - 描き直しは変わった所だけ。DOM を作り直さず、文字と属性を更新する。
 

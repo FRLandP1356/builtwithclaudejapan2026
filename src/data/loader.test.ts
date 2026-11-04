@@ -11,7 +11,7 @@ const prefTopo = { type: 'Topology', objects: { areas: { type: 'GeometryCollecti
 /** A fetch stub that serves the data files from memory. */
 function makeFetch(overrides: Record<string, unknown> = {}) {
   const calls: string[] = [];
-  const fetchStub = vi.fn(async (input: string | URL | Request) => {
+  const fetchStub = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
     const url = String(input);
     calls.push(url);
     if (url in overrides) {
@@ -75,12 +75,35 @@ describe('loadAll', () => {
       expect(err.message).toMatch(/読み込/);
       expect(err.url).toBe('/data/areas/30.json');
       expect(err.status).toBe(500);
+      expect(err.reason).toBe('http');
     }
   });
 
   test('a network error is wrapped the same way', async () => {
     const { fetchStub } = makeFetch({ '/data/groups.json': new TypeError('Failed to fetch') });
-    await expect(loadAll({ fetch: fetchStub as unknown as typeof fetch, base: '/' })).rejects.toBeInstanceOf(DataLoadError);
+    await expect(loadAll({ fetch: fetchStub as unknown as typeof fetch, base: '/' })).rejects.toMatchObject({
+      name: 'DataLoadError',
+      reason: 'network',
+    });
+  });
+
+  test('a request that never answers fails after the timeout with a clear message', async () => {
+    const hanging = vi.fn(
+      (_input: string | URL | Request, init?: RequestInit) =>
+        new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        }),
+    ) as unknown as typeof fetch;
+    const p = loadAll({ fetch: hanging, base: '/', timeoutMs: 20 });
+    await expect(p).rejects.toMatchObject({ name: 'DataLoadError', reason: 'timeout' });
+    await p.catch((e: DataLoadError) => expect(e.message).toMatch(/応答がありません/));
+  });
+
+  test('requests are sent with an abort signal', async () => {
+    const { fetchStub } = makeFetch();
+    await loadAll({ fetch: fetchStub as unknown as typeof fetch, base: '/' });
+    const init = fetchStub.mock.calls[0][1] as RequestInit | undefined;
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 
   test('invalid JSON is reported as a load error too', async () => {
