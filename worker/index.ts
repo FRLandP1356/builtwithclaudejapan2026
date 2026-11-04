@@ -1,3 +1,4 @@
+import { TOOL_DEFS } from '../src/ai/toolDefs';
 import {
   consumeQuota,
   DEFAULT_IP_LIMIT,
@@ -191,7 +192,7 @@ export async function handleRequest(
   if (!validation.ok) {
     return jsonResponse({ error: validation.error }, 400, origin);
   }
-  const { messages, tools } = validation.value;
+  const { messages } = validation.value;
 
   // Fail closed when a secret is missing, before any quota is charged. Names only; values are never logged.
   if (!env.ANTHROPIC_API_KEY || !env.IP_HASH_SECRET) {
@@ -217,13 +218,14 @@ export async function handleRequest(
     return jsonResponse({ cached: true, error: 'rate_limited' }, 429, origin);
   }
 
-  // Built only from validated fields and server-side constants.
+  // Built only from validated messages and server-side constants. The tool definitions are always the canonical
+  // ones from the shared module; whatever `tools` the client sent was never read.
   const payload = {
     model: MODEL,
     max_tokens: MAX_TOKENS,
     system: SYSTEM_PROMPT,
     messages,
-    ...(tools.length > 0 ? { tools } : {}),
+    tools: TOOL_DEFS,
   };
   return callAnthropic(env, payload, fetchFn, origin);
 }

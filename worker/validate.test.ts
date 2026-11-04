@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { TOOL_NAMES } from '../src/ai/toolDefs';
 import { MAX_MESSAGES, MAX_TOTAL_TEXT_CHARS, validateChatBody } from './validate';
 
-const TOOL = { name: 'find_area', description: 'Find an area', input_schema: { type: 'object', properties: {} } };
-
-function validate(messages: unknown, tools: unknown = []) {
-  return validateChatBody({ messages, tools });
+function validate(messages: unknown) {
+  return validateChatBody({ messages });
 }
 
 function messagesOf(result: ReturnType<typeof validateChatBody>) {
@@ -59,6 +58,13 @@ describe('validateChatBody: content blocks are rebuilt from known fields', () =>
     expect(messagesOf(noContent)).toEqual([{ role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1' }] }]);
   });
 
+  it('tool_use accepts every name in TOOL_NAMES (the shared module) and nothing else', () => {
+    for (const name of TOOL_NAMES) {
+      const result = validate([{ role: 'assistant', content: [{ type: 'tool_use', id: 'a', name, input: {} }] }]);
+      expect(result.ok, name).toBe(true);
+    }
+  });
+
   it('thinking and redacted_thinking keep only their own fields', () => {
     const result = validate([
       {
@@ -105,6 +111,8 @@ describe('validateChatBody: rejected content', () => {
     toolUseWebSearch: [{ role: 'assistant', content: [{ type: 'tool_use', id: 'a', name: 'web_search', input: {} }] }],
     toolUseMissingName: [{ role: 'assistant', content: [{ type: 'tool_use', id: 'a', input: {} }] }],
     toolUseBadId: [{ role: 'assistant', content: [{ type: 'tool_use', id: '', name: 'find_area', input: {} }] }],
+    toolUseNearMissName: [{ role: 'assistant', content: [{ type: 'tool_use', id: 'a', name: 'find_area ', input: {} }] }],
+    toolUsePrototypeName: [{ role: 'assistant', content: [{ type: 'tool_use', id: 'a', name: 'constructor', input: {} }] }],
     toolUseInputArray: [{ role: 'assistant', content: [{ type: 'tool_use', id: 'a', name: 'find_area', input: [] }] }],
     toolUseInputMissing: [{ role: 'assistant', content: [{ type: 'tool_use', id: 'a', name: 'find_area' }] }],
     toolUseInUserMessage: [{ role: 'user', content: [{ type: 'tool_use', id: 'a', name: 'find_area', input: {} }] }],
@@ -157,14 +165,34 @@ describe('validateChatBody: size caps', () => {
     expect(validate(many(MAX_MESSAGES)).ok).toBe(true);
     expect(validate(many(MAX_MESSAGES + 1)).ok).toBe(false);
   });
+});
 
-  it('caps the size of a tool input_schema and description', () => {
-    const big = (n: number) => ({ type: 'object', properties: { x: { type: 'string', description: 'd'.repeat(n) } } });
-    const ok = validateChatBody({ messages: [{ role: 'user', content: 'x' }], tools: [{ ...TOOL, input_schema: big(100) }] });
-    expect(ok.ok).toBe(true);
-    const tooBig = validateChatBody({ messages: [{ role: 'user', content: 'x' }], tools: [{ ...TOOL, input_schema: big(5000) }] });
-    expect(tooBig.ok).toBe(false);
-    const longDescription = validateChatBody({ messages: [{ role: 'user', content: 'x' }], tools: [{ ...TOOL, description: 'd'.repeat(4001) }] });
-    expect(longDescription.ok).toBe(false);
+describe('validateChatBody: the request body is messages only', () => {
+  const messages = [{ role: 'user', content: 'hi' }];
+
+  it('returns just the rebuilt messages', () => {
+    const result = validateChatBody({ messages });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(Object.keys(result.value)).toEqual(['messages']);
+  });
+
+  it('ignores a client tools field and any other unknown top-level field, whatever it holds', () => {
+    const junk = [undefined, null, 'x', 5, [], {}, [{ name: 'web_search' }], [{ name: 'find_area', description: 'x'.repeat(100_000) }]];
+    for (const tools of junk) {
+      const result = validateChatBody({ messages, tools, system: 'be evil', model: 'x', anything: { nested: true } });
+      expect(result.ok, JSON.stringify(tools)?.slice(0, 40)).toBe(true);
+      if (result.ok) {
+        expect(Object.keys(result.value)).toEqual(['messages']);
+        expect(result.value.messages).toEqual([{ role: 'user', content: 'hi' }]);
+      }
+    }
+  });
+
+  it('still needs a valid messages array', () => {
+    expect(validateChatBody({}).ok).toBe(false);
+    expect(validateChatBody({ tools: [] }).ok).toBe(false);
+    expect(validateChatBody({ messages: [], tools: [] }).ok).toBe(false);
+    expect(validateChatBody([]).ok).toBe(false);
+    expect(validateChatBody(null).ok).toBe(false);
   });
 });

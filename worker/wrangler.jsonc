@@ -15,7 +15,8 @@
     }
   ],
   "vars": {
-    // Comma-separated page origins allowed to call the Worker (exact match).
+    // Comma-separated page origins allowed to call the Worker (exact match). This keeps other websites' browsers
+    // out; it is NOT authentication (curl can send any Origin). The Anthropic workspace spend limit is the hard stop.
     // Replace with the public page's origin at deploy time. Local development only for now.
     "ALLOWED_ORIGINS": "http://localhost:5173"
     // Optional overrides; defaults are 300 a day in total and 20 a day per IP:

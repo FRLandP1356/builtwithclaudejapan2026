@@ -5,11 +5,15 @@
 ## できること
 
 - `POST /api/chat` だけを受け付けます（それ以外のパスは 404、他のメソッドは 405）。
-- 本文は `{ messages, tools }` です。モデル（`claude-sonnet-5-5`）、`max_tokens`（1500）、システムプロンプトは Worker が決め、画面から来た値は使いません。`messages` と `tools` は、確かめた項目から作り直して送ります（余分な項目、ブロックの `cache_control`、画像や文書のブロックは届きません）。
-- `tools` の名前は許可リスト（`allowlist.ts` の 7 つ）だけです。許可リストにない名前は 400 です。
+- 本文は `{ "messages": [...] }` だけです。`messages` は、確かめた項目から作り直して送ります（余分な項目、ブロックの `cache_control`、画像や文書のブロックは届きません）。
+- モデル（`claude-sonnet-5-5`）、`max_tokens`（1500）、システムプロンプト、**道具（tools）の定義**は Worker が決めます。画面から来た値は使いません。
+  - 道具の定義（名前・説明・入力の形）の正本は `src/ai/toolDefs.ts` の `TOOL_DEFS` です。画面側の `src/ai/tools.ts`（道具の実装）と Worker が、この 1 つのファイルを共有します。Worker は毎回、この定義をそのまま Claude に送ります。
+  - 本文に `tools`（やそのほか知らない最上位の項目）があっても、**無視します**（エラーにはしません。送られた値は一切、上流に届きません）。
+  - 過去のやり取りに入る `tool_use` ブロックの道具名は、`TOOL_NAMES`（同じファイルから出る名前の一覧）にあるものだけです。ないものは 400 `invalid_messages` です。
+  - 説明は 400 文字未満、入力の形（JSON にした長さ）は 2,000 文字未満に収めます（上流への要求を小さく保つため。`toolDefs.test.ts` が確かめます）。
 - 本文は 64KB まで（超えると 413）。メッセージは 40 件まで、テキストの合計は 48,000 文字までです。
 - 応答は上流が 200 のときだけそのまま返します。上流が 200 以外（4xx も含む）、ネットワークの失敗は、中身を見せずに 502 `{ "error": "upstream_error" }` です。
-- 呼び出せる出どころは `ALLOWED_ORIGINS`（カンマ区切り、完全一致）だけです。`Origin` が無い、または違う場合は 403 です。
+- 呼び出せる出どころは `ALLOWED_ORIGINS`（カンマ区切り、完全一致）だけです。`Origin` が無い、または違う場合は 403 です。**これは認証ではありません。** 他のウェブサイトのページの中からブラウザ経由でこの Worker を使わせない、という程度の仕組みです。`curl` などのブラウザ以外の道具は `Origin` に好きな値を付けられるので、これでは止まりません。
 
 ## 制限は「できるだけ」の仕組みです（Limits are best-effort）
 
@@ -21,7 +25,7 @@
 - 害を小さくするため、書き込みは「全体 → IP」の順に 1 つずつ行い、全体の書き込みが失敗したら IP は数えません。KV が使えないときは通さずに 503 を返します（fail closed）。
 - IP は HMAC-SHA-256（鍵は `IP_HASH_SECRET`）で変換して保存し、生のアドレスは保存しません。IPv6 は /64 の範囲で 1 人と数えます。
 
-**お金の本当の上限は、API キーを持つ Anthropic ワークスペースの利用上限（spend limit）です。** 公開する前に必ず設定してください。
+**お金の本当の上限は、API キーを持つ Anthropic ワークスペースの利用上限（spend limit）だけです。** `Origin` の確認も 1 日の回数の上限も、お金を確実に止める仕組みではありません。公開する前に必ず設定してください。
 
 ## 公開前のチェックリスト（承認を得てから）
 
@@ -49,10 +53,8 @@
 
 ```sh
 npx vitest run worker      # 試験（fetch と KV は偽物。実際の API は呼びません）
-npm run typecheck
-cp worker/.dev.vars.example worker/.dev.vars   # 手元で wrangler dev をするときだけ。.dev.vars は git に入れません
+npm run typecheck          # worker/ と、共有する src/ai/toolDefs.ts を含めて型を確かめる
+# 公開はせずに、共有ファイルを含めて 1 つにまとめられるかだけ確かめる（--dry-run）
+WRANGLER_SEND_METRICS=false npx wrangler deploy --dry-run --outdir "$TMPDIR/wrangler-dry" -c worker/wrangler.jsonc
+cp worker/.dev.vars.example worker/.dev.vars   # 手元で wrangler dev をするときだけ。.dev.vars と .dev.vars.* は git に入れません（.dev.vars.example だけ入っています）
 ```
-
-## 今後（Task 13）
-
-道具の定義（名前・説明・入力の形）は、今は画面から送られてきたものを検証して使っています。Task 13 で、サーバー側の正本（`src/ai/toolDefs.ts` を共有）に切り替え、画面からの `tools` を受け取らない形にします。
