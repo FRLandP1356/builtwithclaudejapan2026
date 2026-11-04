@@ -97,6 +97,41 @@ describe('verified numbers (shown as in the tool results, scaled and rounded)', 
   });
 });
 
+describe('fix round 1: key hygiene, dates and spaced units', () => {
+  it('the year and requestedYear fields of a result never verify a quantity', () => {
+    const results = [{ rows: [{ year: 2050, requestedYear: 2043, population: 42311 }] }, JSON.stringify({ year: 2075 })];
+    expect(unverified('2,050人', results)).toEqual(['2,050']);
+    expect(unverified('2,043人', results)).toEqual(['2,043']);
+    expect(unverified('2,075人', results)).toEqual(['2,075']);
+    expect(unverified('42,311人', results)).toEqual([]);
+    // years in the answer are still exempt, and other keys holding the same digits still count
+    expect(unverified('2050年は42,311人', results)).toEqual([]);
+    expect(unverified('2,050人', [{ count: 2050 }])).toEqual([]);
+  });
+
+  it('dates written with / - or . are not data ("2026/11/05", "2026-11-05", "2026.11.05")', () => {
+    expect(unverified('2026/11/05に確認', [])).toEqual([]);
+    expect(unverified('2026-11-05時点', [])).toEqual([]);
+    expect(unverified('2026.11.05', [])).toEqual([]);
+    expect(unverified('2026/11/5から2026/12/20まで', [])).toEqual([]);
+    // two parts are not a date: 11 and 20 are plain numbers
+    expect(unverified('11/20', [])).toEqual(['11', '20']);
+    // and a range of years or a decimal next to a date is still read
+    expect(unverified('2026-11-05に約10万人', [])).toEqual(['10万']);
+  });
+
+  it('a space between the number and its unit or % is allowed ("4.2 万人", "63.3 %")', () => {
+    expect(unverified('約4.2 万人', [{ p: 42311 }])).toEqual([]);
+    expect(unverified('約4.2　万人', [{ p: 42311 }])).toEqual([]);
+    expect(unverified('6,328 万人', [{ n: 63280000 }])).toEqual([]);
+    expect(unverified('約10 万人', [{ p: 42311 }])).toEqual(['10 万']);
+    expect(unverified('割合は51.6 %', [{ share: 51.6 }])).toEqual([]);
+    expect(unverified('割合は5 %', [])).toEqual(['5 %']);
+    // a number followed by a space and an ordinary word is unchanged
+    expect(unverified('42,311 人', [{ p: 42311 }])).toEqual([]);
+  });
+});
+
 describe('exempt numbers', () => {
   it('years 2020..2100 are exempt, with or without 年; other years followed by 年 and durations too', () => {
     expect(unverified('2020年から2100年まで。2050年と2075年。', [])).toEqual([]);

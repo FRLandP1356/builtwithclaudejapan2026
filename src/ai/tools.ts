@@ -12,6 +12,7 @@ import type { Status } from '../engine/facilities';
 import { OFFICIAL_END_YEAR } from '../engine/scenarios';
 import { DEFAULT_SCENARIO } from '../engine/types';
 import type { Area, Facility, Groups, Scenario, Series } from '../engine/types';
+import { MAX_YEARS } from './toolDefs';
 
 /**
  * What the tools need from the app.
@@ -312,7 +313,6 @@ function findArea(raw: unknown, ctx: EngineContext): unknown {
 // ---------------------------------------------------------------------------------------------------------------
 
 const DEFAULT_YEARS = [2020, 2030, 2040, 2050, 2060, 2075, 2100];
-const MAX_YEARS = 40;
 
 function getSeries(raw: unknown, ctx: EngineContext): unknown {
   const input = asInput(raw);
@@ -357,7 +357,12 @@ function getSeries(raw: unknown, ctx: EngineContext): unknown {
 
 const OFFICIAL_YEARS = [2025, 2030, 2035, 2040, 2045, 2050];
 const ESTIMATE_YEARS = [2060, 2065, 2070, 2075, 2080, 2085, 2090, 2095, 2100];
-const round6 = (x: number): number => Math.round(x * 1e6) / 1e6;
+
+/** Two significant digits, so a tiny but real difference never rounds to exactly 0. */
+const sig2 = (x: number): number => Number(x.toPrecision(2));
+
+const COMPARE_NOTE =
+  '社人研（国立社会保障・人口問題研究所）の市区町村別の公式推計は2050年までです。2025〜2050年は、このアプリの計算が公表されている公式の値を、市区町村ごとには数人から十人弱のずれで再現しています（都道府県や日本全体は、足し合わせた分だけずれが大きくなります）。2060年以降はこのアプリの試算で、公式の数字ではありません。';
 
 function compareSources(raw: unknown, ctx: EngineContext): unknown {
   const input = asInput(raw);
@@ -366,7 +371,8 @@ function compareSources(raw: unknown, ctx: EngineContext): unknown {
   const index = indexOf(ctx);
   const series = seriesOf(place, ctx.run(scenario));
 
-  let max = 0;
+  let maxRelative = 0;
+  let maxAbsolute = 0;
   const official = OFFICIAL_YEARS.map((year) => {
     let officialTotal = 0;
     for (const code of place.areaCodes) {
@@ -375,18 +381,21 @@ function compareSources(raw: unknown, ctx: EngineContext): unknown {
       officialTotal += value;
     }
     const app = totalAt(series, year);
-    const relativeDifference = officialTotal > 0 ? Math.abs(app - officialTotal) / officialTotal : 0;
-    max = Math.max(max, relativeDifference);
-    return { year, official: officialTotal, app: people(app), relativeDifference: round6(relativeDifference) };
+    const relative = officialTotal > 0 ? Math.abs(app - officialTotal) / officialTotal : 0;
+    const difference = people(app) - officialTotal;
+    maxRelative = Math.max(maxRelative, relative);
+    maxAbsolute = Math.max(maxAbsolute, Math.abs(difference));
+    return { year, official: officialTotal, app: people(app), difference, relativeDifference: sig2(relative) };
   });
   return {
     area: whoIs(place),
     scenario,
     official,
-    maxRelativeDifference: round6(max),
-    maxRelativeDifferencePercent: Math.round(max * 1e5) / 1e3,
+    maxRelativeDifference: sig2(maxRelative),
+    maxRelativeDifferencePercent: sig2(maxRelative * 100),
+    maxAbsoluteDifference: maxAbsolute,
     appEstimate: ESTIMATE_YEARS.map((year) => ({ year, population: people(totalAt(series, year)), basis: 'app_estimate' })),
-    note: '社人研（国立社会保障・人口問題研究所）の市区町村別の公式推計は2050年までです。2060年以降はこのアプリの試算で、公式の数字ではありません。',
+    note: COMPARE_NOTE,
   };
 }
 
@@ -426,6 +435,9 @@ function runProjection(raw: unknown, ctx: EngineContext): unknown {
 /** Ruling 10: the three metropolitan areas, whole prefectures. The MLIT thresholds exclude them. */
 const METRO_PREFS = new Set(['11', '12', '13', '14', '21', '23', '24', '26', '27', '28', '29']);
 
+/** What the p50 / p80 columns mean in words the model will use: "edge" from the 50% level, "ok" from the 80% level. */
+const THRESHOLDS = { edgePercent: 50, okPercent: 80 };
+
 function facilityCheck(raw: unknown, ctx: EngineContext): unknown {
   const input = asInput(raw);
   const place = resolveSingleArea(input.areaCode, ctx);
@@ -456,6 +468,9 @@ function facilityCheck(raw: unknown, ctx: EngineContext): unknown {
       ? { note: '三大都市圏の県は、人口の目安の元になった国土交通省の統計（2009〜2012年）の対象外です。この目安は参考程度に扱ってください。' }
       : {}),
     counts,
+    facilityCount: facilities.length,
+    facilityTotal: ctx.facilities.length,
+    thresholds: THRESHOLDS,
     facilities,
   };
 }
@@ -465,7 +480,7 @@ function facilityCheck(raw: unknown, ctx: EngineContext): unknown {
 // ---------------------------------------------------------------------------------------------------------------
 
 const MAX_TOP = 10;
-const MAX_FLIPS = 15;
+const MAX_FLIPS = 10; // non-essential flips listed; essential flips are always all listed
 const MAX_EXAMPLES = 3;
 
 function parseSource(input: Record<string, unknown>, ctx: EngineContext): AllocationInput['source'] {
@@ -481,6 +496,41 @@ function parseSource(input: Record<string, unknown>, ctx: EngineContext): Alloca
   }
   const prefCodes = input.prefCodes.map((c) => resolvePref(c, ctx, 'prefCodes の各要素').code);
   return { mode: 'regions', prefCodes: [...new Set(prefCodes)] };
+}
+
+interface FlipEntry {
+  facilityId: string;
+  name: string;
+  essential: boolean;
+  before: number;
+  after: number;
+  lostCount: number;
+  gainedCount: number;
+  lostExamples: string[];
+  gainedExamples: string[];
+}
+
+/** A head count as a whole number with thousands commas, written out in full (never exponent notation). */
+function wholePeople(x: number): string {
+  const n = Math.round(Math.abs(x));
+  return Number.isSafeInteger(n) ? `${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}人` : '桁外れに大きな人数';
+}
+
+/**
+ * A fixed Japanese sentence for an engine RangeError. Which rule was broken is read from the engine's message; the
+ * figures come from the caller, rounded to whole people, so no English text or fraction reaches the model.
+ */
+function allocationFailureMessage(engineMessage: string, deltaPeople: number, targetTotal: number, sourceTotal: number): string {
+  if (engineMessage.includes("source group's population")) {
+    return `動かす人数（${wholePeople(deltaPeople)}）が、人口を引く側の全体の人口（${wholePeople(sourceTotal)}）より多いため、この動かし方はできません。`;
+  }
+  if (engineMessage.includes("target group's population")) {
+    return `減らす人数（${wholePeople(deltaPeople)}）が、対象の人口（${wholePeople(targetTotal)}）より多いため、この動かし方はできません。`;
+  }
+  if (engineMessage.includes('source group is empty')) {
+    return '人口を引く側の地域が残らないため、この動かし方はできません。引く県（prefCodes）の指定を見直してください。';
+  }
+  return 'この条件では人口を動かせません。対象と人数、引く側の指定を見直してください。';
 }
 
 function runAllocation(raw: unknown, ctx: EngineContext): unknown {
@@ -525,8 +575,13 @@ function runAllocation(raw: unknown, ctx: EngineContext): unknown {
   try {
     result = allocate(popByArea, areaPref, { target: { kind: kind as 'pref' | 'area', code: targetPlace.code }, deltaPeople, source }, ctx.facilities);
   } catch (e) {
-    if (e instanceof RangeError) return { error: 'allocation_not_possible', message: `この人口の動かし方はできません: ${e.message}` };
-    throw e;
+    if (!(e instanceof RangeError)) throw e;
+    const inTarget = new Set(targetCodes);
+    const sourceTotal = ctx.areas.reduce(
+      (t, a) => (inTarget.has(a.code) || (source.mode === 'regions' && !source.prefCodes.includes(a.prefCode)) ? t : t + popByArea.get(a.code)!),
+      0,
+    );
+    return { error: 'allocation_not_possible', message: allocationFailureMessage(e.message, deltaPeople, targetBefore, sourceTotal) };
   }
 
   const name = (code: string): string => index.areaByCode.get(code)!.name;
@@ -543,11 +598,11 @@ function runAllocation(raw: unknown, ctx: EngineContext): unknown {
   const examples = (codes: string[]): string[] =>
     [...codes].sort((x, y) => result.pop.get(y)! - result.pop.get(x)! || (x < y ? -1 : 1)).slice(0, MAX_EXAMPLES).map(name);
   const facilityById = new Map(ctx.facilities.map((f) => [f.id, f]));
-  const flips = result.flips
+  const changed = result.flips
     .filter((f) => f.lost.length + f.gained.length > 0)
     .map((f, order) => ({ f, order, essential: facilityById.get(f.facilityId)?.essential === true }))
-    .sort((x, y) => y.f.lost.length + y.f.gained.length - (x.f.lost.length + x.f.gained.length) || Number(y.essential) - Number(x.essential) || x.order - y.order);
-  const facilityFlips = flips.slice(0, MAX_FLIPS).map(({ f, essential }) => ({
+    .sort((x, y) => y.f.lost.length + y.f.gained.length - (x.f.lost.length + x.f.gained.length) || x.order - y.order);
+  const entry = ({ f, essential }: (typeof changed)[number]): FlipEntry => ({
     facilityId: f.facilityId,
     name: facilityById.get(f.facilityId)?.name ?? f.facilityId,
     essential,
@@ -557,7 +612,11 @@ function runAllocation(raw: unknown, ctx: EngineContext): unknown {
     gainedCount: f.gained.length,
     lostExamples: examples(f.lost),
     gainedExamples: examples(f.gained),
-  }));
+  });
+  // Essential facilities are never cut off: all of them are in essentialFlips, and facilityFlips holds the others.
+  const essentialFlips = changed.filter((c) => c.essential).map(entry);
+  const others = changed.filter((c) => !c.essential);
+  const facilityFlips = others.slice(0, MAX_FLIPS).map(entry);
 
   return {
     ...yearFields(year),
@@ -569,7 +628,10 @@ function runAllocation(raw: unknown, ctx: EngineContext): unknown {
     targetBefore: people(targetBefore),
     targetAfter: people(sumOf(targetCodes, result.pop)),
     top,
-    flippedFacilityCount: flips.length,
+    flippedFacilityCount: changed.length,
+    essentialFlippedCount: essentialFlips.length,
+    omittedFlipCount: others.length - facilityFlips.length,
+    essentialFlips,
     facilityFlips,
   };
 }

@@ -6,9 +6,10 @@
 // WHAT COUNTS AS A NUMBER IN THE ANSWER
 //   ASCII or full-width digits, thousands commas ("6,328"), decimals ("63.3"), then optionally
 //   - a Japanese unit: 万 (1e4), 億 (1e8), 兆 (1e12), 千 (1e3), 千万 (1e7), 百万 (1e6), or a descending chain of them
-//     ("1億2,000万", "3万5千", "3万5,000" = tail digits after the last unit), or
-//   - "%" / "％" / "パーセント", or "倍" / "割" (a ratio). The returned substring includes the unit, %, 倍 or 割 but not
-//     counter words such as 人 or 円.
+//     ("1億2,000万", "3万5千", "3万5,000" = tail digits after the last unit). Spaces (ASCII, full-width, no-break)
+//     may stand between a number and its unit: "4.2 万人" is 4.2万. Or
+//   - "%" / "％" / "パーセント" (spaces allowed before it: "63.3 %"), or "倍" / "割" (a ratio). The returned substring
+//     includes the unit, %, 倍 or 割 (and the spaces before a unit or %) but not counter words such as 人 or 円.
 //   A number written as a range with the unit only at the end ("40〜50%", "4〜5万人") lends that unit/percent to the
 //   first number.
 //
@@ -21,6 +22,7 @@
 //   Numbers in the results are: JSON numbers; numbers written inside string values (for example "15,000" in a
 //   facility name, or "3万" in a note); strings that are JSON text are parsed first. All-digit strings of 2 or 5 digits
 //   are codes (area/prefecture codes), never quantities: they are exempt in the answer (below) and never verify a quantity.
+//   Values under the keys `year` and `requestedYear` are ignored: they are years, and must not verify "2,050人".
 //
 // EXEMPT (never returned), applied in this order to every number in the answer
 //   E1  list numbering at the start of a line: "1. ", "2) ", "（3）", "12、" (also after "- ", "* ", "#"). "1.2倍" at the
@@ -34,6 +36,8 @@
 //       (人 世帯 戸 円 件 軒 台). "田辺市（30206）" passes, "30206人" is checked.
 //   E6  a plain integer 0..10: no comma, no decimal point, no unit, no % and no 倍/割 ("3つ", "3町", "10市町村", "7人").
 //       "11町" is checked; "3倍", "3割", "5%" and "0.5" are checked.
+//   E7  (checked second, after E1) any number inside a date written with / - or . ("2026/11/05", "2026-11-05", "2026.11.05"; three parts, the first
+//       with 4 digits). "11/20" is not a date.
 //   "Plain" means digits only. Kanji numerals (三万人) are not read.
 //   A bad number that is written several times is returned once (first appearance order).
 
@@ -51,6 +55,7 @@ const COUNTERS = new Set(['人', '世', '戸', '円', '件', '軒', '台']); // 
 const LABELS_AFTER = new Set(['年', '歳', '代', '位', '番', '月', '日', '章', '節', '号', '条']);
 const TOLERANCE_RELATIVE = 0.005;
 const SLACK = 1e-9;
+const YEAR_KEYS = new Set(['year', 'requestedYear']);
 const MAX_NODES = 200_000;
 const MAX_DEPTH = 64;
 
@@ -104,6 +109,21 @@ function unitAt(t: string, pos: number): readonly [string, number] | undefined {
   return undefined;
 }
 
+const SPACES = new Set([' ', '\u3000', '\u00a0']);
+
+function skipSpaces(t: string, pos: number): number {
+  let p = pos;
+  while (SPACES.has(t[p])) p++;
+  return p;
+}
+
+/** A unit after the number, with optional spaces in between ("4.2 万人"): the unit and the position where it starts. */
+function unitAfter(t: string, pos: number): { unit: readonly [string, number]; at: number } | undefined {
+  const at = skipSpaces(t, pos);
+  const unit = unitAt(t, at);
+  return unit ? { unit, at } : undefined;
+}
+
 const halfOf = (decimals: number, multiplier: number): number => 0.5 * Math.pow(10, -decimals) * multiplier;
 
 /** Parse the number (with its unit chain, %, 倍 or 割) that starts at `start`; undefined when no number starts there. */
@@ -114,24 +134,26 @@ function parseToken(t: string, start: number): Token | undefined {
   let value = first.value;
   let halfUnit = halfOf(first.decimals, 1);
   let firstMult = 1;
-  const firstUnit = unitAt(t, pos);
-  if (firstUnit) {
+  const firstFound = unitAfter(t, pos);
+  const firstUnit = firstFound?.unit;
+  if (firstFound && firstUnit) {
     // A chain of "number unit" pieces with falling units, optionally ending in plain tail digits ("3万5,000").
     firstMult = firstUnit[1];
     value = first.value * firstUnit[1];
     halfUnit = halfOf(first.decimals, firstUnit[1]);
     let lastMult = firstUnit[1];
-    pos += firstUnit[0].length;
+    pos = firstFound.at + firstUnit[0].length;
     for (;;) {
       const piece = numberAt(t, pos);
       if (!piece) break;
       const afterPiece = pos + piece.text.length;
-      const unit = unitAt(t, afterPiece);
-      if (unit && unit[1] < lastMult) {
+      const found = unitAfter(t, afterPiece);
+      const unit = found?.unit;
+      if (found && unit && unit[1] < lastMult) {
         value += piece.value * unit[1];
         halfUnit = halfOf(piece.decimals, unit[1]);
         lastMult = unit[1];
-        pos = afterPiece + unit[0].length;
+        pos = found.at + unit[0].length;
         continue;
       }
       if (!unit) {
@@ -145,12 +167,13 @@ function parseToken(t: string, start: number): Token | undefined {
 
   let percent = false;
   let ratio = false;
-  if (t[pos] === '%') {
+  const sign = skipSpaces(t, pos);
+  if (t[sign] === '%') {
     percent = true;
-    pos += 1;
-  } else if (t.startsWith('パーセント', pos)) {
+    pos = sign + 1;
+  } else if (t.startsWith('パーセント', sign)) {
     percent = true;
-    pos += 'パーセント'.length;
+    pos = sign + 'パーセント'.length;
   } else if (t[pos] === '倍' || t[pos] === '割') {
     ratio = true;
     pos += 1;
@@ -169,7 +192,7 @@ function parseToken(t: string, start: number): Token | undefined {
     value,
     halfUnit,
     prev: start > 0 ? t[start - 1] : '',
-    next: pos < t.length ? t[pos] : '',
+    next: t[skipSpaces(t, pos)] ?? '',
   };
 }
 
@@ -219,6 +242,13 @@ function listNumberStarts(t: string): Set<number> {
   return starts;
 }
 
+/** [start, end) ranges of dates written like 2026/11/05, 2026-11-05 or 2026.11.05. */
+function dateRanges(t: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  for (const m of t.matchAll(/(?<!\d)\d{4}[/.-]\d{1,2}[/.-]\d{1,2}(?!\d)/g)) ranges.push([m.index, m.index + m[0].length]);
+  return ranges;
+}
+
 interface Known {
   values: number[];
   codes: Set<string>;
@@ -265,7 +295,10 @@ function collectKnown(toolResults: unknown): Known {
       case 'object': {
         if (node === null || seen.has(node) || depth >= MAX_DEPTH) break;
         seen.add(node);
-        const children = Array.isArray(node) ? node : Object.values(node as Record<string, unknown>);
+        // Fields named year / requestedYear hold years, which must never verify a quantity such as "2,050人".
+        const children = Array.isArray(node)
+          ? node
+          : Object.entries(node as Record<string, unknown>).filter(([k]) => !YEAR_KEYS.has(k)).map(([, v]) => v);
         for (const c of children) stack.push([c, depth + 1]);
         break;
       }
@@ -276,9 +309,11 @@ function collectKnown(toolResults: unknown): Known {
   return known;
 }
 
-function isExempt(tok: Token, listStarts: Set<number>, codes: Set<string>): boolean {
+function isExempt(tok: Token, listStarts: Set<number>, dates: Array<[number, number]>, codes: Set<string>): boolean {
   // E1 list numbering
   if (listStarts.has(tok.start)) return true;
+  // E7 part of a date written with / - or .
+  if (dates.some(([from, to]) => tok.start >= from && tok.start < to)) return true;
   // E2 stuck to a letter before the digits
   if (/[A-Za-z_]/.test(tok.prev)) return true;
   // E3 ordinals, years, durations, ages, dates
@@ -309,10 +344,11 @@ export function checkNumbers(answer: string, toolResults: unknown[]): { unverifi
   if (tokens.length === 0) return { unverified: [] };
   const known = collectKnown(toolResults);
   const listStarts = listNumberStarts(t);
+  const dates = dateRanges(t);
   const bad: string[] = [];
   const reported = new Set<string>();
   for (const tok of tokens) {
-    if (isExempt(tok, listStarts, known.codes)) continue;
+    if (isExempt(tok, listStarts, dates, known.codes)) continue;
     if (isVerified(tok, known.values)) continue;
     const written = text.slice(tok.start, tok.end);
     if (!reported.has(written)) {

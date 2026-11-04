@@ -3,18 +3,159 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { makeEngineContext } from '../../test/helpers/engineContext';
 import { total } from '../engine/aggregate';
+import { allocate } from '../engine/allocation';
 import { facilityStatus } from '../engine/facilities';
 import { DEFAULT_SCENARIO } from '../engine/types';
 import type { Area, Facility, Scenario, Series } from '../engine/types';
-import { TOOL_DEFS, TOOL_NAMES } from './toolDefs';
+import { MAX_YEARS, TOOL_DEFS, TOOL_NAMES } from './toolDefs';
 import { TOOL_NAMES as SHARED_NAMES } from './toolNames';
+import { checkNumbers } from './numberCheck';
 import { runTool } from './tools';
 import type { EngineContext } from './tools';
 
 const ctx = makeEngineContext();
 
-type Any = any;
-const call = (name: string, input: unknown, c: EngineContext = ctx): Any => runTool(name, input, c);
+interface ToolError {
+  error: string;
+  message: string;
+}
+interface Who {
+  code: string;
+  name: string;
+  prefName?: string;
+}
+interface Scn {
+  cwrMult: number;
+  migMode: 'hold' | 'fade';
+  migScale: number;
+  infraStrength: number;
+}
+interface FindAreaOut {
+  matches: Array<Who & { kind: string }>;
+}
+interface SeriesRow {
+  year: number;
+  requestedYear?: number;
+  population: number;
+  ages65: number;
+  ages65Share: number;
+  changeFrom2020Percent: number;
+  basis: string;
+}
+interface SeriesOut {
+  area: Who;
+  scenario: Scn;
+  rows: SeriesRow[];
+}
+interface CompareOut {
+  area: Who;
+  scenario: Scn;
+  official: Array<{ year: number; official: number; app: number; difference: number; relativeDifference: number }>;
+  maxRelativeDifference: number;
+  maxRelativeDifferencePercent: number;
+  maxAbsoluteDifference: number;
+  appEstimate: Array<{ year: number; population: number; basis: string }>;
+  note: string;
+}
+interface ProjectionOut {
+  area: Who;
+  scenario: Scn;
+  rows: Array<{
+    year: number;
+    basis: string;
+    scenarioPopulation: number;
+    defaultPopulation: number;
+    difference: number;
+    differencePercent: number;
+  }>;
+}
+interface FacilityRow {
+  id: string;
+  name: string;
+  status: 'ok' | 'edge' | 'below';
+  essential: boolean;
+  p50: number;
+  p80: number;
+}
+interface FacilityOut {
+  area: Who;
+  year: number;
+  requestedYear?: number;
+  scenario: Scn;
+  population: number;
+  outsideMlitScope: boolean;
+  note?: string;
+  counts: { ok: number; edge: number; below: number };
+  facilityCount: number;
+  facilityTotal: number;
+  thresholds: { edgePercent: number; okPercent: number };
+  facilities: FacilityRow[];
+}
+interface Flip {
+  facilityId: string;
+  name: string;
+  essential: boolean;
+  before: number;
+  after: number;
+  lostCount: number;
+  gainedCount: number;
+  lostExamples: string[];
+  gainedExamples: string[];
+}
+interface AllocOut {
+  year: number;
+  requestedYear?: number;
+  scenario: Scn;
+  target: { kind: string; code: string; name: string };
+  deltaPercent?: number;
+  deltaPeople: number;
+  source: { mode: string; prefCodes?: string[] };
+  targetBefore: number;
+  targetAfter: number;
+  top: Array<Who & { before: number; after: number }>;
+  flippedFacilityCount: number;
+  essentialFlippedCount: number;
+  omittedFlipCount: number;
+  essentialFlips: Flip[];
+  facilityFlips: Flip[];
+}
+interface SimilarOut {
+  area: Who;
+  year: number;
+  requestedYear?: number;
+  scenario: Scn;
+  population: number;
+  similar: Array<Who & { pop2020: number }>;
+}
+interface CountOut {
+  year: number;
+  requestedYear?: number;
+  scenario: Scn;
+  below?: number;
+  above?: number;
+  prefCode?: string;
+  count: number;
+  total: number;
+  examples: Array<Who & { population: number }>;
+}
+interface ResultMap {
+  find_area: FindAreaOut;
+  get_series: SeriesOut;
+  compare_sources: CompareOut;
+  run_projection: ProjectionOut;
+  facility_check: FacilityOut;
+  run_allocation: AllocOut;
+  find_similar_now: SimilarOut;
+  count_areas: CountOut;
+}
+type Failed = Partial<ToolError>;
+
+/** Run a tool. Known names give the typed result (an error object has the same fields unset); other names give the error fields. */
+function call<N extends keyof ResultMap>(name: N, input: unknown, c?: EngineContext): ResultMap[N] & Failed;
+function call(name: string, input: unknown, c?: EngineContext): Failed & Record<string, unknown>;
+function call(name: string, input: unknown, c: EngineContext = ctx): unknown {
+  return runTool(name, input, c);
+}
 const jsonSize = (x: unknown): number => JSON.stringify(x).length;
 
 const TANABE = '30206';
@@ -32,7 +173,7 @@ describe('tool definitions (data module and shared names)', () => {
       expect(t.description.length).toBeLessThan(400);
       expect(JSON.stringify(t.input_schema).length).toBeLessThan(2000);
       expect(t.input_schema.type).toBe('object');
-      expect((t.input_schema as Any).additionalProperties).toBe(false);
+      expect(t.input_schema.additionalProperties).toBe(false);
       for (const key of t.input_schema.required ?? []) expect(Object.keys(t.input_schema.properties)).toContain(key);
     }
   });
@@ -68,22 +209,22 @@ describe('tool definitions (data module and shared names)', () => {
 describe('find_area', () => {
   it('find_area_tanabe: "田辺" finds 田辺市 (30206), first, ahead of the substring match 京田辺市', () => {
     const r = call('find_area', { query: '田辺' });
-    const codes = r.matches.map((m: Any) => m.code);
+    const codes = r.matches.map((m) => m.code);
     expect(codes).toContain(TANABE);
     expect(codes[0]).toBe(TANABE);
     expect(r.matches[0]).toEqual({ code: TANABE, name: '田辺市', prefName: '和歌山県', kind: 'city' });
-    const kyotanabe = r.matches.find((m: Any) => m.name === '京田辺市');
+    const kyotanabe = r.matches.find((m) => m.name === '京田辺市');
     expect(kyotanabe).toBeDefined();
-    expect(codes.indexOf(kyotanabe.code)).toBeGreaterThan(0);
+    expect(codes.indexOf(kyotanabe!.code)).toBeGreaterThan(0);
   });
 
   it('exact names come first and duplicated names are told apart by prefecture', () => {
     const r = call('find_area', { query: '池田町' });
     expect(r.matches.length).toBeGreaterThanOrEqual(4);
-    expect(r.matches.every((m: Any) => m.name === '池田町')).toBe(true);
-    expect(new Set(r.matches.map((m: Any) => m.prefName)).size).toBe(r.matches.length);
+    expect(r.matches.every((m) => m.name === '池田町')).toBe(true);
+    expect(new Set(r.matches.map((m) => m.prefName)).size).toBe(r.matches.length);
     const mix = call('find_area', { query: '府中' });
-    expect(mix.matches.map((m: Any) => m.name)).toEqual(expect.arrayContaining(['府中市']));
+    expect(mix.matches.map((m) => m.name)).toEqual(expect.arrayContaining(['府中市']));
   });
 
   it('spaces (ASCII and full-width) in the query are ignored', () => {
@@ -138,12 +279,30 @@ describe('years', () => {
 
   it('a year in range but not a multiple of 5 is snapped down and the result says which year was used', () => {
     const r = call('get_series', { areaCode: TANABE, years: [2043, 2040, 2100] });
-    expect(r.rows.map((x: Any) => x.year)).toEqual([2040, 2100]); // 2043 and 2040 both mean 2040
+    expect(r.rows.map((x) => x.year)).toEqual([2040, 2100]); // 2043 and 2040 both mean 2040
     expect(r.rows[0].requestedYear).toBe(2043);
     const f = call('facility_check', { areaCode: TANABE, year: 2099 });
     expect(f.year).toBe(2095);
     expect(f.requestedYear).toBe(2099);
     expect(call('facility_check', { areaCode: TANABE, year: 2095 }).requestedYear).toBeUndefined();
+  });
+
+  it('years may come in any order: rows are sorted by year', () => {
+    const r = call('get_series', { areaCode: TANABE, years: [2100, 2020, 2075, 2050] });
+    expect(r.rows.map((x) => x.year)).toEqual([2020, 2050, 2075, 2100]);
+    const reversed = call('get_series', { areaCode: TANABE, years: [2100, 2090, 2080, 2070] });
+    expect(reversed.rows.map((x) => x.year)).toEqual([2070, 2080, 2090, 2100]);
+  });
+
+  it('MAX_YEARS: the schema maxItems is the constant the code enforces, and one more year is rejected', () => {
+    const years = TOOL_DEFS.find((t) => t.name === 'get_series')!.input_schema.properties.years as { maxItems: number };
+    expect(years.maxItems).toBe(MAX_YEARS);
+    expect(MAX_YEARS).toBe(17); // every 5-year step from 2020 to 2100
+    const all = Array.from({ length: MAX_YEARS }, (_, i) => 2020 + 5 * i);
+    const full = call('get_series', { areaCode: TANABE, years: all });
+    expect(full.error).toBeUndefined();
+    expect(full.rows).toHaveLength(MAX_YEARS);
+    expect(call('get_series', { areaCode: TANABE, years: [...all, 2100] }).error).toBe('invalid_input');
   });
 
   it('non-numeric years are invalid_input', () => {
@@ -158,8 +317,8 @@ describe('get_series', () => {
   it('tokyo_2040: the default row for Tokyo ("13") in 2040 is about 14.5 million (official 14,507,419, within 1%)', () => {
     const r = call('get_series', { areaCode: '13' });
     expect(r.area).toEqual({ code: '13', name: '東京都' });
-    expect(r.rows.map((x: Any) => x.year)).toEqual([2020, 2030, 2040, 2050, 2060, 2075, 2100]);
-    const row2040 = r.rows.find((x: Any) => x.year === 2040);
+    expect(r.rows.map((x) => x.year)).toEqual([2020, 2030, 2040, 2050, 2060, 2075, 2100]);
+    const row2040 = r.rows.find((x) => x.year === 2040)!;
     expect(Math.abs(row2040.population - 14_507_419) / 14_507_419).toBeLessThan(0.01);
     expect(Number.isInteger(row2040.population)).toBe(true);
     expect(row2040.ages65Share).toBe(27.3);
@@ -177,9 +336,9 @@ describe('get_series', () => {
     const base = call('get_series', { areaCode: '13' });
     const fade = call('get_series', { areaCode: '13', scenario: { migMode: 'fade' } });
     for (const y of [2020, 2030, 2040, 2050]) {
-      expect(fade.rows.find((x: Any) => x.year === y).population).toBe(base.rows.find((x: Any) => x.year === y).population);
+      expect(fade.rows.find((x) => x.year === y)!.population).toBe(base.rows.find((x) => x.year === y)!.population);
     }
-    expect(fade.rows.find((x: Any) => x.year === 2100).population).toBeLessThan(base.rows.find((x: Any) => x.year === 2100).population);
+    expect(fade.rows.find((x) => x.year === 2100)!.population).toBeLessThan(base.rows.find((x) => x.year === 2100)!.population);
     expect(fade.scenario).toEqual({ ...DEFAULT_SCENARIO, migMode: 'fade' });
   });
 
@@ -199,7 +358,7 @@ describe('get_series', () => {
     expect(t.area).toEqual({ code: TANABE, name: '田辺市', prefName: '和歌山県' });
     expect(Math.abs(t.rows[0].population - 42_311)).toBeLessThanOrEqual(5);
     const v = call('get_series', { areaCode: KITAYAMA_VILLAGE, years: [2020, 2050, 2100] });
-    expect(v.rows.map((x: Any) => x.population)).toEqual([404, 181, 75]);
+    expect(v.rows.map((x) => x.population)).toEqual([404, 181, 75]);
     const sapporo = call('get_series', { areaCode: '01100', years: [2020] });
     expect(sapporo.area).toEqual({ code: '01100', name: '札幌市', prefName: '北海道' });
     expect(sapporo.rows[0].population).toBeGreaterThan(1_900_000);
@@ -233,15 +392,15 @@ describe('compare_sources', () => {
   it('tanabe: the official 2025..2050 totals sit next to this app, maxRelativeDifference < 0.0005', () => {
     const r = call('compare_sources', { areaCode: TANABE });
     expect(r.area).toEqual({ code: TANABE, name: '田辺市', prefName: '和歌山県' });
-    expect(r.official.map((x: Any) => x.year)).toEqual([2025, 2030, 2035, 2040, 2045, 2050]);
-    const y2050 = r.official.find((x: Any) => x.year === 2050);
+    expect(r.official.map((x) => x.year)).toEqual([2025, 2030, 2035, 2040, 2045, 2050]);
+    const y2050 = r.official.find((x) => x.year === 2050)!;
     expect(y2050.official).toBe(42_309);
     expect(Math.abs(y2050.app - 42_311)).toBeLessThanOrEqual(5);
     expect(r.maxRelativeDifference).toBeLessThan(0.0005);
     expect(r.maxRelativeDifference).toBeGreaterThanOrEqual(0);
     expect(r.maxRelativeDifferencePercent).toBeCloseTo(r.maxRelativeDifference * 100, 2);
-    expect(r.appEstimate.map((x: Any) => x.year)).toEqual([2060, 2065, 2070, 2075, 2080, 2085, 2090, 2095, 2100]);
-    expect(r.appEstimate.every((x: Any) => x.basis === 'app_estimate' && Number.isInteger(x.population))).toBe(true);
+    expect(r.appEstimate.map((x) => x.year)).toEqual([2060, 2065, 2070, 2075, 2080, 2085, 2090, 2095, 2100]);
+    expect(r.appEstimate.every((x) => x.basis === 'app_estimate' && Number.isInteger(x.population))).toBe(true);
     expect(r.note).toMatch(/2050/);
     expect(r.scenario).toEqual(DEFAULT_SCENARIO);
   });
@@ -249,15 +408,45 @@ describe('compare_sources', () => {
   it('prefectures and Japan sum the official totals; a village (official ages only) is close too', () => {
     const tokyo = call('compare_sources', { areaCode: '13' });
     const official2040 = ctx.groups.prefs['13'].reduce((s, c) => s + ctx.areas.find((a) => a.code === c)!.official[2040], 0);
-    expect(tokyo.official.find((x: Any) => x.year === 2040).official).toBe(official2040);
+    expect(tokyo.official.find((x) => x.year === 2040)!.official).toBe(official2040);
     expect(tokyo.maxRelativeDifference).toBeLessThan(0.001);
     const japan = call('compare_sources', { areaCode: '00' });
-    expect(japan.official.find((x: Any) => x.year === 2050).official).toBe(
+    expect(japan.official.find((x) => x.year === 2050)!.official).toBe(
       ctx.areas.reduce((s, a) => s + a.official[2050], 0),
     );
     expect(japan.maxRelativeDifference).toBeLessThan(0.0005);
     const village = call('compare_sources', { areaCode: KITAYAMA_VILLAGE });
     expect(village.maxRelativeDifference).toBeLessThan(0.0005);
+  });
+
+  it('the differences do not collapse to 0: Japan differs by a few people, and the figures show it', () => {
+    const run = ctx.run(DEFAULT_SCENARIO);
+    const japan = call('compare_sources', { areaCode: '00' });
+    let relative = 0;
+    let absolute = 0;
+    for (const row of japan.official) {
+      const official = ctx.areas.reduce((t, a) => t + a.official[row.year], 0);
+      const app = ctx.areas.reduce((t, a) => t + total(run.get(a.code)![row.year]), 0);
+      relative = Math.max(relative, Math.abs(app - official) / official);
+      absolute = Math.max(absolute, Math.abs(Math.round(app) - official));
+      expect(row.difference).toBe(Math.round(app) - official);
+    }
+    expect(relative).toBeGreaterThan(0);
+    expect(japan.maxRelativeDifference).toBeGreaterThan(0);
+    expect(Math.abs(japan.maxRelativeDifference - relative) / relative).toBeLessThan(0.05); // two significant digits
+    expect(japan.maxRelativeDifferencePercent).toBeGreaterThan(0);
+    expect(Math.abs(japan.maxRelativeDifferencePercent - 100 * relative) / (100 * relative)).toBeLessThan(0.05);
+    expect(japan.maxAbsoluteDifference).toBe(absolute);
+    expect(absolute).toBeGreaterThan(0);
+    // 田辺市: 59,954 against the official 59,951 in 2030 and 46,550 against 46,553 in 2045: at most 3 people
+    expect(call('compare_sources', { areaCode: TANABE }).maxAbsoluteDifference).toBe(3);
+  });
+
+  it('the note says the 2025-2050 reproduction differs from the published values by a few people, and that official figures end in 2050', () => {
+    const { note } = call('compare_sources', { areaCode: TANABE });
+    expect(note).toMatch(/2050/);
+    expect(note).toMatch(/数人/);
+    expect(note).toMatch(/社人研/);
   });
 
   it('an optional scenario changes only the app-estimate years', () => {
@@ -275,7 +464,7 @@ describe('compare_sources', () => {
 describe('run_projection', () => {
   it('fade vs default: 2050 is the same; a rural city keeps more people under fade (less out-migration)', () => {
     const r = call('run_projection', { areaCode: TANABE, scenario: { migMode: 'fade' } });
-    expect(r.rows.map((x: Any) => x.year)).toEqual([2050, 2075, 2100]);
+    expect(r.rows.map((x) => x.year)).toEqual([2050, 2075, 2100]);
     expect(r.rows[0].difference).toBe(0);
     for (const row of r.rows) {
       expect(row.difference).toBe(row.scenarioPopulation - row.defaultPopulation);
@@ -308,7 +497,7 @@ describe('run_projection', () => {
 
   it('an empty scenario object is the default scenario (all differences 0); a missing scenario is invalid_input', () => {
     const same = call('run_projection', { areaCode: TANABE, scenario: {} });
-    expect(same.rows.every((x: Any) => x.difference === 0)).toBe(true);
+    expect(same.rows.every((x) => x.difference === 0)).toBe(true);
     expect(call('run_projection', { areaCode: TANABE }).error).toBe('invalid_input');
   });
 
@@ -436,7 +625,7 @@ describe('facility_check', () => {
     expect(r.population).toBe(2970);
     expect(r.outsideMlitScope).toBe(false);
     expect(r.facilities).toHaveLength(48);
-    const by = Object.fromEntries(r.facilities.map((f: Any) => [f.id, f]));
+    const by = Object.fromEntries(r.facilities.map((f) => [f.id, f]));
     expect(by.grocery).toMatchObject({ status: 'ok', essential: true, name: '飲食料品小売業', p50: 500, p80: 500 });
     expect(by.cafe.status).toBe('edge'); // 2,500 <= 2,970 < 7,500
     expect(by.bank.status).toBe('below'); // 6,500
@@ -448,7 +637,7 @@ describe('facility_check', () => {
     const r = call('facility_check', { areaCode: KOYA, year: 2100 });
     expect(r.population).toBe(471);
     expect(r.counts).toEqual({ ok: 0, edge: 0, below: 48 });
-    expect(r.facilities.find((f: Any) => f.id === 'grocery').status).toBe('below');
+    expect(r.facilities.find((f) => f.id === 'grocery')!.status).toBe('below');
   });
 
   it('matches the engine status for every facility of a mid-sized city', () => {
@@ -464,9 +653,66 @@ describe('facility_check', () => {
     const r = call('facility_check', { areaCode: TANABE, year: 2100, onlyEssential: true });
     const essential = ctx.facilities.filter((f) => f.essential);
     expect(r.facilities).toHaveLength(essential.length);
-    expect(r.facilities.every((f: Any) => f.essential === true)).toBe(true);
+    expect(r.facilities.every((f) => f.essential === true)).toBe(true);
     expect(r.counts.ok + r.counts.edge + r.counts.below).toBe(essential.length);
     expect(call('facility_check', { areaCode: TANABE, year: 2100, onlyEssential: 'yes' }).error).toBe('invalid_input');
+  });
+
+  it('the result carries the facility total and what 50 and 80 percent mean, so the natural sentences check out', () => {
+    const r = call('facility_check', { areaCode: TANABE, year: 2100 });
+    expect(r.counts).toEqual({ ok: 13, edge: 6, below: 29 });
+    expect(r.facilityTotal).toBe(48);
+    expect(r.facilityCount).toBe(48);
+    expect(r.thresholds).toEqual({ edgePercent: 50, okPercent: 80 });
+    for (const sentence of [
+      '48種類の施設のうち29種類が目安を下回ります。',
+      '50%の目安以上80%未満は「境界」、80%の目安以上は「目安以上」です。',
+      '13種類は80%の目安以上、6種類は境界です。',
+    ]) {
+      expect(checkNumbers(sentence, [r]).unverified, sentence).toEqual([]);
+    }
+    // a wrong count is still caught
+    expect(checkNumbers('48種類の施設のうち31種類が目安を下回ります。', [r]).unverified).toEqual(['31']);
+    // JSON text of the result works the same
+    expect(checkNumbers('48種類のうち29種類', [JSON.stringify(r)]).unverified).toEqual([]);
+  });
+
+  it('with onlyEssential the count is the listed rows and the total stays the full 48', () => {
+    const r = call('facility_check', { areaCode: TANABE, year: 2100, onlyEssential: true });
+    expect(r.facilityCount).toBe(ctx.facilities.filter((f) => f.essential).length);
+    expect(r.facilityTotal).toBe(48);
+    expect(r.facilityCount).toBe(r.counts.ok + r.counts.edge + r.counts.below);
+    expect(checkNumbers('48種類の施設のうち、生活に必須の8種類を見ると', [r]).unverified).toEqual([]);
+  });
+
+  it('50 and 80 appear in the result only in the explicit thresholds field (no other number is diluted)', () => {
+    const paths: string[] = [];
+    const walk = (node: unknown, path: string): void => {
+      if (typeof node === 'number') {
+        if (node === 50 || node === 80) paths.push(path);
+      } else if (Array.isArray(node)) {
+        node.forEach((x, i) => walk(x, `${path}[${i}]`));
+      } else if (typeof node === 'object' && node !== null) {
+        for (const [k, v] of Object.entries(node)) walk(v, path === '' ? k : `${path}.${k}`);
+      }
+    };
+    for (const input of [{ areaCode: TANABE, year: 2100 }, { areaCode: KOYA, year: 2020, onlyEssential: true }]) {
+      paths.length = 0;
+      walk(call('facility_check', input), '');
+      expect(paths.sort()).toEqual(['thresholds.edgePercent', 'thresholds.okPercent']);
+    }
+  });
+
+  it('outsideMlitScope for every prefecture: exactly Saitama, Chiba, Tokyo, Kanagawa, Gifu, Aichi, Mie, Kyoto, Osaka, Hyogo and Nara', () => {
+    const metro = new Set(['11', '12', '13', '14', '21', '23', '24', '26', '27', '28', '29']);
+    const prefs = [...new Set(ctx.areas.map((a) => a.prefCode))];
+    expect(prefs).toHaveLength(47);
+    for (const pref of prefs) {
+      const first = ctx.areas.find((a) => a.prefCode === pref)!;
+      expect(call('facility_check', { areaCode: first.code, year: 2050 }).outsideMlitScope, `${pref} ${first.name}`).toBe(metro.has(pref));
+    }
+    expect(call('facility_check', { areaCode: '29201', year: 2050 }).outsideMlitScope).toBe(true); // 奈良市
+    expect(call('facility_check', { areaCode: '29201', year: 2050 }).note).toMatch(/三大都市圏/);
   });
 
   it('outsideMlitScope: Tokyo wards and other three-metropolitan prefectures are flagged, others are not', () => {
@@ -505,23 +751,28 @@ describe('run_allocation', () => {
     expect(Math.abs(r.deltaPeople / r.targetBefore - 0.1)).toBeLessThan(1e-4);
     expect(Math.abs(r.targetBefore - 261_987)).toBeLessThan(100);
 
-    const koyaGains = r.facilityFlips.filter((f: Any) => f.gainedExamples.includes('高野町')).map((f: Any) => f.facilityId).sort();
+    const allFlips = [...r.essentialFlips, ...r.facilityFlips];
+    const koyaGains = allFlips.filter((f) => f.gainedExamples.includes('高野町')).map((f) => f.facilityId).sort();
     const p500 = ctx.facilities.filter((f) => f.p50 === 500).map((f) => f.id).sort();
     expect(p500).toHaveLength(8);
     expect(koyaGains).toEqual(p500);
     expect(p500).toEqual(
       ['bar', 'clinic', 'dental_clinic', 'grocery', 'hotel', 'nursing_home', 'post_office', 'restaurant'],
     );
-    const grocery = r.facilityFlips.find((f: Any) => f.facilityId === 'grocery');
-    expect(grocery).toMatchObject({ name: '飲食料品小売業', gainedCount: 1, lostCount: 0, lostExamples: [] });
+    const grocery = r.essentialFlips.find((f) => f.facilityId === 'grocery')!;
+    expect(grocery).toMatchObject({ name: '飲食料品小売業', essential: true, gainedCount: 1, lostCount: 0, lostExamples: [] });
     expect(grocery.after).toBe(grocery.before + 1);
+    expect(r.facilityFlips.find((f) => f.facilityId === 'grocery')).toBeUndefined(); // listed once, not twice
   });
 
-  it('facilityFlips lists only facilities where some area changed, with consistent counts and short example lists', () => {
+  it('the flip lists hold only facilities where some area changed, with consistent counts and short example lists', () => {
     const r = call('run_allocation', wakayama10);
     expect(r.facilityFlips.length).toBeGreaterThan(0);
-    expect(r.facilityFlips.length).toBeLessThanOrEqual(15);
-    for (const f of r.facilityFlips) {
+    expect(r.facilityFlips.length).toBeLessThanOrEqual(10);
+    expect(r.flippedFacilityCount).toBe(12);
+    expect(r.essentialFlippedCount).toBe(r.essentialFlips.length);
+    expect(r.omittedFlipCount).toBe(0);
+    for (const f of [...r.essentialFlips, ...r.facilityFlips]) {
       expect(f.lostCount + f.gainedCount).toBeGreaterThan(0);
       expect(f.after - f.before).toBe(f.gainedCount - f.lostCount);
       expect(f.lostExamples.length).toBeLessThanOrEqual(3);
@@ -530,14 +781,65 @@ describe('run_allocation', () => {
       expect(f.gainedExamples.length).toBe(Math.min(3, f.gainedCount));
     }
     // The cafe threshold (2,500) is crossed downwards by two areas of the rest of the country.
-    expect(r.facilityFlips.find((f: Any) => f.facilityId === 'cafe')).toMatchObject({ lostCount: 2, gainedCount: 0 });
+    expect(r.facilityFlips.find((f) => f.facilityId === 'cafe')).toMatchObject({ lostCount: 2, gainedCount: 0 });
+  });
+
+  it('top has exactly 10 entries when more areas change (a prefecture target, and a single area that moves every other area)', () => {
+    expect(call('run_allocation', wakayama10).top).toHaveLength(10);
+    expect(call('run_allocation', { target: { kind: 'area', code: TANABE }, deltaPercent: 20, year: 2100 }).top).toHaveLength(10);
+  });
+
+  it('essentialFlips lists ALL flipped essential facilities, even when the other flips are cut off (Osaka +100%, Tokyo -30%)', () => {
+    const run = ctx.run(DEFAULT_SCENARIO);
+    const prefOf = new Map(ctx.areas.map((a) => [a.code, a.prefCode]));
+    for (const input of [
+      { target: { kind: 'pref', code: '27' }, deltaPercent: 100, year: 2100 },
+      { target: { kind: 'pref', code: '13' }, deltaPercent: -30, year: 2100 },
+    ]) {
+      const r = call('run_allocation', input);
+      expect(r.error, JSON.stringify(input)).toBeUndefined();
+      // independent oracle: the engine's own flips for the same move
+      const pop = new Map(ctx.areas.map((a) => [a.code, total(run.get(a.code)![2100])]));
+      const targetTotal = ctx.groups.prefs[input.target.code].reduce((t, c) => t + pop.get(c)!, 0);
+      const flips = allocate(
+        pop,
+        prefOf,
+        { target: { kind: 'pref', code: input.target.code }, deltaPeople: Math.round((targetTotal * input.deltaPercent) / 100), source: { mode: 'proportional' } },
+        ctx.facilities,
+      ).flips.filter((f) => f.lost.length + f.gained.length > 0);
+      const essentialIds = new Set(ctx.facilities.filter((f) => f.essential).map((f) => f.id));
+      const expectedEssential = flips.filter((f) => essentialIds.has(f.facilityId)).map((f) => f.facilityId).sort();
+      expect(expectedEssential.length).toBeGreaterThan(0); // the situation the reviewer found
+      expect(r.flippedFacilityCount).toBe(flips.length);
+      expect(r.flippedFacilityCount).toBeGreaterThan(10); // more flips than the other list can show
+      expect(r.essentialFlips.map((f) => f.facilityId).sort()).toEqual(expectedEssential);
+      expect(r.essentialFlippedCount).toBe(expectedEssential.length);
+      expect(r.essentialFlips.length).toBeLessThanOrEqual(8);
+      expect(r.essentialFlips.every((f) => f.essential && f.lostCount + f.gainedCount > 0)).toBe(true);
+      // facilityFlips holds the rest only, capped, and the count of what is left out is exact
+      expect(r.facilityFlips.every((f) => !f.essential)).toBe(true);
+      expect(r.facilityFlips.length).toBeLessThanOrEqual(10);
+      expect(r.essentialFlips.length + r.facilityFlips.length + r.omittedFlipCount).toBe(r.flippedFacilityCount);
+      expect(r.omittedFlipCount).toBeGreaterThan(0);
+      const counts = r.facilityFlips.map((f) => f.lostCount + f.gainedCount);
+      expect([...counts].sort((a, b) => b - a)).toEqual(counts);
+      expect(jsonSize(r), JSON.stringify(input)).toBeLessThan(6000);
+    }
+  });
+
+  it('with nothing essential flipping, essentialFlips is empty and the counts say so', () => {
+    const r = call('run_allocation', { target: { kind: 'area', code: TANABE }, deltaPercent: 20, year: 2100 });
+    expect(r.essentialFlips).toEqual([]);
+    expect(r.essentialFlippedCount).toBe(0);
+    expect(r.flippedFacilityCount).toBe(0);
+    expect(r.omittedFlipCount).toBe(0);
   });
 
   it('top: up to 10 most-changed areas, biggest absolute change first; targets rise, the rest barely move', () => {
     const r = call('run_allocation', wakayama10);
     expect(r.top.length).toBeLessThanOrEqual(10);
     expect(r.top.length).toBeGreaterThan(0);
-    const changes = r.top.map((a: Any) => Math.abs(a.after - a.before));
+    const changes = r.top.map((a) => Math.abs(a.after - a.before));
     expect([...changes].sort((a, b) => b - a)).toEqual(changes);
     for (const a of r.top) {
       expect(Object.keys(a).sort()).toEqual(['after', 'before', 'code', 'name', 'prefName']);
@@ -551,12 +853,13 @@ describe('run_allocation', () => {
     const ppl = call('run_allocation', { target: wakayama10.target, deltaPeople: pct.deltaPeople, year: 2100 });
     expect(ppl.targetAfter).toBe(pct.targetAfter);
     expect(ppl.facilityFlips).toEqual(pct.facilityFlips);
+    expect(ppl.essentialFlips).toEqual(pct.essentialFlips);
     const area = call('run_allocation', { target: { kind: 'area', code: KOYA }, deltaPercent: 20, year: 2100 });
     expect(area.target).toEqual({ kind: 'area', code: KOYA, name: '高野町' });
     expect(area.targetBefore).toBe(471);
     expect(area.targetAfter).toBe(565);
     expect(area.deltaPeople).toBe(94);
-    expect(area.facilityFlips.find((f: Any) => f.facilityId === 'grocery').gainedExamples).toEqual(['高野町']);
+    expect(area.essentialFlips.find((f) => f.facilityId === 'grocery')!.gainedExamples).toEqual(['高野町']);
   });
 
   it('exactly one of deltaPercent / deltaPeople, both finite', () => {
@@ -590,6 +893,35 @@ describe('run_allocation', () => {
     expect(call('run_allocation', { ...wakayama10, sourceMode: 'regions', prefCodes: ['30'] }).error).toBe('allocation_not_possible');
     expect(call('run_allocation', { ...wakayama10, deltaPercent: -150 }).error).toBe('allocation_not_possible');
     expect(call('run_allocation', { ...wakayama10, deltaPercent: 1e9 }).error).toBe('allocation_not_possible');
+  });
+
+  it('allocation_not_possible messages are fixed Japanese sentences with whole-number figures, never the engine text', () => {
+    const cases = [
+      call('run_allocation', { ...wakayama10, deltaPercent: -150 }),
+      call('run_allocation', { ...wakayama10, deltaPercent: 1e9 }),
+      call('run_allocation', { target: wakayama10.target, year: 2100, deltaPeople: 1e15 }),
+      call('run_allocation', { target: wakayama10.target, year: 2100, deltaPeople: 1e300 }),
+      call('run_allocation', { ...wakayama10, sourceMode: 'regions', prefCodes: ['30'] }),
+    ];
+    for (const r of cases) {
+      expect(r.error).toBe('allocation_not_possible');
+      expect(r.message).toMatch(/[ぁ-んァ-ヶ一-龠]/);
+      expect(r.message!.replace(/prefCodes|sourceMode|deltaPercent|deltaPeople/g, '')).not.toMatch(/[A-Za-z]{2,}/); // no engine English
+      expect(r.message).not.toMatch(/\d\.\d/); // no fractional figures
+      expect(r.message).not.toMatch(/e\+\d/); // no exponent notation
+      expect(r.message!.length).toBeLessThan(200);
+    }
+    // the figures are the real ones, written as whole numbers with thousands commas
+    const withCommas = (n: number): string => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const run = ctx.run(DEFAULT_SCENARIO);
+    const wakayama = new Set(ctx.groups.prefs['30']);
+    const sumOf = (inWakayama: boolean): number =>
+      Math.round(ctx.areas.filter((a) => wakayama.has(a.code) === inWakayama).reduce((t, a) => t + total(run.get(a.code)![2100]), 0));
+    expect(cases[0].message).toContain(`${withCommas(sumOf(true))}人`); // the target's own population
+    expect(cases[1].message).toContain(`${withCommas(sumOf(false))}人`); // what the rest of the country has
+    expect(cases[2].message).toContain('1,000,000,000,000,000人');
+    expect(cases[3].message).toContain('桁外れ');
+    expect(cases[4].message).toContain('引く側');
   });
 
   it('bad targets: unknown code, wrong kind, a prefecture code for an area target', () => {
@@ -628,6 +960,7 @@ describe('run_allocation on a synthetic world (flips whose counts do not change)
     assumptions: null,
   });
   const hall: Facility = { id: 'hall', name: 'ホール', p50: 5000, p80: 10000, essential: true, excludesMetro: true, source: 'test' };
+  const shop: Facility = { id: 'shop', name: '店', p50: 5000, p80: 10000, essential: false, excludesMetro: true, source: 'test' };
   const areas = [area('01001', 'S', '01', 5100), area('02001', 'T', '02', 4900)];
   const flat = (): Map<string, Series> => {
     const out = new Map<string, Series>();
@@ -638,24 +971,27 @@ describe('run_allocation on a synthetic world (flips whose counts do not change)
     }
     return out;
   };
-  const tiny: EngineContext = { areas, facilities: [hall], groups: { cities: {}, prefs: { '01': ['01001'], '02': ['02001'] } }, run: flat };
+  const tiny: EngineContext = { areas, facilities: [hall, shop], groups: { cities: {}, prefs: { '01': ['01001'], '02': ['02001'] } }, run: flat };
 
   it('a swap (S falls below, T rises above) is listed even though before == after', () => {
     const r = call('run_allocation', { target: { kind: 'pref', code: '02' }, deltaPercent: 5, year: 2050 }, tiny);
     expect(r.error).toBeUndefined();
     expect(r.targetBefore).toBe(4900);
     expect(r.targetAfter).toBe(5145);
-    expect(r.facilityFlips).toEqual([
-      { facilityId: 'hall', name: 'ホール', essential: true, before: 1, after: 1, lostCount: 1, gainedCount: 1, lostExamples: ['S'], gainedExamples: ['T'] },
-    ]);
-    expect(r.flippedFacilityCount).toBe(1);
+    const swap = { before: 1, after: 1, lostCount: 1, gainedCount: 1, lostExamples: ['S'], gainedExamples: ['T'] };
+    expect(r.essentialFlips).toEqual([{ facilityId: 'hall', name: 'ホール', essential: true, ...swap }]);
+    expect(r.facilityFlips).toEqual([{ facilityId: 'shop', name: '店', essential: false, ...swap }]);
+    expect(r.flippedFacilityCount).toBe(2);
+    expect(r.essentialFlippedCount).toBe(1);
+    expect(r.omittedFlipCount).toBe(0);
   });
 
   it('no flips gives an empty list; the world has the pieces the tools need', () => {
     const r = call('run_allocation', { target: { kind: 'pref', code: '02' }, deltaPercent: 1, year: 2050 }, tiny);
     expect(r.facilityFlips).toEqual([]);
+    expect(r.essentialFlips).toEqual([]);
     expect(r.flippedFacilityCount).toBe(0);
-    expect(call('find_area', { query: 'S' }, tiny).matches.map((m: Any) => m.code)).toEqual(['01001']);
+    expect(call('find_area', { query: 'S' }, tiny).matches.map((m) => m.code)).toEqual(['01001']);
     expect(call('get_series', { areaCode: '01', years: [2100] }, tiny).rows[0].population).toBe(5100);
   });
 });
@@ -675,22 +1011,33 @@ describe('find_similar_now', () => {
       .sort((a, b) => a.d - b.d || (a.code < b.code ? -1 : 1))
       .slice(0, 5)
       .map((x) => x.code);
-    expect(r.similar.map((s: Any) => s.code)).toEqual(expected);
-    expect(r.similar.map((s: Any) => s.code)).not.toContain(TANABE);
+    expect(r.similar.map((s) => s.code)).toEqual(expected);
+    expect(r.similar.map((s) => s.code)).not.toContain(TANABE);
     for (const s of r.similar) {
       expect(s.pop2020).toBe(base.get(s.code));
       expect(s.code).toMatch(/^\d{5}$/);
       expect(typeof s.name).toBe('string');
       expect(typeof s.prefName).toBe('string');
     }
-    const dist = r.similar.map((s: Any) => Math.abs(s.pop2020 - projected));
+    const dist = r.similar.map((s) => Math.abs(s.pop2020 - projected));
     expect([...dist].sort((a, b) => a - b)).toEqual(dist);
+  });
+
+  it('in 2020 the area itself would be the nearest match, but it is excluded', () => {
+    const r = call('find_similar_now', { areaCode: TANABE, year: 2020 });
+    expect(r.population).toBe(Math.round(total(ctx.areas.find((a) => a.code === TANABE)!.base)));
+    expect(r.similar).toHaveLength(5);
+    expect(r.similar.map((x) => x.code)).not.toContain(TANABE);
+    expect(Math.abs(r.similar[0].pop2020 - r.population)).toBeGreaterThan(0); // nobody else has exactly this population
+    for (const code of [KOYA, MINATO_WARD, KITAYAMA_VILLAGE]) {
+      expect(call('find_similar_now', { areaCode: code, year: 2020 }).similar.map((x) => x.code)).not.toContain(code);
+    }
   });
 
   it('works for a prefecture or Japan (only 5-digit areas are returned) and honours the scenario', () => {
     const p = call('find_similar_now', { areaCode: '30', year: 2100 });
     expect(p.similar).toHaveLength(5);
-    expect(p.similar.every((s: Any) => /^\d{5}$/.test(s.code))).toBe(true);
+    expect(p.similar.every((s) => /^\d{5}$/.test(s.code))).toBe(true);
     const base = call('find_similar_now', { areaCode: KOYA, year: 2100 });
     const fade = call('find_similar_now', { areaCode: KOYA, year: 2100, scenario: { migMode: 'fade' } });
     expect(fade.population).toBeGreaterThan(base.population); // less out-migration from a shrinking town
@@ -743,6 +1090,21 @@ describe('count_areas', () => {
     expect(call('count_areas', { year: 2100, below: 3000, prefCode: KOYA }).error).toBe('invalid_input');
   });
 
+  it('boundaries: below is strictly less, above is greater or equal, at exactly the population shown', () => {
+    const year = 2050;
+    const exact = call('get_series', { areaCode: TANABE, years: [year] }).rows[0].population;
+    const run = ctx.run(DEFAULT_SCENARIO);
+    const equal = ctx.areas.filter((a) => Math.round(total(run.get(a.code)![year])) === exact).length;
+    expect(equal).toBeGreaterThanOrEqual(1); // 田辺市 itself
+    const n = (bounds: { below?: number; above?: number }): number => call('count_areas', { year, ...bounds }).count;
+    expect(n({ below: exact + 1 }) - n({ below: exact })).toBe(equal);
+    expect(n({ above: exact }) - n({ above: exact + 1 })).toBe(equal);
+    expect(n({ above: exact, below: exact + 1 })).toBe(equal);
+    expect(n({ above: exact, below: exact })).toBe(0);
+    const at = call('count_areas', { year, above: exact, below: exact + 1 });
+    expect(at.examples.some((e) => e.code === TANABE)).toBe(equal <= 5);
+  });
+
   it('at least one numeric bound is required; the scenario applies', () => {
     expect(call('count_areas', { year: 2100 }).error).toBe('invalid_input');
     expect(call('count_areas', { year: 2100, below: '3000' }).error).toBe('invalid_input');
@@ -767,18 +1129,19 @@ describe('robustness', () => {
   it('never throws and always returns a JSON-serialisable value, for every tool and every kind of garbage', () => {
     for (const name of [...TOOL_NAMES, 'nope']) {
       for (const g of garbage) {
-        let r: Any;
+        let r: unknown;
         expect(() => {
           r = runTool(name, g, ctx);
         }, `${name}(${String(JSON.stringify(g))?.slice(0, 40)})`).not.toThrow();
         expect(() => JSON.stringify(r)).not.toThrow();
         expect(r).toBeTypeOf('object');
         expect(r).not.toBeNull();
-        if (r.error !== undefined) {
-          expect(typeof r.error).toBe('string');
-          expect(typeof r.message).toBe('string');
-          expect(r.message.length).toBeGreaterThan(0);
-          expect(jsonSize(r)).toBeLessThan(1000);
+        const out = r as Failed;
+        if (out.error !== undefined) {
+          expect(typeof out.error).toBe('string');
+          expect(typeof out.message).toBe('string');
+          expect(out.message!.length).toBeGreaterThan(0);
+          expect(jsonSize(out)).toBeLessThan(1000);
         }
       }
     }

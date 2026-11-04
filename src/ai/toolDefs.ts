@@ -16,6 +16,9 @@ export interface ToolDef {
   };
 }
 
+/** Most years get_series takes at once: every 5-year step from 2020 to 2100. The schema and tools.ts share this one number. */
+export const MAX_YEARS = 17;
+
 const AREA_CODE = {
   type: 'string',
   description: '市区町村と政令市は5桁、都道府県は2桁、日本全体は"00"。分からなければ先に find_area で探す',
@@ -65,7 +68,7 @@ export const TOOL_DEFS: ToolDef[] = [
       type: 'object',
       properties: {
         areaCode: AREA_CODE,
-        years: { type: 'array', items: YEAR, maxItems: 17, description: '知りたい年（省くと代表的な7つの年）' },
+        years: { type: 'array', items: YEAR, maxItems: MAX_YEARS, description: '知りたい年（省くと代表的な7つの年）' },
         scenario: SCENARIO,
       },
       required: ['areaCode'],
@@ -113,7 +116,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'run_allocation',
     description:
-      '人口を動かす仮定。対象（都道府県か市区町村）の人口を deltaPercent か deltaPeople のどちらか一方で増減し、同じ人数を他の地域から引く（全国の合計は変わらない）。引く元は既定で全国に人口比。regions と prefCodes で県を限れる。変化の大きい地域と、目安をまたぐ施設を返す。',
+      '人口を動かす仮定。対象（都道府県か市区町村）の人口を deltaPercent か deltaPeople のどちらか一方で増減し、同じ人数を他の地域から引く（全国の合計は変わらない）。引く元は既定で全国に人口比。regions と prefCodes で県を限れる。変化の大きい地域と、目安をまたぐ施設を返す（必須の施設は essentialFlips に全部）。',
     input_schema: {
       type: 'object',
       properties: {
