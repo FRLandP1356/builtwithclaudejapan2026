@@ -35,6 +35,33 @@ class HashMismatch(Exception):
     pass
 
 
+class UnsafeFileName(ValueError):
+    """A destination file name from sources.json is not a plain base name inside the raw-data directory."""
+
+
+def safe_dest(raw_dir: str, name: Any) -> str:
+    """Return raw_dir/name after checking that name is a plain base name.
+
+    Rejected (UnsafeFileName): non-strings, '', '.', '..', NUL, and anything containing a path
+    separator ('/' or '\\', whatever the OS). The resolved path (symlinks followed) must also stay
+    inside raw_dir, so an existing symlink in raw_dir cannot redirect a write elsewhere.
+    Nothing is created or written here.
+    """
+    if not isinstance(name, str) or not name:
+        raise UnsafeFileName(f"destination file name must be a non-empty string, got {name!r}")
+    if "\x00" in name:
+        raise UnsafeFileName(f"destination file name contains a NUL byte: {name!r}")
+    if name in (".", ".."):
+        raise UnsafeFileName(f"destination file name must not be {name!r}")
+    if "/" in name or "\\" in name or os.path.basename(name) != name:
+        raise UnsafeFileName(f"destination file name must be a plain base name, got {name!r}")
+    root = os.path.realpath(raw_dir)
+    resolved = os.path.realpath(os.path.join(raw_dir, name))
+    if resolved == root or os.path.commonpath([root, resolved]) != root:
+        raise UnsafeFileName(f"destination {name!r} resolves outside the raw-data directory ({resolved})")
+    return os.path.join(raw_dir, name)
+
+
 def sha256_of(path: str) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as fh:
@@ -63,9 +90,10 @@ def fetch_one(entry: Dict[str, Any], raw_dir: str = RAW_DIR, force: bool = False
     """Make sure entry['file'] exists in raw_dir and matches entry['sha256'].
 
     Returns one of "cached", "downloaded", "unverified" (no hash recorded yet).
-    Raises HashMismatch (and removes the bad file) if the content differs.
+    Raises HashMismatch (and removes the bad file) if the content differs, and UnsafeFileName
+    (before anything is written) if entry['file'] is not a plain base name inside raw_dir.
     """
-    dest = os.path.join(raw_dir, entry["file"])
+    dest = safe_dest(raw_dir, entry["file"])
     expected: Optional[str] = entry.get("sha256")
     status = "cached"
     if force or not os.path.exists(dest) or (expected and sha256_of(dest) != expected):
@@ -100,7 +128,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     for entry in data["sources"]:
         if args.record:
             # Recording trusts what the server sends now; do not compare with the old hash.
-            dest = os.path.join(RAW_DIR, entry["file"])
+            dest = safe_dest(RAW_DIR, entry["file"])
             if args.force or not os.path.exists(dest):
                 download(entry["url"], dest)
             entry["sha256"] = sha256_of(dest)
@@ -113,7 +141,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"MISMATCH    {exc}", file=sys.stderr)
             failed = True
             continue
-        except OSError as exc:
+        except (UnsafeFileName, OSError) as exc:
             print(f"FAILED      {entry['file']}: {exc}", file=sys.stderr)
             failed = True
             continue

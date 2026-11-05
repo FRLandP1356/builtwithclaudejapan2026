@@ -106,7 +106,7 @@ def record_hashes() -> None:
     data = fetch_sources.load_sources()
     entries = default_entries()
     for entry in entries:
-        dest = os.path.join(RAW_DIR, entry["file"])
+        dest = fetch_sources.safe_dest(RAW_DIR, entry["file"])
         if not os.path.exists(dest):
             fetch_sources.download(entry["url"], dest)
         entry["bytes"] = os.path.getsize(dest)
@@ -136,7 +136,7 @@ def fetch_all(entries: Iterable[Dict[str, Any]]) -> None:
     for entry in entries:
         try:
             status = fetch_sources.fetch_one(entry, raw_dir=RAW_DIR)
-        except (fetch_sources.HashMismatch, OSError) as exc:
+        except (fetch_sources.HashMismatch, fetch_sources.UnsafeFileName, OSError) as exc:
             print(f"FAILED      {entry['file']}: {exc}", file=sys.stderr)
             failed = True
             continue
