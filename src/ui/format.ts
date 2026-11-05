@@ -28,3 +28,12 @@ export function formatPct(ratio: number): string {
 export function formatYear(year: number): string {
   return `${year}年`;
 }
+
+/** A signed change in percent points: +10.0% / −0.04% (two decimals below 0.1) / ±0%. */
+export function formatDeltaPct(p: number): string {
+  if (!Number.isFinite(p)) return DASH;
+  const abs = Math.abs(p);
+  if (abs < 0.005) return '±0%';
+  const text = abs < 0.1 ? abs.toFixed(2) : abs.toFixed(1);
+  return `${p < 0 ? '−' : '+'}${text}%`;
+}

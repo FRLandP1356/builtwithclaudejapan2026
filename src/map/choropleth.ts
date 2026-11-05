@@ -39,6 +39,8 @@ export interface TooltipContent {
   lines: string[];
   /** Small dashed marker text (e.g. 試算) appended to the tooltip. */
   badge?: string;
+  /** Second marker for numbers that include a reallocation (割り振り後), drawn as `.badge-alloc`. */
+  allocBadge?: string;
 }
 
 export interface ChoroplethOptions {
@@ -56,6 +58,13 @@ export interface ChoroplethOptions {
   onPick(code: string): void;
 }
 
+/** A small count label drawn on top of an area (the national view's "+n / −n" markers). */
+export interface MapMarker {
+  code: string;
+  text: string;
+  kind: 'gain' | 'loss' | 'mixed';
+}
+
 export interface Choropleth {
   svg: SVGSVGElement;
   /** Codes of the shapes that were drawn. */
@@ -64,6 +73,10 @@ export interface Choropleth {
   update(fill: (code: string) => string): void;
   /** Outline one area persistently (or none). */
   setSelected(code?: string): void;
+  /** Outline the areas that rose to a facility guide (solid blue) and those that fell below it (dashed rust). */
+  setRings(gained: Iterable<string>, lost: Iterable<string>): void;
+  /** Place count markers on areas (an empty list removes them). */
+  setMarkers(markers: readonly MapMarker[]): void;
   focusArea(code: string): void;
   /** Drop the hover state and hide the tooltip (call when the map is hidden or replaced). */
   clearHover(): void;
@@ -76,6 +89,17 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const PAD = 12;
 const INSET_PAD = 10;
 const CLUSTER_GAP_DEG = 0.6;
+// Count markers ("+n −n"): a dot on the place and a label just above it, so the label never covers the place's own
+// colour (a small prefecture such as 和歌山県 is about the label's size on a phone). Sizes in screen pixels: the
+// marker group is scaled by the inverse of the map's on-screen scale, so it keeps its size when the map shrinks to a
+// phone width (the text itself is 12px in app.css).
+const MARKER_CHAR_W = 7.5; // advance of one 12px semi-bold digit, sign or space (tabular figures)
+const MARKER_PAD_X = 5;
+const MARKER_H = 18;
+const MARKER_RX = 3;
+const MARKER_GAP = 5; // between the dot and the label's bottom edge
+const MARKER_DOT_R = 2.5;
+const MARKER_BASELINE = 4; // text baseline below the label's centre
 let uid = 0;
 
 type Box = [number, number, number, number]; // lonMin, latMin, lonMax, latMax
@@ -377,7 +401,7 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
 
   // Overlay rings: halo + stroke for selected, hover and focus.
   const ring = (cls: string) => {
-    const halo = svgEl('path', { class: 'ring ring-halo', d: '' });
+    const halo = svgEl('path', { class: `ring ring-halo ${cls}-halo`, d: '' });
     const line = svgEl('path', { class: `ring ${cls}`, d: '' });
     svg.append(halo, line);
     return (d: string) => {
@@ -385,9 +409,41 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
       line.setAttribute('d', d);
     };
   };
+  const setGainRing = ring('ring-gain');
+  const setLossRing = ring('ring-loss');
   const setSelectedRing = ring('ring-selected');
   const setHoverRing = ring('ring-hover');
   const setFocusRing = ring('ring-focus');
+  const gMarkers = svgEl('g', { class: 'markers', 'aria-hidden': 'true' });
+  svg.append(gMarkers);
+  let markerNodes: Array<{ g: SVGGElement; x: number; y: number }> = [];
+
+  /** viewBox units per screen pixel (1 while the map is not laid out, e.g. hidden). */
+  function unitsPerPixel(): number {
+    const r = svg.getBoundingClientRect();
+    const s = Math.min(r.width / W, r.height / H); // the viewBox is fitted with "meet"
+    return s > 0 && Number.isFinite(s) ? 1 / s : 1;
+  }
+  function placeMarkers(): void {
+    const k = unitsPerPixel().toFixed(3);
+    for (const m of markerNodes) m.g.setAttribute('transform', `translate(${m.x.toFixed(1)},${m.y.toFixed(1)}) scale(${k})`);
+  }
+  const resizeObserver =
+    typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => {
+          if (markerNodes.length) placeMarkers();
+        })
+      : undefined;
+  resizeObserver?.observe(svg);
+
+  const joinD = (codes: Iterable<string>): string => {
+    let d = '';
+    for (const c of codes) {
+      const part = dByCode.get(c);
+      if (part) d += part;
+    }
+    return d;
+  };
 
   // Tooltip.
   const tip = document.createElement('div');
@@ -417,6 +473,13 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
       const badge = document.createElement('span');
       badge.className = 'badge-estimate';
       badge.textContent = content.badge;
+      parts.push(badge);
+    }
+    if (content.allocBadge) {
+      const badge = document.createElement('span');
+      badge.className = 'badge-alloc';
+      badge.textContent = content.allocBadge;
+      if (content.badge) parts.push(document.createTextNode(' '));
       parts.push(badge);
     }
     tip.replaceChildren(...parts);
@@ -526,6 +589,28 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
     setSelected(code) {
       setSelectedRing((code && dByCode.get(code)) || '');
     },
+    setRings(gained, lost) {
+      setGainRing(joinD(gained));
+      setLossRing(joinD(lost));
+    },
+    setMarkers(markers) {
+      markerNodes = [];
+      for (const m of markers) {
+        const anchor = anchorByCode.get(m.code);
+        if (!anchor) continue;
+        const w = m.text.length * MARKER_CHAR_W + 2 * MARKER_PAD_X;
+        const g = svgEl('g', { class: `marker marker-${m.kind}`, 'data-for': m.code });
+        const top = -(MARKER_GAP + MARKER_H);
+        g.append(svgEl('circle', { class: 'marker-dot', cx: 0, cy: 0, r: MARKER_DOT_R }));
+        g.append(svgEl('rect', { x: -w / 2, y: top, width: w, height: MARKER_H, rx: MARKER_RX }));
+        const t = svgEl('text', { x: 0, y: top + MARKER_H / 2 + MARKER_BASELINE, 'text-anchor': 'middle' });
+        t.textContent = m.text;
+        g.append(t);
+        markerNodes.push({ g, x: anchor[0], y: anchor[1] });
+      }
+      placeMarkers();
+      gMarkers.replaceChildren(...markerNodes.map((m) => m.g));
+    },
     focusArea(code) {
       pathByCode.get(code)?.focus({ preventScroll: true });
     },
@@ -537,6 +622,7 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
     },
     destroy() {
       ac.abort();
+      resizeObserver?.disconnect();
       hoverCode = undefined;
       focusCode = undefined;
       svg.remove();

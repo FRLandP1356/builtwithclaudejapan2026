@@ -655,3 +655,142 @@ describe('mountAllocation', () => {
     expect(row.cells).toEqual([grocery.before.toLocaleString('ja-JP'), grocery.after.toLocaleString('ja-JP'), signedCount(grocery.after - grocery.before)]);
   });
 });
+
+describe('地図に反映する (the map overlay)', () => {
+  test('the toggle draws the current result on the map and takes it off again', () => {
+    const { q, store, ctx } = mount();
+    const toggle = q<HTMLButtonElement>('#alloc-map-toggle');
+    expect(toggle.textContent).toBe('地図に反映する');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(store.get().allocation).toBeUndefined();
+
+    toggle.click();
+    expect(toggle.textContent).toBe('地図に反映中');
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    const a = store.get().allocation!;
+    expect(a.year).toBe(2100);
+    expect(a.label).toBe('和歌山県 +10%');
+    expect(a.changePercent['30206']).toBeCloseTo(10, 6);
+    expect(Object.keys(a.changePercent)).toHaveLength(ctx.data.areas.length);
+    const grocery = a.flips.find((f) => f.facilityId === 'grocery')!;
+    expect(grocery.gained).toContain('30344');
+    expect(q('#alloc-map-status').textContent).toContain('地図の色は');
+
+    toggle.click();
+    expect(store.get().allocation).toBeUndefined();
+    expect(toggle.textContent).toBe('地図に反映する');
+    expect(q('#alloc-map-status').textContent).toBe('');
+  });
+
+  test('pressing a facility name focuses that facility on the map (and turns the map on); pressing again unfocuses', () => {
+    const { el, store } = mount();
+    const name = [...el.querySelectorAll<HTMLButtonElement>('.alloc-focus')].find((b) => b.textContent === '飲食料品小売業')!;
+    expect(name.getAttribute('aria-pressed')).toBe('false');
+    name.click();
+    expect(store.get().allocation?.focusFacilityId).toBe('grocery');
+    expect(el.querySelector<HTMLButtonElement>('#alloc-map-toggle')!.getAttribute('aria-pressed')).toBe('true');
+    const pressed = [...el.querySelectorAll<HTMLButtonElement>('.alloc-focus')].find((b) => b.textContent === '飲食料品小売業')!;
+    expect(pressed.getAttribute('aria-pressed')).toBe('true');
+    pressed.click();
+    expect(store.get().allocation).toBeDefined();
+    expect(store.get().allocation?.focusFacilityId).toBeUndefined();
+  });
+
+  test('while on, a year change, a form change and a scenario change redraw the overlay', async () => {
+    const { q, store, slide, choose } = mount();
+    q<HTMLButtonElement>('#alloc-map-toggle').click();
+    const first = store.get().allocation!;
+    store.set({ year: 2080 });
+    const second = store.get().allocation!;
+    expect(second).not.toBe(first);
+    expect(second.year).toBe(2080);
+    await slide(20);
+    expect(store.get().allocation?.label).toBe('和歌山県 +20%');
+    choose(q<HTMLSelectElement>('#alloc-target'), 'pref:13');
+    expect(store.get().allocation?.label).toBe('東京都 +20%');
+    store.set({ scenario: { cwrMult: 1.2, migMode: 'hold', migScale: 1, infraStrength: 0 } });
+    const after = store.get().allocation!;
+    expect(after).toBeDefined(); // the store cleared it, the panel drew it again under the new series
+    expect(after.label).toBe('東京都 +20%');
+    expect(q<HTMLButtonElement>('#alloc-map-toggle').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  test('when the overlay is removed from outside, the toggle turns off', () => {
+    const { q, store } = mount();
+    q<HTMLButtonElement>('#alloc-map-toggle').click();
+    store.set({ allocation: undefined });
+    expect(q<HTMLButtonElement>('#alloc-map-toggle').getAttribute('aria-pressed')).toBe('false');
+    expect(q('#alloc-map-toggle').textContent).toBe('地図に反映する');
+    q<HTMLButtonElement>('#alloc-map-toggle').click();
+    const own = store.get().allocation!;
+    store.set({ allocation: { ...own, label: 'someone else', changePercent: {}, flips: [] } }); // the AI panel took the map
+    expect(q<HTMLButtonElement>('#alloc-map-toggle').getAttribute('aria-pressed')).toBe('false');
+    expect(store.get().allocation?.label).toBe('someone else');
+  });
+
+  test('a form that cannot be computed turns the map off; teardown clears the overlay', () => {
+    const { q, store, choose, teardown } = mount();
+    q<HTMLButtonElement>('#alloc-map-toggle').click();
+    expect(store.get().allocation).toBeDefined();
+    choose(q<HTMLSelectElement>('#alloc-target'), 'pref:13');
+    [...q<HTMLElement>('.choice-stack').querySelectorAll<HTMLButtonElement>('button')].find((b) => b.dataset.source === 'regions')!.click();
+    for (const box of q<HTMLElement>('#alloc-regions').querySelectorAll<HTMLInputElement>('input')) {
+      if (box.checked) box.click(); // no region left: a form error
+    }
+    expect(q<HTMLElement>('#alloc-error').hidden).toBe(false);
+    expect(store.get().allocation).toBeUndefined();
+    expect(q<HTMLButtonElement>('#alloc-map-toggle').getAttribute('aria-pressed')).toBe('false');
+
+    q<HTMLElement>('#alloc-regions').querySelector<HTMLInputElement>('input')!.click();
+    q<HTMLButtonElement>('#alloc-map-toggle').click();
+    expect(store.get().allocation).toBeDefined();
+    teardown();
+    expect(store.get().allocation).toBeUndefined();
+  });
+
+  test('pressing a facility name in the collapsed group keeps keyboard focus on it and the group open', () => {
+    const { q, store } = mount();
+    const more = q<HTMLDetailsElement>('details.alloc-more');
+    more.open = true;
+    const name = more.querySelector<HTMLButtonElement>('.alloc-focus')!;
+    const id = name.dataset.facility!;
+    expect(id).toBeTruthy();
+    name.focus();
+    name.click();
+    expect(store.get().allocation?.focusFacilityId).toBe(id);
+    expect(document.activeElement).toBe(name); // the same button, not a rebuilt one
+    expect(name.isConnected).toBe(true);
+    expect(name.getAttribute('aria-pressed')).toBe('true');
+    expect(more.open).toBe(true);
+    // the toggle off clears every pressed name, again in place
+    q<HTMLButtonElement>('#alloc-map-toggle').click();
+    expect(name.isConnected).toBe(true);
+    expect(name.getAttribute('aria-pressed')).toBe('false');
+    expect(more.open).toBe(true);
+  });
+
+  test('an overlay put on the map from elsewhere together with a new year turns the toggle off and still recomputes the year', () => {
+    const { q, store } = mount();
+    q<HTMLButtonElement>('#alloc-map-toggle').click();
+    const own = store.get().allocation!;
+    store.set({ year: 2060, allocation: { ...own, year: 2060, label: 'AI', flips: [], focusFacilityId: undefined } });
+    expect(q<HTMLButtonElement>('#alloc-map-toggle').getAttribute('aria-pressed')).toBe('false');
+    expect(store.get().allocation?.label).toBe('AI');
+    expect(q('#alloc-year').textContent).toContain('2060年の人口で計算');
+  });
+
+  test('an overlay put on the map from elsewhere together with new assumptions also turns the toggle off and stays', () => {
+    const { q, store } = mount();
+    q<HTMLButtonElement>('#alloc-map-toggle').click();
+    const own = store.get().allocation!;
+    store.set({ scenario: { cwrMult: 1.2, migMode: 'hold', migScale: 1, infraStrength: 0 }, allocation: { ...own, label: 'AI', flips: [], focusFacilityId: undefined } });
+    expect(q<HTMLButtonElement>('#alloc-map-toggle').getAttribute('aria-pressed')).toBe('false');
+    expect(store.get().allocation?.label).toBe('AI'); // the panel did not draw its own over it
+  });
+
+  test('the panel never says the forbidden words, with the map on', () => {
+    const { el, q } = mount();
+    q<HTMLButtonElement>('#alloc-map-toggle').click();
+    for (const w of FORBIDDEN) expect(el.textContent).not.toContain(w);
+  });
+});

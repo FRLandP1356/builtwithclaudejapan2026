@@ -3,7 +3,11 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { loadSampleAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
 import { makeTopology } from '../../test/helpers/makeTopology';
-import { mountApp, type AppHandle } from './app';
+import { allocationColor, changeColor, RATIO_MAX } from '../map/colors';
+import { ALLOC_BADGE, ALLOC_CLEAR, mountApp, type AppHandle } from './app';
+import { total } from '../engine/aggregate';
+import { formatPct, formatPop } from './format';
+import type { AllocationOverlay } from './state';
 
 const sample = loadSampleAreas(); // 30 和歌山県 (3 areas), 13 東京都 (2), 01 北海道 (1)
 const prefs = [...new Map(sample.map((a) => [a.prefCode, a.prefName]))].map(([code, name]) => ({ code, name }));
@@ -328,5 +332,205 @@ describe('Task 8 leftovers', () => {
     expect(onHead.length).toBeGreaterThan(0);
     for (const [, arg] of onHead) expect(arg).toEqual({ preventScroll: true });
     focus.mockRestore();
+  });
+});
+
+describe('allocation overlay on the map', () => {
+  const overlay = (patch: Partial<AllocationOverlay> = {}): AllocationOverlay => ({
+    year: 2100,
+    label: '和歌山県 +10%',
+    changePercent: { '30206': 10, '30201': 10, '30427': 10, '13101': -0.04, '13402': -0.04, '01101': -0.04 },
+    flips: [{ facilityId: 'grocery', name: '飲食料品小売業', gained: ['30206'], lost: ['13402'] }],
+    ...patch,
+  });
+
+  test('recolours the national map in place (same elements), switches the legend and the headline badge', async () => {
+    const { root, store } = await mount();
+    store.set({ year: 2100 });
+    const svg = root.querySelector('.map-host-national svg')!;
+    const before = [...svg.querySelectorAll('path.area')];
+    const wakayama = svg.querySelector('path.area[data-code="30"]')!;
+    const ratioFill = wakayama.getAttribute('fill');
+    expect(store.set({ allocation: overlay() })).toBe(true);
+    const after = [...svg.querySelectorAll('path.area')];
+    expect(after).toEqual(before); // no DOM rebuild
+    expect(wakayama.getAttribute('fill')).toBe(allocationColor(10, 10));
+    expect(wakayama.getAttribute('fill')).toBe(changeColor(RATIO_MAX));
+    expect(wakayama.getAttribute('fill')).not.toBe(ratioFill);
+    const legend = root.querySelector('.legend')!;
+    expect(legend.textContent).toContain('割り振りによる人口の変化（%）');
+    expect([...legend.querySelectorAll('.legend-tick')].map((t) => t.textContent)).toEqual(['−10%', '−5%', '0', '+5%', '+10%']);
+    // 2100 keeps its 試算 mark; the allocation adds its own mark next to it.
+    expect(root.querySelector('.map-headline-num .badge-estimate')!.textContent).toBe('試算');
+    expect(root.querySelector('.map-headline-num .badge-alloc')!.textContent).toBe(ALLOC_BADGE);
+    const bar = root.querySelector<HTMLElement>('.alloc-bar')!;
+    expect(bar.hidden).toBe(false);
+    expect(bar.textContent).toContain('和歌山県 +10%');
+    expect(root.querySelector<HTMLElement>('.alloc-bar-stale')!.hidden).toBe(true);
+    expect(wakayama.getAttribute('aria-label')).toContain('割り振りによる変化 +10.0%');
+  });
+
+  test('the headline, the tooltip and the label show the population after the allocation, with both marks', async () => {
+    const { root, store } = await mount();
+    store.set({ year: 2100, selectedPref: '30' });
+    await settle();
+    const series = store.get().series;
+    const codes = sample.filter((a) => a.prefCode === '30').map((a) => a.code);
+    const before2100 = codes.reduce((t, c) => t + total(series.get(c)![2100]), 0);
+    const base2020 = codes.reduce((t, c) => t + total(series.get(c)![2020]), 0);
+    const after = before2100 * 1.1; // every Wakayama area is at +10% in this overlay
+    expect(root.querySelector('.map-headline-num b')!.textContent).toBe(formatPop(before2100));
+    store.set({ allocation: overlay() });
+    const num = root.querySelector('.map-headline-num')!;
+    expect(num.querySelector('b')!.textContent).toBe(formatPop(after));
+    expect(num.textContent).toContain(`2020年比 ${formatPct(after / base2020)}`);
+    expect(num.querySelector('.badge-estimate')!.textContent).toBe('試算');
+    expect(num.querySelector('.badge-alloc')!.textContent).toBe(ALLOC_BADGE);
+
+    // An area: its own population times 1.1, in the label and in the tooltip, with the change line.
+    const prefSvg = root.querySelector('.map-host:not([hidden]) svg')!;
+    const tanabe = prefSvg.querySelector('path.area[data-code="30206"]')!;
+    const tanabeAfter = formatPop(total(series.get('30206')![2100]) * 1.1);
+    expect(tanabe.getAttribute('aria-label')).toContain(`2100年 ${tanabeAfter}`);
+    expect(tanabe.getAttribute('aria-label')).toContain('（このアプリの試算）（割り振り後）');
+    tanabe.dispatchEvent(new Event('pointerover', { bubbles: true }));
+    const tip = root.querySelector<HTMLElement>('.map-host:not([hidden]) .map-tip')!;
+    expect(tip.hidden).toBe(false);
+    expect(tip.textContent).toContain(`2100年 ${tanabeAfter}`);
+    expect(tip.textContent).toContain('割り振りによる変化 +10.0%');
+    expect(tip.querySelector('.badge-estimate')!.textContent).toBe('試算');
+    expect(tip.querySelector('.badge-alloc')!.textContent).toBe(ALLOC_BADGE);
+  });
+
+  test('an allocation for another year leaves the numbers as they are and drops the 割り振り後 mark', async () => {
+    const { root, store } = await mount();
+    store.set({ year: 2100, selectedPref: '30' });
+    await settle();
+    store.set({ allocation: overlay() });
+    store.set({ year: 2080 });
+    const series = store.get().series;
+    const codes = sample.filter((a) => a.prefCode === '30').map((a) => a.code);
+    expect(root.querySelector('.map-headline-num b')!.textContent).toBe(formatPop(codes.reduce((t, c) => t + total(series.get(c)![2080]), 0)));
+    expect(root.querySelector('.map-headline-num .badge-alloc')).toBeNull();
+    const tanabe = root.querySelector('.map-host:not([hidden]) svg path.area[data-code="30206"]')!;
+    expect(tanabe.getAttribute('aria-label')).toContain('割り振りによる変化 +10.0%（2100年の計算）');
+    expect(tanabe.getAttribute('aria-label')).not.toContain('（割り振り後）');
+  });
+
+  test('a year change keeps the overlay and shows a quiet stale note', async () => {
+    const { root, store } = await mount();
+    store.set({ year: 2100 });
+    store.set({ allocation: overlay() });
+    store.set({ year: 2080 });
+    expect(store.get().allocation).toBeDefined();
+    const stale = root.querySelector<HTMLElement>('.alloc-bar-stale')!;
+    expect(stale.hidden).toBe(false);
+    expect(stale.textContent).toBe('この割り振りは2100年の計算です');
+    store.set({ year: 2100 });
+    expect(stale.hidden).toBe(true);
+  });
+
+  test('the clear button and Escape remove the overlay and restore the ratio colouring', async () => {
+    const { root, store } = await mount();
+    store.set({ year: 2100 });
+    const svg = root.querySelector('.map-host-national svg')!;
+    const wakayama = svg.querySelector('path.area[data-code="30"]')!;
+    const ratioFill = wakayama.getAttribute('fill');
+    store.set({ allocation: overlay() });
+    const clear = root.querySelector<HTMLButtonElement>('.alloc-clear')!;
+    expect(clear.textContent).toBe(ALLOC_CLEAR);
+    clear.focus(); // as a keyboard user who tabbed to it
+    clear.click();
+    expect(store.get().allocation).toBeUndefined();
+    expect(wakayama.getAttribute('fill')).toBe(ratioFill);
+    expect(root.querySelector('.legend')!.textContent).toContain('2020年の人口との比');
+    expect(root.querySelector<HTMLElement>('.alloc-bar')!.hidden).toBe(true);
+    expect(root.querySelector('.map-headline-num span')!.textContent).toBe('試算');
+    expect(root.querySelector('.map-headline-num .badge-alloc')).toBeNull();
+    expect(document.activeElement).toBe(root.querySelector('.map-headline-name')); // focus does not stay on a hidden button
+
+    store.set({ allocation: overlay() });
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(store.get().allocation).toBeUndefined();
+
+    // Escape inside a text field is left to the field
+    store.set({ allocation: overlay() });
+    const input = root.querySelector<HTMLInputElement>('.search-input')!;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(store.get().allocation).toBeDefined();
+  });
+
+  test('a focused facility draws count markers on the national view and rings in the prefecture view', async () => {
+    const { root, store } = await mount();
+    store.set({ year: 2100 });
+    store.set({ allocation: overlay({ focusFacilityId: 'grocery' }) });
+    const svg = root.querySelector('.map-host-national svg')!;
+    const markers = [...svg.querySelectorAll('.marker')];
+    expect(markers.map((m) => m.textContent)).toEqual(['+1', '−1']);
+    expect(markers[0].classList.contains('marker-gain')).toBe(true);
+    expect(markers[1].classList.contains('marker-loss')).toBe(true);
+    expect(svg.querySelector('path.area[data-code="30"]')!.getAttribute('aria-label')).toContain('飲食料品小売業：目安を上回る町 +1、下回る町 −0');
+    expect(svg.querySelector('path.area[data-code="13"]')!.getAttribute('aria-label')).toContain('下回る町 −1');
+    expect(markers.map((m) => m.getAttribute('data-for'))).toEqual(['30', '13']);
+    expect(svg.querySelector('.markers')!.getAttribute('aria-hidden')).toBe('true'); // the numbers are in the labels
+
+    store.set({ selectedPref: '30' });
+    await settle();
+    const prefSvg = root.querySelector('.map-host:not([hidden]) svg')!;
+    const gain = prefSvg.querySelector('.ring-gain')!.getAttribute('d')!;
+    expect(gain).toBe(prefSvg.querySelector('path.area[data-code="30206"]')!.getAttribute('d'));
+    expect(prefSvg.querySelector('.ring-loss')!.getAttribute('d')).toBe('');
+    expect(prefSvg.querySelectorAll('.marker')).toHaveLength(0);
+    expect(prefSvg.querySelector('path.area[data-code="30206"]')!.getAttribute('aria-label')).toContain('飲食料品小売業が目安を上回る（増えた）');
+
+    store.set({ selectedPref: '13' });
+    await settle();
+    const tokyoSvg = root.querySelector('.map-host:not([hidden]) svg')!;
+    expect(tokyoSvg.querySelector('.ring-loss')!.getAttribute('d')).toBe(tokyoSvg.querySelector('path.area[data-code="13402"]')!.getAttribute('d'));
+    expect(tokyoSvg.querySelector('path.area[data-code="13402"]')!.getAttribute('aria-label')).toContain('下回る（減った）');
+
+    store.set({ allocation: undefined });
+    expect(tokyoSvg.querySelector('.ring-loss')!.getAttribute('d')).toBe('');
+    expect(svg.querySelectorAll('.marker')).toHaveLength(0);
+  });
+
+  test('while the allocation panel draws on the map, a year or scenario change ends with its new overlay everywhere', async () => {
+    const { root, store } = await mount();
+    root.querySelector<HTMLButtonElement>('#alloc-map-toggle')!.click();
+    expect(store.get().allocation?.year).toBe(store.get().year);
+    const stale = root.querySelector<HTMLElement>('.alloc-bar-stale')!;
+    const legend = root.querySelector<HTMLElement>('.legend')!;
+
+    store.set({ year: 2100 }); // the panel recomputes inside its subscriber; the shell must not end on the old overlay
+    expect(store.get().allocation?.year).toBe(2100);
+    expect(stale.hidden).toBe(true);
+    expect(legend.dataset.mode).toBe('allocation');
+
+    store.set({ scenario: { cwrMult: 1.2, migMode: 'hold', migScale: 1, infraStrength: 0 } });
+    expect(store.get().allocation).toBeDefined(); // cleared by the store, drawn again by the panel
+    expect(root.querySelector<HTMLElement>('.alloc-bar')!.hidden).toBe(false);
+    expect(legend.dataset.mode).toBe('allocation');
+    expect(root.querySelector('.map-headline-num .badge-alloc')).not.toBeNull();
+  });
+
+  test('count markers keep their screen size: on a map drawn at half its viewBox width they are scaled by 2', async () => {
+    const { root, store } = await mount();
+    const svg = root.querySelector<SVGSVGElement>('.map-host-national svg')!;
+    const vbWidth = Number(svg.getAttribute('viewBox')!.split(' ')[2]);
+    vi.spyOn(svg, 'getBoundingClientRect').mockReturnValue({ width: vbWidth / 2, height: 10_000 } as DOMRect);
+    store.set({ year: 2100, allocation: overlay({ focusFacilityId: 'grocery' }) });
+    const marker = svg.querySelector('.marker')!;
+    expect(marker.getAttribute('transform')).toMatch(/^translate\(-?[\d.]+,-?[\d.]+\) scale\(2\.000\)$/);
+    const rect = marker.querySelector('rect')!;
+    expect(Number(rect.getAttribute('height'))).toBe(18); // screen pixels once scaled
+  });
+
+  test('a scenario change clears the overlay from the map', async () => {
+    const { root, store } = await mount();
+    store.set({ year: 2100, allocation: overlay() });
+    store.set({ scenario: { cwrMult: 1.2, migMode: 'hold', migScale: 1, infraStrength: 0 } });
+    expect(store.get().allocation).toBeUndefined();
+    expect(root.querySelector<HTMLElement>('.alloc-bar')!.hidden).toBe(true);
+    expect(root.querySelector('.legend')!.textContent).toContain('2020年の人口との比');
   });
 });

@@ -1,5 +1,15 @@
 import { describe, expect, test } from 'vitest';
-import { formatPct, formatPop, formatYear } from './format';
+import { formatDeltaPct, formatPct, formatPop, formatYear } from './format';
+
+describe('formatDeltaPct', () => {
+  test('one decimal normally, two below 0.1, ±0 near zero', () => {
+    expect(formatDeltaPct(10)).toBe('+10.0%');
+    expect(formatDeltaPct(-3.46)).toBe('−3.5%');
+    expect(formatDeltaPct(-0.04)).toBe('−0.04%');
+    expect(formatDeltaPct(0.001)).toBe('±0%');
+    expect(formatDeltaPct(Number.NaN)).toBe('－');
+  });
+});
 
 describe('formatPop', () => {
   test('under 10,000 shows people with separators', () => {

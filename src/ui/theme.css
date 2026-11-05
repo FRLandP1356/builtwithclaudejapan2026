@@ -344,6 +344,21 @@ a {
   vertical-align: middle;
   white-space: nowrap;
 }
+/* Marks figures and colours that come from a reallocation drawn on the map. */
+.badge-alloc {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--accent-soft);
+  border-radius: 3px;
+  background: var(--accent-soft);
+  font-family: var(--font-body);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--accent);
+  vertical-align: middle;
+  white-space: nowrap;
+}
 .badge-official {
   display: inline-block;
   padding: 0 6px;

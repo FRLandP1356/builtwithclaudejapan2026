@@ -1,5 +1,17 @@
 import { describe, expect, test } from 'vitest';
-import { changeColor, legendStops, NEUTRAL_RATIO, RATIO_MAX, RATIO_MIN, ratioToT } from './colors';
+import {
+  ALLOC_MIN_SCALE,
+  allocationColor,
+  allocationLegendRamp,
+  allocationLegendStops,
+  allocationScale,
+  changeColor,
+  legendStops,
+  NEUTRAL_RATIO,
+  RATIO_MAX,
+  RATIO_MIN,
+  ratioToT,
+} from './colors';
 
 const HEX = /^#[0-9a-f]{6}$/;
 
@@ -66,6 +78,55 @@ describe('changeColor', () => {
     expect(ratioToT(0.5)).toBeCloseTo(-1);
     expect(ratioToT(0.25)).toBeCloseTo(-2);
     expect(ratioToT(2)).toBeCloseTo(1);
+  });
+});
+
+describe('allocation scale (change in percent, centred on 0)', () => {
+  test('0 is the same neutral as ratio 1; negative is rust, positive is blue', () => {
+    expect(allocationColor(0, 10)).toBe(changeColor(1));
+    const minus = allocationColor(-10, 10);
+    const plus = allocationColor(10, 10);
+    expect(minus).toBe(changeColor(RATIO_MIN)); // full rust arm
+    expect(plus).toBe(changeColor(RATIO_MAX)); // full blue arm
+    expect(minus).not.toBe(plus);
+  });
+
+  test('clamps beyond the domain and darkens monotonically on both sides', () => {
+    expect(allocationColor(-50, 10)).toBe(allocationColor(-10, 10));
+    expect(allocationColor(50, 10)).toBe(allocationColor(10, 10));
+    const lum = (hex: string) => luminance(hex);
+    const down = [0, -2, -4, -6, -8, -10].map((p) => lum(allocationColor(p, 10)));
+    const up = [0, 2.5, 5, 7.5, 10].map((p) => lum(allocationColor(p, 10)));
+    for (let i = 1; i < down.length; i++) expect(down[i]).toBeLessThan(down[i - 1]);
+    for (let i = 1; i < up.length; i++) expect(up[i]).toBeLessThan(up[i - 1]);
+  });
+
+  test('a tiny change on a wide domain stays within a hair of neutral', () => {
+    const neutral = allocationColor(0, 10);
+    const tiny = allocationColor(-0.04, 10);
+    const channel = (hex: string, i: number) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
+    for (let i = 0; i < 3; i++) expect(Math.abs(channel(tiny, i) - channel(neutral, i))).toBeLessThanOrEqual(2);
+    expect(allocationColor(Number.NaN, 10)).toBe(changeColor(1));
+  });
+
+  test('allocationScale picks a round half-width at or above the largest change, never below the minimum', () => {
+    expect(allocationScale([10, -0.04, 0])).toBe(10);
+    expect(allocationScale([3, -1])).toBe(ALLOC_MIN_SCALE);
+    expect(allocationScale([-12])).toBe(20);
+    expect(allocationScale([49.9])).toBe(50);
+    expect(allocationScale([150])).toBe(200);
+    expect(allocationScale([])).toBe(ALLOC_MIN_SCALE);
+    expect(allocationScale([Number.NaN, 7])).toBe(10);
+  });
+
+  test('legend stops are symmetric with signed labels and a 0 in the middle', () => {
+    const stops = allocationLegendStops(10);
+    expect(stops.map((s) => s.label)).toEqual(['−10%', '−5%', '0', '+5%', '+10%']);
+    expect(stops.map((s) => s.offset)).toEqual([0, 0.25, 0.5, 0.75, 1]);
+    expect(stops[2].color).toBe(changeColor(1));
+    const ramp = allocationLegendRamp(10, 4);
+    expect(ramp.map((r) => r.offset)).toEqual([0, 0.25, 0.5, 0.75, 1]);
+    expect(ramp[2].color).toBe(changeColor(1));
   });
 });
 

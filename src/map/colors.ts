@@ -142,3 +142,56 @@ export function legendRamp(steps = 32): Array<{ offset: number; color: string }>
   }
   return out;
 }
+
+// -----------------------------------------------------------------------------------------------------------------
+// Allocation overlay: change in percent caused by a reallocation, a symmetric diverging scale centred on 0.
+// Same two arms (rust = fewer people, blue = more people) and the same neutral, so the map keeps one vocabulary;
+// each arm is used over its full length (the rust arm has more steps than the blue one, as in the ratio scale).
+// -----------------------------------------------------------------------------------------------------------------
+
+/** The smallest half-width of the percent domain: tiny changes stay almost neutral instead of filling the ramp. */
+export const ALLOC_MIN_SCALE = 5;
+const NICE_SCALES = [5, 10, 20, 30, 50, 100];
+
+/** Half-width of the symmetric domain for a set of percent changes: a round number at or above the largest |change|. */
+export function allocationScale(changes: Iterable<number>): number {
+  let max = 0;
+  for (const v of changes) if (Number.isFinite(v) && Math.abs(v) > max) max = Math.abs(v);
+  for (const s of NICE_SCALES) if (max <= s) return Math.max(ALLOC_MIN_SCALE, s);
+  return Math.ceil(max / 100) * 100;
+}
+
+/** Fill colour for a change of `percent` on a domain of +-`scale` percent. 0 is the neutral; beyond +-scale clamps. */
+export function allocationColor(percent: number, scale: number): string {
+  if (Number.isNaN(percent) || !(scale > 0)) return changeColor(1);
+  const u = Math.max(-1, Math.min(1, percent / scale));
+  const t = u < 0 ? T_MIN * -u : T_MAX * u;
+  const q = Math.round(t * QUANT);
+  let hex = cache.get(q);
+  if (hex === undefined) {
+    hex = oklabToHex(interpolateAt(q / QUANT));
+    cache.set(q, hex);
+  }
+  return hex;
+}
+
+/** Labelled ticks for the allocation legend: -scale, -scale/2, 0, +scale/2, +scale. */
+export function allocationLegendStops(scale: number): LegendStop[] {
+  const fmt = (p: number) => (p === 0 ? '0' : `${p < 0 ? '−' : '+'}${Math.abs(p)}%`);
+  return [-scale, -scale / 2, 0, scale / 2, scale].map((p, i) => ({
+    ratio: p,
+    offset: i / 4,
+    color: allocationColor(p, scale),
+    label: fmt(p),
+  }));
+}
+
+/** Dense stops for the allocation legend gradient. */
+export function allocationLegendRamp(scale: number, steps = 32): Array<{ offset: number; color: string }> {
+  const out: Array<{ offset: number; color: string }> = [];
+  for (let i = 0; i <= steps; i++) {
+    const offset = i / steps;
+    out.push({ offset, color: allocationColor((offset * 2 - 1) * scale, scale) });
+  }
+  return out;
+}
