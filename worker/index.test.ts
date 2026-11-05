@@ -109,9 +109,19 @@ function validBody(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** The JSON body the Worker sent upstream on its first call. */
+function sentBody(fetchFn: ReturnType<typeof mockFetch>): Record<string, unknown> {
+  return JSON.parse(fetchFn.mock.calls[0]![1]?.body as string) as Record<string, unknown>;
+}
+
 /** The `tools` array of the body the Worker sent upstream. */
 function sentTools(fetchFn: ReturnType<typeof mockFetch>): unknown {
-  return JSON.parse(fetchFn.mock.calls[0]![1]?.body as string).tools;
+  return sentBody(fetchFn).tools;
+}
+
+/** Every header the Worker sent upstream on its first call (names lower-cased by Headers). */
+function sentHeaders(fetchFn: ReturnType<typeof mockFetch>): Record<string, string> {
+  return Object.fromEntries(new Headers(fetchFn.mock.calls[0]![1]?.headers).entries());
 }
 
 function spyOnConsole() {
@@ -584,16 +594,45 @@ describe('upstream call', () => {
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
-  it('calls the Messages API with the key and version headers', async () => {
+  it('calls the Messages API with exactly these headers (deep equality: adding or dropping one fails)', async () => {
     const fetchFn = mockFetch();
     await handleRequest(chatRequest(validBody()), makeEnv(), fetchFn);
     const [url, init] = fetchFn.mock.calls[0]!;
     expect(url).toBe('https://api.anthropic.com/v1/messages');
     expect(init?.method).toBe('POST');
-    const headers = new Headers(init?.headers);
-    expect(headers.get('x-api-key')).toBe(API_KEY);
-    expect(headers.get('anthropic-version')).toBe('2023-06-01');
-    expect(headers.get('content-type')).toBe('application/json');
+    expect(sentHeaders(fetchFn)).toStrictEqual({
+      'anthropic-beta': 'thinking-binding-controls-2026-08-01',
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'x-api-key': API_KEY,
+    });
+  });
+
+  it('sends exactly this upstream body (deep equality: adding or dropping a field fails)', async () => {
+    const fetchFn = mockFetch();
+    const messages = [{ role: 'user', content: '東京都千代田区の2050年の人口を教えて' }];
+    const res = await handleRequest(chatRequest({ messages }), makeEnv(), fetchFn);
+    expect(res.status).toBe(200);
+    expect(sentBody(fetchFn)).toStrictEqual({
+      model: 'claude-sonnet-5-5',
+      max_tokens: 3000,
+      output_config: { effort: 'low' },
+      thinking: { type: 'adaptive', block_binding: { prefix_mismatch_behavior: 'drop_block' } },
+      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+      messages,
+      tools: TOOL_DEFS,
+    });
+    // Nothing else is passed to fetch either: no stream, no extra signal-less options.
+    expect(Object.keys(fetchFn.mock.calls[0]![1]!).sort()).toEqual(['body', 'headers', 'method', 'redirect', 'signal']);
+  });
+
+  it('relays the upstream body untouched, whatever stop_reason it carries', async () => {
+    for (const stopReason of ['end_turn', 'max_tokens', 'refusal', 'tool_use', 'pause_turn', 'model_context_window_exceeded']) {
+      const upstreamBody = { ...OK_BODY, stop_reason: stopReason, content: [{ type: 'text', text: `停止理由 ${stopReason}` }] };
+      const res = await handleRequest(chatRequest(validBody()), makeEnv(), mockFetch(() => jsonResponse(upstreamBody)));
+      expect(res.status, stopReason).toBe(200);
+      expect(await res.text(), stopReason).toBe(JSON.stringify(upstreamBody));
+    }
   });
 
   it('never_forwards_client_system_or_model', async () => {
@@ -613,14 +652,16 @@ describe('upstream call', () => {
     const res = await handleRequest(chatRequest(body), makeEnv(), fetchFn);
     expect(res.status).toBe(200);
 
-    const [, init] = fetchFn.mock.calls[0]!;
-    const sent = JSON.parse(init?.body as string);
-    expect(Object.keys(sent).sort()).toEqual(['max_tokens', 'messages', 'model', 'system', 'tools']);
-    expect(sent.model).toBe('claude-sonnet-5-5');
-    expect(sent.max_tokens).toBe(1500);
-    expect(sent.system).toBe(SYSTEM_PROMPT);
-    expect(sent.messages).toEqual([{ role: 'user', content: 'hello' }]);
-    expect(sent.tools).toEqual(TOOL_DEFS);
+    const sent = sentBody(fetchFn);
+    expect(sent).toStrictEqual({
+      model: 'claude-sonnet-5-5',
+      max_tokens: 3000,
+      output_config: { effort: 'low' },
+      thinking: { type: 'adaptive', block_binding: { prefix_mismatch_behavior: 'drop_block' } },
+      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: 'hello' }],
+      tools: TOOL_DEFS,
+    });
     expect(JSON.stringify(sent)).not.toContain('attacker');
     expect(JSON.stringify(sent)).not.toContain('Ignore all rules');
     expect(JSON.stringify(sent)).not.toContain('Client-supplied description');
@@ -666,7 +707,10 @@ describe('upstream call', () => {
     expect(res.status).toBe(200);
 
     const [, init] = fetchFn.mock.calls[0]!;
-    expect(init?.body as string).not.toMatch(/TAMPERED|web_search|ephemeral|evil/);
+    expect(init?.body as string).not.toMatch(/TAMPERED|web_search|evil/);
+    // The only cache_control upstream is the Worker's own, on the system block; none came from the client's tools.
+    expect(JSON.stringify(sentTools(fetchFn))).not.toMatch(/cache_control|ephemeral/);
+    expect((init?.body as string).match(/cache_control/g)).toHaveLength(1);
     expect(JSON.stringify(sentTools(fetchFn))).toBe(JSON.stringify(TOOL_DEFS));
     expect(JSON.stringify(TOOL_DEFS)).toBe(before); // the shared module is never mutated by a request
   });
@@ -807,7 +851,10 @@ describe('upstream call', () => {
         ],
       },
     ]);
-    expect(JSON.stringify(sent)).not.toMatch(/cache_control|citations|caller|1h/);
+    expect(JSON.stringify(sent.messages)).not.toMatch(/cache_control|citations|caller|1h/);
+    // The only cache_control upstream is the Worker's own, on the system block (checked in the exact-body test).
+    expect(JSON.stringify(sent).match(/cache_control/g)).toHaveLength(1);
+    expect(JSON.stringify(sent)).not.toMatch(/citations|caller|1h/);
   });
 
   it('rejects billable or forged blocks in nested content with 400 and sends nothing upstream', async () => {

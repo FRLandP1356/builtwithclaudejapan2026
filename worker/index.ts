@@ -21,9 +21,23 @@ export interface Env {
   DAILY_IP_LIMIT?: string;
 }
 
-// Decided here and never taken from the client.
+// Decided here and never taken from the client. Behaviour per the Claude API documentation (verified 2026-11-06):
+//  - With `thinking` omitted, claude-sonnet-5-5 runs adaptive thinking, and thinking tokens count toward max_tokens,
+//    so the budget below leaves room for thinking plus an answer (1500 could cut the answer off or leave it empty).
+//  - `output_config.effort` is GA (no beta header) and lives inside output_config, not at the top level.
+//  - The client replays assistant turns with their signed thinking blocks and trims old exchanges. A thinking block is
+//    valid only while the system prompt, tools and earlier messages are unchanged; on accounts created on or after
+//    2026-08-31 a replay after trimming is a 400. `block_binding` with `drop_block` makes the API drop the first
+//    mismatched block (and those after it) for that request only, and the request succeeds. It needs the beta header
+//    below (without it block_binding is a 400) and works only with `type: 'adaptive'`.
 const MODEL = 'claude-sonnet-5-5';
-const MAX_TOKENS = 1500;
+const MAX_TOKENS = 3000;
+const OUTPUT_CONFIG = { effort: 'low' } as const;
+const THINKING = {
+  type: 'adaptive',
+  block_binding: { prefix_mismatch_behavior: 'drop_block' },
+} as const;
+const ANTHROPIC_BETA = 'thinking-binding-controls-2026-08-01';
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 const UPSTREAM_TIMEOUT_MS = 60_000;
@@ -111,6 +125,7 @@ async function callAnthropic(
       headers: {
         'x-api-key': env.ANTHROPIC_API_KEY,
         'anthropic-version': ANTHROPIC_VERSION,
+        'anthropic-beta': ANTHROPIC_BETA,
         'content-type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -223,10 +238,14 @@ export async function handleRequest(
 
   // Built only from validated messages and server-side constants. The tool definitions are always the canonical
   // ones from the shared module; whatever `tools` the client sent was never read.
+  // The one cache_control breakpoint is on the system block: it caches tools + system, the constant prefix of about
+  // 4.6K tokens, so each call re-reads that prefix at the cache-read price. Nothing here comes from the client.
   const payload = {
     model: MODEL,
     max_tokens: MAX_TOKENS,
-    system: SYSTEM_PROMPT,
+    output_config: OUTPUT_CONFIG,
+    thinking: THINKING,
+    system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
     messages,
     tools: TOOL_DEFS,
   };
