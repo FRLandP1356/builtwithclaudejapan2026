@@ -73,6 +73,7 @@
 | 族 | 主な class | 役割 |
 |---|---|---|
 | 見出し | `.town` `.town-head` `.town-name`（明朝 26px）`.town-sub` `.town-hint` | 町名、県と区分、何も選んでいない時のヒント |
+| 割り振りの注記 | `.note.town-alloc-note`（数字のタイルの下、読み上げ領域にしない） | 地図が表示中の年の割り振り後で、この場所が割り振りに入っている間だけ「地図は割り振り後（28.8万人）です。この欄の数字は割り振り前です。」。タイルは割り振り前のまま |
 | チャートの器 | `.chart-figure` `.chart`（inline SVG、幅 100%・最大 560px）`.chart-summary` `.chart-legend` `.chart-key`（`.key-estimate` `.key-baseline`） | 図と、その下の 1 文の要約と凡例。文字はすべて `--ink-2`、系列の色で文字を塗らない |
 | 折れ線 | `.line .line-official / .line-estimate / .line-baseline`、`.dot .dot-official / .dot-estimate / .dot-baseline`、`.chart-grid` `.chart-border` `.chart-marker` `.chart-end` `.chart-marker-label` `.chart-unit` `.chart-caption` | 公式（墨・実線）、試算（藍・破線）、参考（灰・点線）。線 2px、点 8px 以上、2050 年の縦線 |
 | ピラミッド | `.pyr-m` `.pyr-f` `.pyr-hit` `.pyramid-note` | 男は `--pyramid-m`、女は `--pyramid-f`。左右と「男」「女」の文字でも区別 |
@@ -86,9 +87,9 @@
 |---|---|---|
 | 前提 | `.controls-groups`（`.field` を罫で区切る）`.field-tags` `.controls-actions` `.controls-status` `#ctl-error` `#ctl-infra-custom` | スライダーと 2 択、適用と戻すのボタン、状態の 1 行 |
 | 割り振りの入力 | `.alloc-form` `.alloc-regions`（`fieldset`）`.alloc-region`（チェックボックス 20px、行 40px）`.alloc-year` | 対象・割合・引く元 |
-| 地図への反映 | `.alloc-map-actions` `.alloc-map-toggle`（`aria-pressed`。「地図に反映する」/「地図に反映中」）`.alloc-map-status`（`role=status`） | 押すと store の `allocation` に今の結果を置く。年・前提・入力が変わるたびに置き直す。外す・片付けると消す |
+| 地図への反映 | `.alloc-map-actions` `.alloc-map-toggle`（`aria-pressed`。「地図に反映する」/「地図に反映中」）`.alloc-map-status`（`role=status`） | 押すと store の `allocation` に今の結果を置く。年・前提・入力が変わるたびに置き直す。外す・片付けると消す。反映中は地図で別の県や町を選んでも対象を変えない（印をたどってほかの県の輪を見るため）。反映していない時は、これまでどおり地図の選択が対象になる |
 | 結果 | `.alloc-result` `.alloc-summary`（`role=status`）`.alloc-notes` `.alloc-more`（`details`） | 1 文の要約と施設の表 |
-| 施設の表 | `.alloc-table-visible` `.alloc-table-hidden` `.alloc-group`（`th[scope=rowgroup]`）`.alloc-name.alloc-focus`（施設名のボタン、`aria-pressed`、`data-facility`。押した状態はその場で書き換え、表を作り直さない：フォーカスも開いた「その他の施設」もそのまま）`.alloc-example` `.alloc-example-count` `.alloc-down`（減る差は `--decline-deep`） | 施設名を押すと、その施設の目安をまたいだ町に地図で印が付く |
+| 施設の表 | `.alloc-table-visible` `.alloc-table-hidden` `.alloc-group`（`th[scope=rowgroup]`）`.alloc-name.alloc-focus`（施設名のボタン：藍の下線付きの文字で 40px、押した状態は `--accent-soft` の面。`aria-pressed`、`data-facility`。押した状態はその場で書き換え、表を作り直さない：フォーカスも開いた「その他の施設」もそのまま）`.alloc-example` `.alloc-example-count` `.alloc-down`（減る差は `--decline-deep`） | 施設名を押すと、その施設の目安をまたいだ町に地図で印が付く |
 
 ### AI に質問（`aiPanel.css`、`aiPanel.ts`・`aiTrace.ts`）
 
@@ -112,10 +113,13 @@
 | 割り振りの行 | `.alloc-bar`（「地図に反映中の割り振り：」）`.alloc-bar-name`（「和歌山県 +10%」）`.alloc-bar-stale`（「この割り振りは◯年の計算です」）`.alloc-clear`（「割り振りを地図から消す」、40px。Esc でも消える。入力欄の中の Esc は欄のもの） | 地図の上、見出しの下。消えた時にこの行にフォーカスがあれば、見出しの地名へ移す |
 | 凡例 | `.legend`（`data-mode="ratio" | "allocation"`）`.legend-title` `.legend-bar` `.legend-ticks` `.legend-tick` | 割り振り中は「割り振りによる人口の変化（%）」に切り替わる |
 
+目印だけの class（css の規則が無く、テストやスクリプトが要素を探すためのもの）：`.ai-allocations` `.ai-basis` `.ai-cancel` `.ai-form` `.ai-links` `.ai-message` `.ai-trace` `.ai-trace-result` `.ai-trimmed` `.alloc-clear` `.alloc-map-actions` `.alloc-map-status` `.alloc-map-toggle` `.alloc-table-hidden` `.alloc-table-visible` `.map-inset`。見た目は一緒に付く共通の class（`.btn`・`.note`・`.data-table` など）が決める。`.marker-mixed`（増えた町と減った町の両方がある県）は独自の色を持たず、印の文字は墨のまま。
+
 ## 数字と文言
 
 - 人口は `formatPop()`（`src/ui/format.ts`）：8,340人 / 4.2万人 / 1,190万人 / 1億2,615万人。増減は `formatPct()`：−31.5% / +2.5%（マイナスは U+2212）。割り振りの変化は `formatDeltaPct()`：+10.0% / −0.04% / ±0%。
-- 割り振りが地図にある間、見出し・ツールチップ・面の `aria-label`・場所の読み上げは、割り振りの年と表示中の年が同じなら割り振り後の人口と 2020 年比を出し、「割り振り後」の印（読み上げは「（割り振り後）」）を付ける。年が違えば数字はそのまま、印も付けない。ツールチップと `aria-label` には「割り振りによる変化 +10.0%」（年が違えば「（2100年の計算）」を添える）と、焦点の施設があれば「◯◯が目安を上回る（増えた）」「◯◯が目安を下回る（減った）」、全国の地図では「◯◯：目安を上回る町 +n、下回る町 −n」を足す。県の変化は `allocatedTotals()`（`src/ui/derive.ts`）で県の合計から計算する。
+- 割り振りが地図にある間、見出し・ツールチップ・面の `aria-label`・場所の読み上げは、割り振りの年と表示中の年が同じなら割り振り後の人口と 2020 年比を出し、割り振り前の人口も並べ（「28.8万人（割り振り前 26.2万人）」）、「割り振り後」の印（読み上げは「（割り振り後）」）を付ける。解釈：「割り振り後」の印は試算・公式の印の後ろに足すもので、置き換えない（2050 年より後は必ず「試算」を出す、という全体の決まりのため）。年が違えば数字はそのまま、印も付けない。ツールチップと `aria-label` には「割り振りによる変化 +10.0%」（年が違えば「（2100年の計算）」を添える）と、焦点の施設があれば「◯◯が目安を上回る（増えた）」「◯◯が目安を下回る（減った）」、全国の地図では「◯◯：目安を上回る町 +n、下回る町 −n」を足す。県の変化は `allocatedTotals()`（`src/ui/derive.ts`）で県の合計から計算する。これらの数字と文言は `src/ui/allocationView.ts`（DOM なしの関数：`allocationView`・`placeNumbers`・`allocationLines`・`countMarkers`）にあり、シェルと町の詳細の注記が同じものを使う。
+- 色の幅（`allocationScale`）は最大の変化を画面と同じ小数 1 桁に丸めてから 5・10・20・30・50・100 と比べる。計算の誤差（10.000000000000018）や人数の丸め（10.0001）で +10% の割り振りが ±20 にならない。
 - 2050 年より後の数字には必ず試算の印を付け、「予測」と書かない。文言の正本は `src/ui/sources.ts`（`ESTIMATE_NOTE`・`OFFICIAL_NOTE`・`badgeFor`・出典）。
 - 「残せない」でなく「人口の目安を下回る」。残す・残さないを勧める言葉は書かない。
 - 丸数字・矢印記号・英語の大文字ラベルは使わない。
@@ -130,11 +134,11 @@
 
 ## 状態と更新
 
-- 状態は `store`（`src/ui/state.ts` の `createAppStore`）。`store.get()` で `year`・`scenario`・`series`・`selectedPref`・`selectedArea`・`allocation` を読み、`store.subscribe((s, prev) => …)` で描き直す。`store.set(patch)` は適用されたら `true`、何も変わらない・拒否されたら `false` を返す。`prev` はその購読者が前に受け取った状態。購読者の中で `set` してよい（割り振りのパネルは年の変化を受けてその場で置き直す）：その時は全員に新しい状態がすぐ届き、まだ受け取っていない購読者には 2 つの変化が 1 回にまとまって届く。古い状態で終わる購読者は出ない。
+- 状態は `store`（`src/ui/state.ts` の `createAppStore`）。`store.get()` で `year`・`scenario`・`series`・`selectedPref`・`selectedArea`・`allocation` を読み、`store.subscribe((s, prev) => …)` で描き直す。`store.set(patch)` は適用されたら `true`、何も変わらない・拒否されたら `false` を返す。`prev` はその購読者が前に受け取った状態。購読者の中で `set` してよい（割り振りのパネルは年の変化を受けてその場で置き直す）：その時は全員に新しい状態がすぐ届き、まだ受け取っていない購読者にはいくつかの変化が 1 回にまとまって届く（打ち消し合って何も変わらなければ呼ばれない）。古い状態で終わる購読者は出ない。通知の途中で購読をやめた購読者には、その通知はもう届かない。
 - 町を選ぶ時は `store.set({ selectedArea: code })` だけでよい。store が `selectedPref` をその町の県にそろえる（県の地図・パンくず・戻るボタンも付いてくる）。`store.set({ selectedPref })` で県を変えると、その県に属さない町の選択は消える。`selectedPref: undefined` で日本に戻る（町の選択も消える）。無い地域コード・県コードは拒否される（状態は変わらず、通知も無く、console.warn が出る）。`src/ui/nav.ts` の `pickArea`・`pickPref`・`goUp`・`toJapan` は同じ patch を作る便利関数。
 - `store.set({ scenario })` を呼ぶと、`series` が同じ通知の中で更新されて届く（自分で runner を呼ばない）。範囲外・NaN・未知の migMode は拒否され、前の値が残る（通知なし・console.warn）。値が同じ scenario を入れ直しても通知は無い。スライダーの min/max は `SCENARIO_LIMITS`（`src/data/runner.ts`）に合わせる。
 - `year` は 2020〜2100 の 5 年刻みだけ受け付ける（それ以外は拒否）。
-- `store.set({ allocation })` で割り振りを地図に置く（`AllocationOverlay`：`year`・`label`・`changePercent`（地域コードごとの % 変化）・`flips`（施設ごとの目安以上になった町・下回った町の全コード）・`focusFacilityId`）。store が検査して写しを持つ（無いコード・NaN・刻み外の年・flips に無い focus は拒否）。`store.set({ allocation: undefined })` で消える。前提（scenario）が変わると自動で消える（割り振りのパネルは反映中なら計算し直して置き直す）。年が変わっても消えず、地図の上に「この割り振りは◯年の計算です」と出る。作るのは `buildOverlay()`（`src/ui/allocationOverlay.ts`）、AI の道具の入力からは `overlayFromToolInput()`（道具と同じ読み方：年は 5 年刻みに切り下げ、人数は整数に丸め、前提は `sanitizeScenario`。読めない入力は日本語の文で断る。モデルの書いたコードは 12 文字までにして文字として出す）。AI のパネルがボタンを出すのは、結果が error でなかった `run_allocation` の入力だけ（同じ入力は 1 つ、3 つまで。`allocationOffers()`）。押すと年をその割り振りの年に動かし、前提が画面と違えば前提も同じ patch で置く（目安をまたぐ町は前提で変わるため）。その時は文言で「この割り振りの前提も画面に反映しました（…）」と伝える。
+- `store.set({ allocation })` で割り振りを地図に置く（`AllocationOverlay`：`year`・`label`・`changePercent`（地域コードごとの % 変化）・`flips`（施設ごとの目安以上になった町・下回った町の全コード）・`focusFacilityId`）。store が検査して写しを持つ（無いコード・NaN・刻み外の年・flips に無い focus は拒否）。`store.set({ allocation: undefined })` で消える。前提（scenario）が変わると自動で消える（割り振りのパネルは反映中なら計算し直して置き直す）。年が変わっても消えず、地図の上に「この割り振りは◯年の計算です」と出る。作るのは `buildOverlay()`（`src/ui/allocationOverlay.ts`）、AI の道具の入力からは `overlayFromToolInput()`（道具と同じ読み方：年は 5 年刻みに切り下げ、人数は整数に丸め、前提は `sanitizeScenario`。読めない入力は日本語の文で断る。モデルの書いたコードは 12 文字までにして文字として出す）。AI のパネルがボタンを出すのは、結果が error でなかった `run_allocation` の入力だけ（同じ入力は 1 つ、3 つまで。`allocationOffers()`）。押すと年をその割り振りの年に動かし、前提が画面と違えば前提も同じ patch で置く（目安をまたぐ町は前提で変わるため）。前提が違う間はボタンに「（前提も画面に合わせます）」と添え（画面の前提が変わるたびに付け外しする）、押した後は「この割り振りの前提も画面に反映しました（…）」と伝える。共通の計算（`populationAt`・`targetPeople`・`allocationErrorMessage`）は `src/ui/allocationCore.ts` にあり、パネルと `allocationOverlay.ts` の両方がそこから読む（互いを読み合わない）。
 - 年ごとの合計は `deriveTotals(series, data.groups)`（`src/ui/derive.ts`）。`series` が同じ間は同じ結果が返るので、呼ぶたびに計算し直さない。
 - 描き直しは変わった所だけ。DOM を作り直さず、文字と属性を更新する。読み上げの領域（`role=status`・`aria-live`）は意味が変わった時だけ書き換える。
 
