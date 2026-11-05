@@ -164,6 +164,31 @@ class TestDownloadSizeCap(unittest.TestCase):
             self.run_download(FakeResponse(total=None), 1000)
         self.assertEqual(self.leftovers(), ["big.bin"])
 
+    def test_declared_length_accepts_only_plain_ascii_digits(self):
+        ok = {"0": 0, "10": 10, " 12 ": 12, "007": 7, "99999999999": 99999999999}
+        for value, want in ok.items():
+            with self.subTest(value=value):
+                self.assertEqual(fetch_sources.declared_length({"Content-Length": value}), want)
+        for value in ["abc", "", "-5", "+5", "1.5", "1_000", "10, 10", "\u00b2", "\u0663", "\uff11\uff10", "1e3"]:
+            with self.subTest(value=value):
+                self.assertIsNone(fetch_sources.declared_length({"Content-Length": value}))
+        self.assertIsNone(fetch_sources.declared_length({}))
+        self.assertIsNone(fetch_sources.declared_length(None))
+
+    def test_unusable_content_length_is_ignored_and_the_stream_cap_still_applies(self):
+        limit = fetch_sources.size_limit(1000)
+        for value in ["\u00b2", "abc", "-5", "1e3"]:
+            with self.subTest(value=value, case="within limit"):
+                self.run_download(FakeResponse(total=100, content_length=value), 1000)
+                self.assertEqual(os.path.getsize(self.dest), 100)
+                os.remove(self.dest)
+            with self.subTest(value=value, case="over limit"):
+                resp = FakeResponse(total=None, content_length=value)
+                with self.assertRaises(fetch_sources.DownloadTooLarge):
+                    self.run_download(resp, 1000)
+                self.assertEqual(resp.served, limit + 1)
+                self.assertEqual(self.leftovers(), [])
+
     def test_without_a_recorded_size_the_ceiling_applies(self):
         with mock.patch.object(fetch_sources, "MAX_UNRECORDED_BYTES", 500):
             with self.assertRaises(fetch_sources.DownloadTooLarge):

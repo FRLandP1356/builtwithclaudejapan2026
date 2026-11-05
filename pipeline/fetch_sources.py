@@ -88,6 +88,19 @@ def size_limit(expected_bytes: Optional[int]) -> int:
     return MAX_UNRECORDED_BYTES
 
 
+def declared_length(headers: Any) -> Optional[int]:
+    """The Content-Length header as an int, or None if it is absent or not plain ASCII digits.
+
+    str.isdigit() is also true for characters such as '\u00b2' that int() cannot parse, so the value must
+    be ASCII as well. An unusable header is treated as no header: only the streaming cap then applies.
+    """
+    value = headers.get("Content-Length") if headers is not None else None
+    if value is None:
+        return None
+    value = value.strip()
+    return int(value) if value.isascii() and value.isdigit() else None
+
+
 def download(url: str, dest: str, expected_bytes: Optional[int] = None, opener: Optional[Callable[..., Any]] = None) -> None:
     """Download url to dest atomically (temp file in the same directory, then rename).
 
@@ -103,10 +116,9 @@ def download(url: str, dest: str, expected_bytes: Optional[int] = None, opener: 
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(dest), suffix=".part")
     try:
         with os.fdopen(fd, "wb") as out, open_url(req, timeout=120) as resp:
-            headers = getattr(resp, "headers", None)
-            declared = headers.get("Content-Length") if headers is not None else None
-            if declared and declared.strip().isdigit() and int(declared) > limit:
-                raise DownloadTooLarge(f"{url}: server announces {int(declared)} bytes, limit is {limit}")
+            declared = declared_length(getattr(resp, "headers", None))
+            if declared is not None and declared > limit:
+                raise DownloadTooLarge(f"{url}: server announces {declared} bytes, limit is {limit}")
             received = 0
             while True:
                 block = resp.read(min(CHUNK, limit - received + 1))
