@@ -3,7 +3,7 @@
 //
 // Screen readers: the range input carries the year through aria-valuetext (「2055年」), so the big numeral is
 // aria-live="off" and the note is a role="status" region that is rewritten only when the year crosses 2050.
-import { phraseNodes } from './seriesChart';
+import { phraseNodes } from './phrases';
 import { ESTIMATE_BADGE, ESTIMATE_NOTE, OFFICIAL_END_YEAR, OFFICIAL_NOTE } from './sources';
 
 export interface YearSliderOptions {

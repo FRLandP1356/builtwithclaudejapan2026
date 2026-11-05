@@ -17,7 +17,7 @@ import { deriveTotals, ratioAt, yearIndex, type Totals } from './derive';
 import { formatPct, formatPop } from './format';
 import { breadcrumbs, buildSearchIndex, goUp, levelOf, pickArea, pickPref, prefOfArea, type Selection } from './nav';
 import { mountSearch } from './search';
-import { phrases } from './seriesChart';
+import { phrases } from './phrases';
 import { mountAIPanel } from './aiPanel';
 import { allocatedBasisNote, APP_LEAD, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, SOURCES, type SourceLine } from './sources';
 import { createAppStore, DEFAULT_YEAR, type AllocationOverlay, type AppState, type PanelContext, type Store } from './state';
