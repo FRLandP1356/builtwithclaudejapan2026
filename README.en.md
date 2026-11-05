@@ -6,7 +6,7 @@ A map that shows Japan's population up to 2100. You drill down from Japan to a p
 
 The app does not recommend what to keep or give up. It shows facts so people can decide.
 
-The author's view (作者の見解): the author thinks that if every rural region in Japan were revitalised at the same time, it would not add up in terms of population. The app is not a proof of that view; it lays out material for checking it.
+The author's view (作者の見解): the author thinks that if every rural region in Japan were revitalised at the same time, it would not add up in terms of population. The app is not a proof of that view; it lays out material for checking it. (This sentence was written by Claude from the author's remarks; its wording is awaiting the author's confirmation.)
 
 - Public page: (public URL to be added at submission)
 - Status: before the hackathon submission. Nothing has been deployed: there is no public page, no proxy (Worker) for the free-text AI questions, and no saved AI answers yet. **In this version the AI questions do not work** (see [Limits and unfinished items](#limits-and-unfinished-items)). The numbers in this document are as of commit fa21f09 (2026-11-06).
@@ -115,7 +115,7 @@ When migration stops, the national total falls, but small shrinking towns can en
 - **Not made by Claude:** the population projections and assumptions (IPSS), the administrative boundaries (MLIT National Land Numerical Information, originally from the Geospatial Information Authority of Japan) and the facility population-size chart (MLIT National Spatial Planning Bureau) are those organisations' data. `public/data` in this repository is that data processed by scripts Claude wrote; the facility table is Claude's transcription of the chart's numbers (the original numbers are MLIT's). The original IPSS Excel files are not in the repository. The libraries listed below were not made by Claude either.
 - No AI-generated images or audio are used (the icon is an SVG written in code: a square and a circle). Only fonts already on the system are used; no web fonts are loaded.
 - OSS dependencies (licences as declared in each package's `package.json`): D3 7.9.2 (ISC), topojson-client 3.1.0 (ISC). For development: Vite 8.3.5 (MIT), TypeScript 7.0.2 (Apache-2.0), Vitest 5.1.0 (MIT), jsdom 30.1.3 (MIT), mapshaper 0.7.101 (MPL-2.0, used to simplify boundaries), Wrangler 4.157.0 (MIT OR Apache-2.0), `@cloudflare/workers-types` and `@types/*`. No other third-party code was copied in. The Python data scripts use only the standard library.
-- Pre-existing material: nothing made before the hackathon was reused (code, images or text). This repository was created after the hackathon began. External data is used, as above, by processing the organisations' own data.
+- Pre-existing material: nothing made before the hackathon was reused (code, images or text). This repository was created after the hackathon began. External data is used, as above, by processing the organisations' own data. The one thing taken over is the colour scheme of the screens (paper colour and indigo), which follows the scheme the author already used in the author's own documents: only the colours were matched; no code or assets were reused. The files of those documents are not in the repository.
 
 ## Data sources and licences
 
