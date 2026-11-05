@@ -65,7 +65,8 @@ describe('和歌山県 +10% in 2100 on the real maps', () => {
     const svg = root.querySelector('.map-host-national svg')!;
     const marker = svg.querySelector('.marker[data-for="30"]')!;
     expect(marker.textContent).toBe('+1');
-    expect(label(svg, '30')).toContain('飲食料品小売業：目安を上回る町 +1、下回る町 −0');
+    expect(label(svg, '30')).toMatch(/飲食料品小売業：目安を上回る町 \+1(、|$)/);
+    expect(label(svg, '30')).not.toContain('−0');
 
     handle.store.set({ selectedPref: '30' });
     await settle();

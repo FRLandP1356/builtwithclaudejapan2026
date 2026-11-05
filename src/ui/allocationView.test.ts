@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { Groups } from '../engine/types';
-import { allocationLines, allocationView, changeOf, countMarkers, overlayCovers, placeNumbers } from './allocationView';
+import { allocationLines, allocationView, crossingCounts, changeOf, countMarkers, overlayCovers, placeNumbers } from './allocationView';
 import type { Totals } from './derive';
 import type { AllocationOverlay } from './state';
 
@@ -80,7 +80,22 @@ describe('allocationLines and countMarkers', () => {
     expect(allocationLines(v, 'area', '01001', 2100)).toEqual(['割り振りによる変化 +10.0%', '施設Fが目安を上回る（増えた）']);
     expect(allocationLines(v, 'area', '02001', 2100)).toEqual(['割り振りによる変化 −5.0%', '施設Fが目安を下回る（減った）']);
     expect(allocationLines(v, 'pref', '01', 2100)).toEqual(['割り振りによる変化 +2.5%', '施設F：目安を上回る町 +1、下回る町 −1']);
-    expect(allocationLines(v, 'pref', '02', 2050)).toEqual(['割り振りによる変化 −5.0%（2100年の計算）', '施設F：目安を上回る町 +0、下回る町 −1']);
+    expect(allocationLines(v, 'pref', '02', 2050)).toEqual(['割り振りによる変化 −5.0%（2100年の計算）', '施設F：目安を下回る町 −1']);
+  });
+
+  test('a prefecture line never prints a zero side: only gained, only lost, both, or no line at all', () => {
+    expect(crossingCounts({ gained: 3, lost: 0 })).toBe('目安を上回る町 +3');
+    expect(crossingCounts({ gained: 0, lost: 2 })).toBe('目安を下回る町 −2');
+    expect(crossingCounts({ gained: 1, lost: 4 })).toBe('目安を上回る町 +1、下回る町 −4');
+    expect(crossingCounts({ gained: 0, lost: 0 })).toBeUndefined();
+    for (const code of ['01', '02']) {
+      const text = allocationLines(v, 'pref', code, 2100).join('\n');
+      expect(text).not.toMatch(/[+−]0(?![.\d])/);
+    }
+    const onlyGain = allocationView({ ...overlay, flips: [{ facilityId: 'f', name: '施設F', gained: ['01001'], lost: [] }] }, totals, groups);
+    expect(allocationLines(onlyGain, 'pref', '01', 2100)).toEqual(['割り振りによる変化 +2.5%', '施設F：目安を上回る町 +1']);
+    const none = allocationView({ ...overlay, flips: [{ facilityId: 'f', name: '施設F', gained: ['01001'], lost: [] }] }, totals, groups);
+    expect(allocationLines(none, 'pref', '02', 2100)).toEqual(['割り振りによる変化 −5.0%']); // a prefecture without crossings gets no facility line
   });
 
   test('one marker per prefecture with crossings: mixed or loss', () => {

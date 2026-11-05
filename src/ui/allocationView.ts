@@ -97,6 +97,17 @@ export function overlayCovers(overlay: AllocationOverlay, areaCodes: readonly st
   return areaCodes.some((c) => c in overlay.changePercent);
 }
 
+/**
+ * 「目安を上回る町 +1、下回る町 −1」: only the sides that have towns. A side with none is left out, so no "−0" is printed
+ * (「目安を上回る町 +1」 / 「目安を下回る町 −2」); `undefined` when neither side has any.
+ */
+export function crossingCounts(c: { gained: number; lost: number }): string | undefined {
+  if (c.gained > 0 && c.lost > 0) return `目安を上回る町 +${c.gained}、下回る町 −${c.lost}`;
+  if (c.gained > 0) return `目安を上回る町 +${c.gained}`;
+  if (c.lost > 0) return `目安を下回る町 −${c.lost}`;
+  return undefined;
+}
+
 /** Lines added to a shape's tooltip and label: the change, and the focused facility's state there. */
 export function allocationLines(v: AllocationView, kind: PlaceKind, code: string, year: number): string[] {
   const stale = v.overlay.year !== year ? `（${v.overlay.year}年の計算）` : '';
@@ -104,7 +115,10 @@ export function allocationLines(v: AllocationView, kind: PlaceKind, code: string
   if (v.focus) {
     if (kind === 'pref') {
       const c = v.prefCounts.get(code);
-      if (c) lines.push(`${v.focus.name}：目安を上回る町 +${c.gained}、下回る町 −${c.lost}`);
+      if (c) {
+        const counts = crossingCounts(c);
+        if (counts) lines.push(`${v.focus.name}：${counts}`);
+      }
     } else if (v.gained.has(code)) lines.push(`${v.focus.name}が目安を上回る（増えた）`);
     else if (v.lost.has(code)) lines.push(`${v.focus.name}が目安を下回る（減った）`);
   }
