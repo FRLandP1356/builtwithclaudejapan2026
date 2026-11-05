@@ -100,13 +100,13 @@ describe('one Tab stop for the whole map', () => {
     expect(stops(host)).toEqual(['g12']);
   });
 
-  test('the svg is described by a hidden sentence that names the arrow keys', () => {
+  test('the svg is described by a hidden sentence that names every key the map answers to, and says nothing else', () => {
     const { host } = mount();
     const svg = host.querySelector('svg')!;
     const hint = host.querySelector(`#${svg.getAttribute('aria-describedby')}`)!;
     expect(hint.classList.contains('sr-only')).toBe(true);
-    expect(hint.textContent).toContain('矢印キー');
-    expect(hint.textContent).toContain('Home');
+    // the whole sentence: a clause cannot be dropped (PageUp/PageDown is only told here) or added unnoticed
+    expect(hint.textContent).toBe('矢印キーで隣の地域へ、PageUpとPageDownで前と次の地域へ、HomeとEndで最初と最後の地域へ移ります。EnterかSpaceで選びます。');
   });
 });
 
