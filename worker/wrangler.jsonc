@@ -14,6 +14,21 @@
       "id": "REPLACE_WITH_REAL_KV_NAMESPACE_ID"
     }
   ],
+  // Burst limiter: at most 20 calls per 60 seconds per visitor (the key is an HMAC of the client address, set in
+  // worker/index.ts). Wrangler 4.36 or later. `period` can only be 10 or 60. The count is kept per Cloudflare
+  // location and is eventually consistent, so it is a courtesy limit, not accounting (the Anthropic workspace spend
+  // limit is the hard stop). `namespace_id` is a positive integer, written as a string, that must be unique in the
+  // Cloudflare account: bindings that share one share their counters, so pick another number if 21001 is in use.
+  "ratelimits": [
+    {
+      "name": "IP_LIMITER",
+      "namespace_id": "21001",
+      "simple": {
+        "limit": 20,
+        "period": 60
+      }
+    }
+  ],
   "vars": {
     // Comma-separated page origins allowed to call the Worker (exact match). This keeps other websites' browsers
     // out; it is NOT authentication (curl can send any Origin). The Anthropic workspace spend limit is the hard stop.

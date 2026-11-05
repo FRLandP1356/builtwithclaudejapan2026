@@ -1,5 +1,6 @@
 import { TOOL_DEFS } from '../src/ai/toolDefs';
 import {
+  clientKey,
   consumeQuota,
   DEFAULT_IP_LIMIT,
   DEFAULT_TOTAL_LIMIT,
@@ -15,6 +16,12 @@ export interface Env {
   IP_HASH_SECRET: string;
   /** KV namespace holding the daily counters. */
   RATE_KV: KVNamespace;
+  /**
+   * Workers Rate Limiting binding (`ratelimits` in wrangler.jsonc, 20 calls per 60 s per key), keyed by the HMAC'd
+   * client identity. Stops a quick burst from one visitor. Required: when it is missing the Worker answers 503
+   * `server_misconfigured` instead of skipping the check.
+   */
+  IP_LIMITER: RateLimit;
   /** Comma-separated list of page origins that may call this Worker (exact match). */
   ALLOWED_ORIGINS: string;
   DAILY_TOTAL_LIMIT?: string;
@@ -212,9 +219,17 @@ export async function handleRequest(
   }
   const { messages } = validation.value;
 
-  // Fail closed when a secret is missing, before any quota is charged. Names only; values are never logged.
-  if (!env.ANTHROPIC_API_KEY || !env.IP_HASH_SECRET) {
-    console.error(`server secret not configured: ${!env.ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY' : 'IP_HASH_SECRET'}`);
+  // Fail closed when a secret or the burst limiter binding is missing, before any quota is charged. Names only;
+  // values are never logged.
+  const missing = !env.ANTHROPIC_API_KEY
+    ? 'ANTHROPIC_API_KEY'
+    : !env.IP_HASH_SECRET
+      ? 'IP_HASH_SECRET'
+      : !env.IP_LIMITER
+        ? 'IP_LIMITER'
+        : null;
+  if (missing !== null) {
+    console.error(`server configuration missing: ${missing}`);
     return jsonResponse({ error: 'server_misconfigured' }, 503, origin);
   }
 
@@ -224,6 +239,21 @@ export async function handleRequest(
     perIp: parseLimit(env.DAILY_IP_LIMIT, DEFAULT_IP_LIMIT),
     total: parseLimit(env.DAILY_TOTAL_LIMIT, DEFAULT_TOTAL_LIMIT),
   };
+  // Burst limit first (20 calls per 60 s per visitor, see wrangler.jsonc). The binding is per Cloudflare location and
+  // eventually consistent, a courtesy limit like the daily counters. A refusal here costs no KV read or write.
+  let withinBurst: boolean;
+  try {
+    const outcome = await env.IP_LIMITER.limit({ key: await clientKey(env.IP_HASH_SECRET, clientIp) });
+    withinBurst = outcome.success;
+  } catch {
+    // Fail closed, like a KV read failure: without the limiter the burst cap cannot be enforced.
+    console.error('burst limiter unavailable');
+    return jsonResponse({ error: 'service_unavailable' }, 503, origin);
+  }
+  if (!withinBurst) {
+    return jsonResponse({ cached: true, error: 'rate_limited' }, 429, origin);
+  }
+
   let allowed: boolean;
   try {
     allowed = await consumeQuota(env.RATE_KV, clientIp, limits, env.IP_HASH_SECRET);

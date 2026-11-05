@@ -10,11 +10,13 @@ import { SYSTEM_PROMPT } from './systemPrompt';
 class FakeKV {
   store = new Map<string, string>();
   puts: Array<{ key: string; value: string; options?: { expirationTtl?: number } }> = [];
+  gets: string[] = [];
   failing = false;
   /** Makes put() throw for the keys this returns true for. */
   failPutFor: ((key: string) => boolean) | null = null;
 
   async get(key: string): Promise<string | null> {
+    this.gets.push(key);
     if (this.failing) throw new Error('kv down');
     return this.store.get(key) ?? null;
   }
@@ -26,20 +28,47 @@ class FakeKV {
   }
 }
 
+/**
+ * Stand-in for the Workers Rate Limiting binding. It counts calls per key (no time window: a test is one "period")
+ * and refuses the call after `perKey` of them; `Infinity` never refuses. `failing` makes limit() throw.
+ */
+class FakeLimiter {
+  calls: string[] = [];
+  failing = false;
+  constructor(public perKey = Number.POSITIVE_INFINITY) {}
+
+  async limit({ key }: { key: string }): Promise<{ success: boolean }> {
+    this.calls.push(key);
+    if (this.failing) throw new Error('limiter down');
+    const used = this.calls.filter((seen) => seen === key).length;
+    return { success: used <= this.perKey };
+  }
+}
+
 const ORIGIN = 'https://town-2100.pages.dev';
 const API_KEY = 'sk-ant-test-SECRET-0123456789';
 const IP_HASH_SECRET = 'test-ip-hash-secret-0123456789';
 
-function makeEnv(overrides: Partial<Env> = {}): Env & { kv: FakeKV } {
+function makeEnv(overrides: Partial<Env> = {}): Env & { kv: FakeKV; limiter: FakeLimiter } {
   const kv = new FakeKV();
+  const limiter = new FakeLimiter(); // permissive by default; the burst-limit tests tighten it
   return {
     ANTHROPIC_API_KEY: API_KEY,
     IP_HASH_SECRET,
     RATE_KV: kv as unknown as KVNamespace,
+    IP_LIMITER: limiter as unknown as RateLimit,
     ALLOWED_ORIGINS: `${ORIGIN},http://localhost:5173`,
     kv,
+    limiter,
     ...overrides,
   };
+}
+
+/** HMAC-SHA-256 of a client identity, first 16 bytes as hex: what the Worker is documented to key limits on. */
+async function expectedClientKey(secret: string, identity: string): Promise<string> {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(identity));
+  return [...new Uint8Array(mac).slice(0, 16)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 /** What an honest old-style client might still send. The Worker must ignore it: the definitions are server-owned. */
@@ -579,6 +608,94 @@ describe('rate limits', () => {
   });
 });
 
+// ----------------------------------------------------------- burst limiter binding
+
+describe('burst limiter (IP_LIMITER)', () => {
+  it('answers a visitor over the burst limit with the same 429 {cached:true,error:rate_limited} as the daily limit', async () => {
+    const env = makeEnv({ DAILY_IP_LIMIT: '1000', DAILY_TOTAL_LIMIT: '1000' });
+    const limiter = new FakeLimiter(20); // what wrangler.jsonc configures: 20 calls per key per period
+    env.IP_LIMITER = limiter as unknown as RateLimit;
+    const fetchFn = mockFetch();
+    const call = (ip: string) => handleRequest(chatRequest(validBody(), { ip }), env, fetchFn);
+
+    for (let i = 1; i <= 20; i++) expect((await call('203.0.113.1')).status, `call ${i}`).toBe(200);
+    const putsBefore = env.kv.puts.length;
+    const getsBefore = env.kv.gets.length;
+    const blocked = await call('203.0.113.1');
+    expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toEqual({ cached: true, error: 'rate_limited' });
+    expect(blocked.headers.get('access-control-allow-origin')).toBe(ORIGIN);
+    expect(fetchFn).toHaveBeenCalledTimes(20);
+    // A burst refusal is decided before the daily counters: no KV read, no KV write.
+    expect(env.kv.puts).toHaveLength(putsBefore);
+    expect(env.kv.gets).toHaveLength(getsBefore);
+
+    // Another visitor has a bucket of their own.
+    expect((await call('203.0.113.2')).status).toBe(200);
+    expect(fetchFn).toHaveBeenCalledTimes(21);
+  });
+
+  it('is consulted once per request, with the HMAC of the normalized client and never the raw address', async () => {
+    const env = makeEnv();
+    await handleRequest(chatRequest(validBody(), { ip: '203.0.113.7' }), env, mockFetch());
+    await handleRequest(chatRequest(validBody(), { ip: '2001:db8:abcd:12::1' }), env, mockFetch());
+    await handleRequest(chatRequest(validBody(), { ip: '2001:db8:abcd:12:aaaa:bbbb:cccc:dddd' }), env, mockFetch());
+    expect(env.limiter.calls).toEqual([
+      await expectedClientKey(IP_HASH_SECRET, '203.0.113.7'),
+      await expectedClientKey(IP_HASH_SECRET, '2001:db8:abcd:12::/64'),
+      await expectedClientKey(IP_HASH_SECRET, '2001:db8:abcd:12::/64'),
+    ]);
+    expect(JSON.stringify(env.limiter.calls)).not.toMatch(/203\.0\.113\.7|2001/);
+
+    // A different secret gives a different key for the same visitor.
+    const other = makeEnv({ IP_HASH_SECRET: 'another-secret-0123456789' });
+    await handleRequest(chatRequest(validBody(), { ip: '203.0.113.7' }), other, mockFetch());
+    expect(other.limiter.calls[0]).not.toBe(env.limiter.calls[0]);
+  });
+
+  it('is not consulted for requests that never reach the API (wrong origin, bad body, wrong route)', async () => {
+    const env = makeEnv();
+    const fetchFn = mockFetch();
+    await handleRequest(chatRequest(validBody(), { origin: 'https://evil.example' }), env, fetchFn);
+    await handleRequest(chatRequest(null, { rawBody: '{bad' }), env, fetchFn);
+    await handleRequest(chatRequest(validBody({ messages: [] })), env, fetchFn);
+    await handleRequest(chatRequest(validBody(), { path: '/x' }), env, fetchFn);
+    await handleRequest(chatRequest(validBody(), { method: 'GET' }), env, fetchFn);
+    await handleRequest(chatRequest(undefined, { method: 'OPTIONS' }), env, fetchFn);
+    expect(env.limiter.calls).toHaveLength(0);
+  });
+
+  it('fails closed with 503 service_unavailable when limit() throws: no upstream call, no daily counter touched', async () => {
+    const env = makeEnv();
+    env.limiter.failing = true;
+    const fetchFn = mockFetch();
+    const res = await handleRequest(chatRequest(validBody(), { ip: '203.0.113.7' }), env, fetchFn);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: 'service_unavailable' });
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(env.kv.gets).toHaveLength(0);
+    expect(env.kv.puts).toHaveLength(0);
+    // The log says what failed, nothing about the visitor.
+    const logged = JSON.stringify([console.error, console.warn].flatMap((fn) => vi.mocked(fn).mock.calls));
+    expect(logged).toContain('burst limiter unavailable');
+    expect(logged).not.toMatch(/203\.0\.113\.7|limiter down/);
+  });
+
+  it('answers 503 server_misconfigured, charging nothing, when the binding is missing (not silently skipped)', async () => {
+    for (const value of [undefined, null]) {
+      const env = makeEnv();
+      (env as unknown as Record<string, unknown>).IP_LIMITER = value;
+      const fetchFn = mockFetch();
+      const res = await handleRequest(chatRequest(validBody()), env, fetchFn);
+      expect(res.status, String(value)).toBe(503);
+      expect(await res.json()).toEqual({ error: 'server_misconfigured' });
+      expect(fetchFn).not.toHaveBeenCalled();
+      expect(env.kv.gets).toHaveLength(0);
+      expect(env.kv.puts).toHaveLength(0);
+    }
+  });
+});
+
 // ------------------------------------------------------------------- upstream
 
 describe('upstream call', () => {
@@ -925,6 +1042,12 @@ describe('never_echoes_api_key', () => {
       ['validation error', chatRequest(validBody({ messages: [] })), () => jsonResponse(OK_BODY), {}],
       ['bad origin', chatRequest(validBody(), { origin: 'https://evil.example' }), () => jsonResponse(OK_BODY), {}],
       ['rate limited', chatRequest(validBody()), () => jsonResponse(OK_BODY), { DAILY_IP_LIMIT: '0' }],
+      [
+        'burst limited',
+        chatRequest(validBody()),
+        () => jsonResponse(OK_BODY),
+        { IP_LIMITER: new FakeLimiter(0) as unknown as RateLimit },
+      ],
       ['404', chatRequest(validBody(), { path: '/x' }), () => jsonResponse(OK_BODY), {}],
     ];
 

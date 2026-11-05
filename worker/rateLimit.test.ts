@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { consumeQuota, normalizeClientIp } from './rateLimit';
+import { clientKey, consumeQuota, normalizeClientIp } from './rateLimit';
 
 const SECRET = 'unit-test-ip-hash-secret';
 const LIMITS = { perIp: 5, total: 100 };
@@ -77,6 +77,21 @@ describe('normalizeClientIp', () => {
     for (const bad of ['', 'garbage', '1:2:3', '2001:db8::1::2', '1:2:3:4:5:6:7:8:9', 'g::1', '999.1.1.1', '1.2.3', 'unknown']) {
       expect(normalizeClientIp(bad), bad).toBe('unknown');
     }
+  });
+});
+
+describe('clientKey', () => {
+  it('is the HMAC-SHA-256 of the normalized client under the secret, 16 bytes as hex', async () => {
+    expect(await clientKey(SECRET, '203.0.113.7')).toBe(await hmacHex16(SECRET, '203.0.113.7'));
+    expect(await clientKey(SECRET, '2001:db8:abcd:12::1')).toBe(await hmacHex16(SECRET, '2001:db8:abcd:12::/64'));
+    expect(await clientKey(SECRET, '::ffff:203.0.113.7')).toBe(await clientKey(SECRET, '203.0.113.7'));
+    expect(await clientKey(SECRET, '203.0.113.7')).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('differs per client and per secret', async () => {
+    const base = await clientKey(SECRET, '203.0.113.7');
+    expect(await clientKey(SECRET, '203.0.113.8')).not.toBe(base);
+    expect(await clientKey('another-secret', '203.0.113.7')).not.toBe(base);
   });
 });
 

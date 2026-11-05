@@ -96,13 +96,14 @@ export function normalizeClientIp(raw: string): string {
 }
 
 /**
- * Keyed hash of the client identity (HMAC-SHA-256, truncated to 16 bytes). The raw address is never written to KV,
- * and without the secret the keys cannot be matched back to an address by brute force over the IP space.
+ * Keyed hash of the client identity (HMAC-SHA-256, truncated to 16 bytes). The raw address is never written to KV or
+ * handed to the rate limiter, and without the secret the keys cannot be matched back to an address by brute force
+ * over the IP space. One function, so the burst limiter and the daily counters see the same visitor the same way.
  */
-async function hashClient(secret: string, client: string): Promise<string> {
+export async function clientKey(secret: string, clientIp: string): Promise<string> {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const mac = await crypto.subtle.sign('HMAC', key, encoder.encode(client));
+  const mac = await crypto.subtle.sign('HMAC', key, encoder.encode(normalizeClientIp(clientIp)));
   return [...new Uint8Array(mac).slice(0, 16)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
@@ -135,7 +136,7 @@ export async function consumeQuota(
   now: Date = new Date(),
 ): Promise<boolean> {
   const date = utcDate(now);
-  const ipKey = `ip:${date}:${await hashClient(ipHashSecret, normalizeClientIp(clientIp))}`;
+  const ipKey = `ip:${date}:${await clientKey(ipHashSecret, clientIp)}`;
   const totalKey = `total:${date}`;
 
   const [ipCount, totalCount] = await Promise.all([readCount(kv, ipKey), readCount(kv, totalKey)]);
