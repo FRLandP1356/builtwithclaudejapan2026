@@ -356,13 +356,13 @@ function getSeries(raw: unknown, ctx: EngineContext): unknown {
 // ---------------------------------------------------------------------------------------------------------------
 
 const OFFICIAL_YEARS = [2025, 2030, 2035, 2040, 2045, 2050];
-const ESTIMATE_YEARS = [2060, 2065, 2070, 2075, 2080, 2085, 2090, 2095, 2100];
+const ESTIMATE_YEARS = [2055, 2060, 2065, 2070, 2075, 2080, 2085, 2090, 2095, 2100];
 
 /** Two significant digits, so a tiny but real difference never rounds to exactly 0. */
 const sig2 = (x: number): number => Number(x.toPrecision(2));
 
 const COMPARE_NOTE =
-  '社人研（国立社会保障・人口問題研究所）の市区町村別の公式推計は2050年までです。2025〜2050年は、このアプリの計算が公表されている公式の値を、市区町村ごとには数人から十人弱のずれで再現しています（都道府県や日本全体は、足し合わせた分だけずれが大きくなります）。2060年以降はこのアプリの試算で、公式の数字ではありません。';
+  '社人研（国立社会保障・人口問題研究所）の市区町村別の公式推計は2050年までです。2025〜2050年は、このアプリの計算が公表されている公式の値を、市区町村ごとには数人から十人弱のずれで再現しています（都道府県や日本全体は、足し合わせた分だけずれが大きくなります）。2055年以降（2055〜2100年）はこのアプリの試算で、公式の数字ではありません。';
 
 function compareSources(raw: unknown, ctx: EngineContext): unknown {
   const input = asInput(raw);
