@@ -600,13 +600,13 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
     if (button) {
       const group = button.closest('details');
       if (group && !group.open) group.open = true; // a button inside a closed group cannot take focus
-      button.focus();
+      button.focus({ preventScroll: true }); // the page stays where the visitor has it: a script's focus() would scroll it
       return;
     }
     const heading = detailEl.querySelector<HTMLElement>('.panel-section-title');
     if (!heading) return;
     heading.tabIndex = -1; // a heading takes focus from a script, not from the Tab key
-    heading.focus();
+    heading.focus({ preventScroll: true });
   }
 
   const rowOpts: RowOptions = {

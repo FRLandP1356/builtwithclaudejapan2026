@@ -1027,6 +1027,24 @@ describe('地図に反映する (the map overlay)', () => {
       expect(document.activeElement).not.toBe(document.body);
     });
 
+    test('putting focus back never scrolls the page: the focus call asks for preventScroll, for the button and for the heading', () => {
+      const { el, store } = mount();
+      const focusCalls = vi.spyOn(HTMLElement.prototype, 'focus');
+      buttonFor(el, 'grocery')!.focus();
+      focusCalls.mockClear();
+
+      store.set({ year: 2095 }); // grocery is still listed: focus goes to its new button
+      expect(focusCalls).toHaveBeenCalledTimes(1);
+      expect(focusCalls.mock.contexts[0]).toBe(buttonFor(el, 'grocery'));
+      expect(focusCalls.mock.calls[0]).toEqual([{ preventScroll: true }]);
+
+      focusCalls.mockClear();
+      store.set({ year: 2090 }); // grocery is gone: focus goes to the heading
+      expect(focusCalls).toHaveBeenCalledTimes(1);
+      expect(focusCalls.mock.contexts[0]).toBe(el.querySelector('#alloc-detail .panel-section-title'));
+      expect(focusCalls.mock.calls[0]).toEqual([{ preventScroll: true }]);
+    });
+
     test('focus that is not in the list is left alone, and nothing steals it when nothing has focus', () => {
       const { el, q, store } = mount();
       const slider = q<HTMLInputElement>('#alloc-percent');
