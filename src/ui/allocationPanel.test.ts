@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { repoPath } from '../../test/helpers/paths';
 import { makeRealContext, realAppData } from '../../test/helpers/realPanelContext';
 import type { FacilityFlip } from '../engine/allocation';
 import { deriveTotals, yearIndex } from './derive';
@@ -373,6 +375,17 @@ describe('mountAllocation', () => {
     expect(q('#alloc-announce').getAttribute('role')).toBe('status');
     expect(q('#alloc-announce').classList.contains('sr-only')).toBe(true);
     expect(q('#alloc-announce').textContent).toBe(''); // nothing is announced for the first drawing
+    // It must be speakable: a hidden or aria-hidden element (or one inside such) is never read, and a live region that
+    // is display:none is dropped by screen readers. Hiding is done with the clip pattern of .sr-only instead.
+    const announce = q<HTMLElement>('#alloc-announce');
+    expect(announce.closest('[hidden], [aria-hidden="true"], [inert]')).toBeNull();
+    expect(announce.hasAttribute('hidden')).toBe(false);
+    expect(announce.getAttribute('style') ?? '').not.toMatch(/display\s*:\s*none|visibility\s*:\s*hidden/);
+    expect(['polite', null]).toContain(announce.getAttribute('aria-live')); // role=status is polite already
+    const srOnly = /\.sr-only\s*\{([^}]*)\}/.exec(readFileSync(repoPath('src/ui/theme.css'), 'utf8'))?.[1] ?? '';
+    expect(srOnly).toContain('position: absolute');
+    expect(srOnly).toContain('clip: rect(0 0 0 0)');
+    expect(srOnly).not.toMatch(/display\s*:\s*none|visibility\s*:\s*hidden/);
     expect(q('#alloc-percent-value').textContent).toBe('+10%（約2.6万人）');
     expect(q('[data-source="proportional"]').getAttribute('aria-pressed')).toBe('true');
     expect(q<HTMLElement>('#alloc-regions').hidden).toBe(true);
