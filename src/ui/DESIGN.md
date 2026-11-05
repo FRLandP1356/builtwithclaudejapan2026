@@ -95,7 +95,7 @@
 
 | 族 | 主な class | 役割 |
 |---|---|---|
-| 入力 | `.ai-panel` `.ai-samples` `.ai-sample`（幅いっぱい・左揃え）`.ai-form` `.ai-input` `.ai-help` `.ai-counter`（`.is-over`）`.ai-input-msg` `.ai-new`（`.is-attention` は藍の 2px 枠） | 例の質問、自由入力、新しい質問 |
+| 入力 | `.ai-panel` `.ai-samples` `.ai-sample`（幅いっぱい・左揃え）`.ai-form` `.ai-input` `.ai-help` `.ai-counter`（`.is-over`）`.ai-input-msg` `.ai-new`（`.is-attention` は藍の 2px 枠） | 例の質問、自由入力、新しい質問。冒頭の説明 `.panel-lead` は、ビルドが AI の接続先（`VITE_CHAT_ENDPOINT`）も `endpoint` も決めていない時は、答えるという約束ではなく、接続先が無い時の札と同じ 1 文（「このバージョンでは、AIへの質問は使えません…」）。決めた時は「日本語で質問すると…」。例の質問のボタンはどちらでも付く。接続先が無いのに AI が答えた時は、最初の本物の答えのあとで後者に替わる |
 | 待ち | `.ai-status` `.ai-status-text`（`role=status`）`.ai-cancel` | 1 行と「やめる」 |
 | 答え | `.ai-answers` `.ai-answer`（罫で区切る。`[data-role=ai-unavailable]` は AI の接続先が無い時の 1 文で、画面に 1 つだけ。ボタンは無いが、保存済みの答えが確認済みの質問がある間は、その質問のボタン `.ai-fail-samples` が付く）`.ai-question` `.ai-answer-head` `.ai-answer-text` `.ai-basis`（数字の確認を通った答えにだけ）`.ai-estimate`（確認できなかった数字のある答えと、2051 年以降の結果を持つ失敗の札に付く「2050年より後は、このアプリの試算です」の 1 行。答えの文が 2051 年以降の年を言う時も、札の上の印 `.badge-estimate` を出す）`.ai-message` `.ai-trimmed` `.ai-fail` `.ai-fail-samples`（保存済みの答えが確認済みの質問がある時だけ） | 新しい順。保存済みは `.tag`、試算は `.badge-estimate` |
 | 確かめられない数字 | `.notice.ai-warning`（墨の 4px の左罫） | 赤錆は使わない（目安を下回る印に取ってある） |
