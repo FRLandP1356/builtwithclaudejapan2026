@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { PREF_CODES } from '../data/loader';
-import { prefCodesOf, REGION_IDS, REGION_NAMES, REGION_PREFS, regionOfPref } from './regions';
+import { prefCodesOf, REGION_IDS, REGION_NAMES, REGION_PREFS } from './regions';
 
 describe('regions', () => {
   test('every prefecture 01..47 appears in exactly one region', () => {
@@ -28,11 +28,8 @@ describe('regions', () => {
     expect(REGION_IDS.map((id) => REGION_NAMES[id])).toEqual(['北海道', '東北', '関東', '中部', '近畿', '中国', '四国', '九州・沖縄']);
   });
 
-  test('prefCodesOf unions regions and regionOfPref finds the owner', () => {
+  test('prefCodesOf unions regions', () => {
     expect(prefCodesOf(['shikoku', 'hokkaido'])).toEqual(['01', '36', '37', '38', '39']);
     expect(prefCodesOf([])).toEqual([]);
-    expect(regionOfPref('30')).toBe('kinki');
-    expect(regionOfPref('13')).toBe('kanto');
-    expect(regionOfPref('99')).toBeUndefined();
   });
 });

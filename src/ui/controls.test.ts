@@ -4,6 +4,8 @@ import { makeRealContext } from '../../test/helpers/realPanelContext';
 import { DEFAULT_SCENARIO, type Scenario } from '../engine/types';
 import { SCENARIO_LIMITS } from '../data/runner';
 import { deriveTotals, yearIndex } from './derive';
+import type { Listener, Store } from './state';
+import { formatPop } from './format';
 import {
   checkScenario,
   compareNote,
@@ -77,6 +79,7 @@ describe('describeScenario', () => {
       'いまの前提：子ども×1.2、移動は止まる、インフラ連動 弱い',
     );
     expect(describeScenario({ ...DEFAULT_SCENARIO, migScale: 0.5 })).toBe('いまの前提：移動の強さ×0.5');
+    expect(describeScenario({ ...DEFAULT_SCENARIO, migScale: 0.75 })).toBe('いまの前提：移動の強さ×0.75');
     expect(describeScenario({ ...DEFAULT_SCENARIO, cwrMult: 0.85, infraStrength: 0.005 })).toBe('いまの前提：子ども×0.85、インフラ連動 強い');
   });
 
@@ -129,14 +132,30 @@ describe('compareNote', () => {
 // ---------------------------------------------------------------------------------------------------------------
 const raf = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
 
-function mount(initial = {}) {
-  const ctx = makeRealContext(initial);
+/** A store wrapper that tracks which subscribers are still attached. */
+function tracked(store: Store, active: Set<Listener>): Store {
+  return {
+    ...store,
+    subscribe(fn) {
+      active.add(fn);
+      const off = store.subscribe(fn);
+      return () => {
+        active.delete(fn);
+        off();
+      };
+    },
+  };
+}
+
+function mount(initial = {}, wrap?: (store: Store) => Store) {
+  const base = makeRealContext(initial);
+  const ctx = wrap ? { ...base, store: wrap(base.store) } : base;
   const el = document.createElement('section');
   el.className = 'panel';
   el.id = 'panel-controls';
   el.innerHTML = '<h2 class="panel-title" id="panel-controls-title">前提を変える</h2><p class="panel-empty">placeholder</p>';
   document.body.append(el);
-  mountControls(el, ctx);
+  const teardown = mountControls(el, ctx);
   const q = <T extends Element>(sel: string) => el.querySelector<T>(sel)!;
   const type = async (input: HTMLInputElement, value: number) => {
     input.value = String(value);
@@ -147,7 +166,7 @@ function mount(initial = {}) {
     value: k.querySelector('.kpi-value')!.textContent!,
     note: k.querySelector('.kpi-note')!.textContent!,
   }));
-  return { ctx, el, q, type, tiles, store: ctx.store };
+  return { ctx: base, el, q, type, tiles, store: base.store, teardown };
 }
 
 afterEach(() => {
@@ -304,25 +323,121 @@ describe('mountControls', () => {
     expect(store.get().scenario.cwrMult).toBe(1.1);
   });
 
-  test('effect tiles: the country, and the selected place when there is one', () => {
+  test('effect tiles: the selected place shows its own 2100 number against its own default', () => {
     const { ctx, store, tiles } = mount();
+    const groups = ctx.data.groups;
+    const base = deriveTotals(ctx.runner.run(DEFAULT_SCENARIO), groups); // the default scenario, whatever the store holds
+    const i = yearIndex(base.years, 2100);
     expect(tiles()).toHaveLength(1);
+
     store.set({ selectedArea: '30206' });
     expect(tiles()).toHaveLength(2);
-    const totals = deriveTotals(store.get().series, ctx.data.groups);
-    const i = yearIndex(totals.years, 2100);
-    const tanabe = totals.area.get('30206')![i];
-    const [, place] = tiles();
+    let now = deriveTotals(store.get().series, groups);
+    let place = tiles()[1];
     expect(place.label).toBe('和歌山県 田辺市の2100年の人口');
-    expect(place.value).toMatch(/万人$|人$/);
-    expect(place.note).toBe('初期値と同じ（' + place.value + '）');
-    expect(tanabe).toBeGreaterThan(0);
+    expect(place.value).toBe(formatPop(now.area.get('30206')![i]));
+    expect(place.value).not.toBe(formatPop(now.pref.get('30')![i])); // the town, not its prefecture
+    expect(place.note).toBe(`初期値と同じ（${formatPop(base.area.get('30206')![i])}）`);
+
     store.set({ scenario: { ...DEFAULT_SCENARIO, cwrMult: 1.4 } });
-    expect(tiles()[1].note).toMatch(/^初期値（.+）より \+/);
+    now = deriveTotals(store.get().series, groups);
+    place = tiles()[1];
+    expect(place.value).toBe(formatPop(now.area.get('30206')![i]));
+    expect(place.note).toBe(compareNote(now.area.get('30206')![i], base.area.get('30206')![i]));
+    expect(place.note).toMatch(/^初期値（.+）より \+/);
+    const japan = tiles()[0];
+    expect(japan.value).toBe(formatPop(now.japan[i]));
+    expect(japan.note).toBe(compareNote(now.japan[i], base.japan[i]));
+
     store.set({ selectedArea: undefined, selectedPref: '30' });
-    expect(tiles()[1].label).toBe('和歌山県の2100年の人口');
+    place = tiles()[1];
+    expect(place.label).toBe('和歌山県の2100年の人口');
+    expect(place.value).toBe(formatPop(now.pref.get('30')![i]));
+    expect(place.note).toBe(compareNote(now.pref.get('30')![i], base.pref.get('30')![i]));
+
+    store.set({ selectedPref: '13' }); // another prefecture brings its own baseline
+    place = tiles()[1];
+    expect(place.label).toBe('東京都の2100年の人口');
+    expect(place.value).toBe(formatPop(now.pref.get('13')![i]));
+    expect(place.note).toBe(compareNote(now.pref.get('13')![i], base.pref.get('13')![i]));
+
     store.set({ selectedPref: undefined });
     expect(tiles()).toHaveLength(1);
+  });
+
+  test('the tile baseline is the default scenario even when the panel opens on another one', () => {
+    const { tiles } = mount({ scenario: { cwrMult: 1.2 } });
+    const [japan] = tiles();
+    expect(japan.value).toBe('7,093万人');
+    expect(japan.note).toBe('初期値（6,328万人）より +765万人（+12.1%）');
+  });
+
+  test('a strength set from elsewhere that is off the slider steps is shown as it is', () => {
+    const { q, store } = mount();
+    store.set({ scenario: { ...DEFAULT_SCENARIO, migScale: 0.75 } });
+    expect(q('#ctl-migscale-value').textContent).toBe('×0.75');
+    expect(q('#ctl-migscale').getAttribute('aria-valuetext')).toBe('標準の0.75倍');
+    expect(q('#ctl-status').textContent).toBe('いまの前提：移動の強さ×0.75');
+    store.set({ scenario: { ...DEFAULT_SCENARIO, migScale: 0.5 } });
+    expect(q('#ctl-migscale-value').textContent).toBe('×0.5');
+    expect(q('#ctl-migscale').getAttribute('aria-valuetext')).toBe('標準の0.5倍');
+  });
+
+  test('the status line and the error are rewritten only when their content changes', () => {
+    const { q, store } = mount();
+    const obs = new MutationObserver(() => {});
+    for (const id of ['#ctl-status', '#ctl-error']) obs.observe(q(id), { childList: true, characterData: true, subtree: true, attributes: true });
+    store.set({ year: 2050 }); // repaints, says the same thing
+    store.set({ selectedPref: '30' });
+    expect(obs.takeRecords()).toHaveLength(0);
+    store.set({ scenario: { ...DEFAULT_SCENARIO, cwrMult: 1.1 } }); // the status changes; the hidden error is left alone
+    const records = obs.takeRecords();
+    expect(records.length).toBeGreaterThan(0);
+    expect(records.every((r) => (r.target as Node).parentElement?.id === 'ctl-status' || (r.target as Element).id === 'ctl-status')).toBe(true);
+    obs.disconnect();
+  });
+
+  test('the error element is an alert', () => {
+    const { q } = mount();
+    expect(q('#ctl-error').getAttribute('role')).toBe('alert');
+    expect(q('#ctl-status').getAttribute('role')).toBe('status');
+  });
+
+  test('the teardown stops listening to the store and cancels a pending slider update', async () => {
+    const active = new Set<Listener>();
+    const { q, type, store, teardown } = mount({}, (s) => tracked(s, active));
+    expect(active.size).toBe(1);
+    await type(q<HTMLInputElement>('#ctl-cwr'), 1.1); // a frame is now pending
+    const spy = vi.spyOn(store, 'set');
+    teardown();
+    expect(active.size).toBe(0);
+    await raf();
+    expect(spy).not.toHaveBeenCalled();
+    expect(store.get().scenario).toEqual(DEFAULT_SCENARIO);
+    store.set({ scenario: { ...DEFAULT_SCENARIO, cwrMult: 1.4 } });
+    expect(q('#ctl-status').textContent).toBe('初期値（2050年の前提を据え置き）'); // not repainted
+    q<HTMLButtonElement>('[data-infra="strong"]').click(); // a torn-down panel does not write either
+    expect(store.get().scenario.infraStrength).toBe(0);
+    teardown(); // twice is fine
+  });
+
+  test('mounting twice into the same element ends the first mount and keeps one heading badge', () => {
+    const active = new Set<Listener>();
+    const ctx = makeRealContext();
+    const store = tracked(ctx.store, active);
+    const el = document.createElement('section');
+    el.innerHTML = '<h2 class="panel-title">前提を変える</h2>';
+    document.body.append(el);
+    const first = mountControls(el, { ...ctx, store });
+    const second = mountControls(el, { ...ctx, store });
+    expect(active.size).toBe(1);
+    expect(el.querySelectorAll('.panel-title .badge-estimate')).toHaveLength(1);
+    expect(el.querySelector('.panel-title')!.textContent).toBe('前提を変える 試算');
+    expect(el.querySelectorAll('#ctl-cwr')).toHaveLength(1);
+    first(); // the first teardown must not end the second mount
+    expect(active.size).toBe(1);
+    second();
+    expect(active.size).toBe(0);
   });
 
   test('keyboard and screen reader basics: labelled ranges with a spoken value, real buttons, no negative tabindex', async () => {

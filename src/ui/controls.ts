@@ -53,12 +53,17 @@ function trim(v: number, digits = 2): string {
   return String(Number(v.toFixed(digits)));
 }
 
+/** A strength shown with the one decimal the slider steps in, or two decimals when the value is off the steps (set elsewhere). */
+function scaleText(v: number): string {
+  return Math.abs(v * 10 - Math.round(v * 10)) < 1e-9 ? v.toFixed(1) : v.toFixed(2);
+}
+
 /** The status line: only what differs from the default, in plain words. */
 export function describeScenario(s: Scenario): string {
   const parts: string[] = [];
   if (s.cwrMult !== DEFAULT_SCENARIO.cwrMult) parts.push(`子ども×${trim(s.cwrMult)}`);
   if (s.migMode !== DEFAULT_SCENARIO.migMode) parts.push('移動は止まる');
-  if (s.migScale !== DEFAULT_SCENARIO.migScale) parts.push(`移動の強さ×${trim(s.migScale, 1)}`);
+  if (s.migScale !== DEFAULT_SCENARIO.migScale) parts.push(`移動の強さ×${trim(s.migScale, 2)}`);
   if (s.infraStrength !== DEFAULT_SCENARIO.infraStrength) {
     if (s.infraStrength === INFRA_STRENGTH.weak) parts.push('インフラ連動 弱い');
     else if (s.infraStrength === INFRA_STRENGTH.strong) parts.push('インフラ連動 強い');
@@ -164,13 +169,33 @@ function nextFrame(fn: () => void): { cancel(): void } {
   return { cancel: () => clearTimeout(id) };
 }
 
-export function mountControls(el: HTMLElement, ctx: PanelContext): void {
+/** Write text into a live region only when it differs, so a screen reader is not told the same thing again. */
+function setText(el: HTMLElement, text: string): void {
+  if (el.textContent !== text) el.textContent = text;
+}
+
+/** Remove a badge (and the space before it) that an earlier mount left in the heading. */
+function resetHeadingBadge(title: Element): void {
+  for (const b of title.querySelectorAll(':scope > .badge-estimate')) {
+    const gap = b.previousSibling;
+    if (gap?.nodeType === Node.TEXT_NODE && gap.textContent === ' ') gap.remove();
+    b.remove();
+  }
+}
+
+/** The teardown of the panel currently mounted in an element: a second mount into it ends the first. */
+const mounted = new WeakMap<HTMLElement, () => void>();
+
+/** Mount the panel into `el`. Returns a teardown that stops listening to the store and cancels a pending update. */
+export function mountControls(el: HTMLElement, ctx: PanelContext): () => void {
   const { store, data, runner } = ctx;
+  mounted.get(el)?.();
 
   // Keep the shell's heading, replace everything else (the placeholder).
   const title = el.querySelector('.panel-title');
   el.replaceChildren(...(title ? [title] : []));
   if (title) {
+    resetHeadingBadge(title);
     const badge = document.createElement('span');
     badge.className = 'badge-estimate';
     badge.textContent = ESTIMATE_BADGE;
@@ -196,6 +221,7 @@ export function mountControls(el: HTMLElement, ctx: PanelContext): void {
   /** What the controls show right now. Follows the store, except while the user's change is waiting for its frame. */
   let view: ControlValues = controlsFromScenario(store.get().scenario);
   let pending: { cancel(): void } | undefined;
+  let alive = true;
 
   // The default's 2100 numbers, computed on first use and kept (the runner's own cache holds only a few scenarios).
   let baseline: Totals | undefined;
@@ -206,8 +232,8 @@ export function mountControls(el: HTMLElement, ctx: PanelContext): void {
     cwrValue.textContent = `×${view.cwrMult.toFixed(2)}`;
     cwr.setAttribute('aria-valuetext', `2050年の水準の${view.cwrMult.toFixed(2)}倍`);
     if (Number(migScale.value) !== view.migScale) migScale.value = String(view.migScale);
-    migScaleValue.textContent = `×${view.migScale.toFixed(1)}`;
-    migScale.setAttribute('aria-valuetext', `標準の${view.migScale.toFixed(1)}倍`);
+    migScaleValue.textContent = `×${scaleText(view.migScale)}`;
+    migScale.setAttribute('aria-valuetext', `標準の${scaleText(view.migScale)}倍`);
     for (const b of migButtons) b.setAttribute('aria-pressed', String(b.dataset.mig === view.migMode));
     for (const b of infraButtons) b.setAttribute('aria-pressed', String(b.dataset.infra === view.infra));
     if (view.infra === 'custom') {
@@ -266,13 +292,13 @@ export function mountControls(el: HTMLElement, ctx: PanelContext): void {
   }
 
   function paintCommitted(s: AppState): void {
-    statusEl.textContent = describeScenario(s.scenario);
+    setText(statusEl, describeScenario(s.scenario));
     paintTiles(s);
   }
 
   function showError(message: string | undefined): void {
-    errorEl.hidden = message === undefined;
-    errorEl.textContent = message ?? '';
+    if (errorEl.hidden !== (message === undefined)) errorEl.hidden = message === undefined;
+    setText(errorEl, message ?? '');
   }
 
   /** Send the controls' scenario to the store. A rejected value is explained and the display goes back to the store. */
@@ -297,6 +323,7 @@ export function mountControls(el: HTMLElement, ctx: PanelContext): void {
 
   /** Slider input: show the new value at once, send it to the store once per animation frame. Only the moved knob changes. */
   function onSlider(change: Partial<ControlValues>): void {
+    if (!alive) return;
     view = { ...view, ...change };
     paintControls();
     pending ??= nextFrame(commit);
@@ -306,6 +333,7 @@ export function mountControls(el: HTMLElement, ctx: PanelContext): void {
 
   for (const b of migButtons) {
     b.addEventListener('click', () => {
+      if (!alive) return;
       view = { ...view, migMode: b.dataset.mig as Scenario['migMode'] };
       paintControls();
       commit();
@@ -313,12 +341,14 @@ export function mountControls(el: HTMLElement, ctx: PanelContext): void {
   }
   for (const b of infraButtons) {
     b.addEventListener('click', () => {
+      if (!alive) return;
       view = { cwrMult: view.cwrMult, migMode: view.migMode, migScale: view.migScale, infra: b.dataset.infra as InfraChoice };
       paintControls();
       commit();
     });
   }
   resetBtn.addEventListener('click', () => {
+    if (!alive) return;
     pending?.cancel();
     pending = undefined;
     showError(undefined);
@@ -330,7 +360,7 @@ export function mountControls(el: HTMLElement, ctx: PanelContext): void {
   });
 
   // The store drives the display; this subscriber never writes to the store.
-  store.subscribe((s, prev) => {
+  const unsubscribe = store.subscribe((s, prev) => {
     if (s.scenario !== prev.scenario) {
       if (!pending) view = controlsFromScenario(s.scenario);
       showError(undefined);
@@ -341,4 +371,15 @@ export function mountControls(el: HTMLElement, ctx: PanelContext): void {
 
   paintControls();
   paintCommitted(store.get());
+
+  const teardown = (): void => {
+    if (!alive) return;
+    alive = false;
+    unsubscribe();
+    pending?.cancel();
+    pending = undefined;
+    if (mounted.get(el) === teardown) mounted.delete(el);
+  };
+  mounted.set(el, teardown);
+  return teardown;
 }

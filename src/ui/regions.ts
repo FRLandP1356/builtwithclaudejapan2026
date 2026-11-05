@@ -38,8 +38,3 @@ export function prefCodesOf(ids: Iterable<RegionId>): string[] {
   for (const id of ids) for (const code of REGION_PREFS[id] ?? []) out.add(code);
   return [...out].sort();
 }
-
-/** The region a 2-digit prefecture code belongs to, or undefined for an unknown code. */
-export function regionOfPref(prefCode: string): RegionId | undefined {
-  return REGION_IDS.find((id) => REGION_PREFS[id].includes(prefCode));
-}

@@ -2,6 +2,8 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { makeRealContext, realAppData } from '../../test/helpers/realPanelContext';
 import type { FacilityFlip } from '../engine/allocation';
+import { deriveTotals, yearIndex } from './derive';
+import type { Listener, Store } from './state';
 import type { Area, Facility } from '../engine/types';
 import {
   allocationErrorMessage,
@@ -294,14 +296,30 @@ describe('computeAllocation with the real data', () => {
 // ---------------------------------------------------------------------------------------------------------------
 const raf = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
 
-function mount(initial = {}) {
-  const ctx = makeRealContext(initial);
+/** A store wrapper that tracks which subscribers are still attached. */
+function tracked(store: Store, active: Set<Listener>): Store {
+  return {
+    ...store,
+    subscribe(fn) {
+      active.add(fn);
+      const off = store.subscribe(fn);
+      return () => {
+        active.delete(fn);
+        off();
+      };
+    },
+  };
+}
+
+function mount(initial = {}, wrap?: (store: Store) => Store) {
+  const base = makeRealContext(initial);
+  const ctx = wrap ? { ...base, store: wrap(base.store) } : base;
   const el = document.createElement('section');
   el.className = 'panel';
   el.id = 'panel-allocation';
   el.innerHTML = '<h2 class="panel-title" id="panel-allocation-title">人口の割り振り</h2><p class="panel-empty">placeholder</p>';
   document.body.append(el);
-  mountAllocation(el, ctx);
+  const teardown = mountAllocation(el, ctx);
   const q = <T extends Element>(sel: string) => el.querySelector<T>(sel)!;
   const text = (sel: string) => q(sel).textContent!;
   const choose = (select: HTMLSelectElement, value: string) => {
@@ -319,7 +337,7 @@ function mount(initial = {}) {
     cells: [...tr.querySelectorAll('td.num')].map((td) => td.textContent!),
     text: tr.textContent!,
   }));
-  return { ctx, el, q, text, choose, slide, rows, store: ctx.store };
+  return { ctx: base, el, q, text, choose, slide, rows, store: base.store, teardown };
 }
 
 afterEach(() => {
@@ -346,6 +364,9 @@ describe('mountAllocation', () => {
     expect(q<HTMLInputElement>('#alloc-percent').value).toBe('10');
     expect(q('#alloc-percent').getAttribute('min')).toBe('-30');
     expect(q('#alloc-percent').getAttribute('max')).toBe('50');
+    expect(q('#alloc-percent').getAttribute('step')).toBe('5');
+    expect(q('#alloc-error').getAttribute('role')).toBe('alert');
+    expect(q('#alloc-summary').getAttribute('role')).toBe('status');
     expect(q('#alloc-percent-value').textContent).toBe('+10%（約2.6万人）');
     expect(q('[data-source="proportional"]').getAttribute('aria-pressed')).toBe('true');
     expect(q<HTMLElement>('#alloc-regions').hidden).toBe(true);
@@ -391,7 +412,8 @@ describe('mountAllocation', () => {
     const { el, text } = mount();
     const notes = text('.alloc-notes');
     expect(notes).toContain('人口の差は全国で見ると小さいので、人口の目安をまたぐ町の数で示しています。');
-    expect(notes).toContain('三大都市圏の町は、表の対象外ですが、参考として数えています。');
+    expect(notes).toContain('国土交通省の目安は三大都市圏を除く統計ですが、ここでは三大都市圏の町も同じ目安で数えています。');
+    expect(notes).not.toContain('表の対象外');
     for (const w of FORBIDDEN) expect(el.textContent).not.toContain(w);
     // the wording the brief asks for
     expect(el.textContent).toContain('人口の目安以上');
@@ -421,6 +443,47 @@ describe('mountAllocation', () => {
     expect(q('.panel-title .badge-estimate')).toBeNull();
     store.set({ year: 2085 });
     expect(q('.panel-title .badge-estimate')).not.toBeNull();
+  });
+
+  test('the slider year changes the numbers, not only the label: 2060 is computed from the 2060 population', () => {
+    const { ctx, store, text, rows } = mount();
+    store.set({ year: 2060 });
+    const series = store.get().series;
+    const at2060 = computeAllocation(ctx.data, series, 2060, form());
+    const at2100 = computeAllocation(ctx.data, series, 2100, form());
+    expect(Math.abs(at2060.input.deltaPeople - at2100.input.deltaPeople)).toBeGreaterThan(10_000); // the two years really differ
+    expect(text('#alloc-summary')).toBe(
+      describeAllocation({ year: 2060, targetName: '和歌山県', percent: 10, people: at2060.input.deltaPeople, sourceNames: undefined }),
+    );
+    expect(text('#alloc-summary')).toContain('約5.4万人');
+    expect(text('#alloc-percent-value')).toBe('+10%（約5.4万人）');
+    // and the table is the 2060 table
+    const shown = rows().map((r) => ({ name: r.name, cells: r.cells }));
+    const expected = at2060.summary.visible.map((r) => ({
+      name: r.name,
+      cells: [r.before.toLocaleString('ja-JP'), r.after.toLocaleString('ja-JP'), signedCount(r.diff)],
+    }));
+    expect(shown).toEqual(expected);
+    // back to 2100: the 2100 numbers return
+    store.set({ year: 2100 });
+    expect(text('#alloc-summary')).toContain('約2.6万人');
+  });
+
+  test('a town target moves a share of that town, not of its prefecture', async () => {
+    const { ctx, choose, slide, text, q } = mount({ selectedArea: '30206' });
+    choose(q<HTMLSelectElement>('#alloc-target'), 'area:30206');
+    await slide(20);
+    const totals = deriveTotals(ctx.store.get().series, ctx.data.groups);
+    const i = yearIndex(totals.years, 2100);
+    const tanabe = totals.area.get('30206')![i];
+    expect(tanabe * 0.2).toBeLessThan(totals.pref.get('30')![i] * 0.2 / 10); // the town is far smaller than 20% of Wakayama
+    expect(text('#alloc-percent-value')).toBe(`+20%（${approxPeople(tanabe * 0.2)}）`);
+    expect(text('#alloc-percent-value')).toBe('+20%（約2,376人）');
+    expect(text('#alloc-summary')).toBe(
+      describeAllocation({ year: 2100, targetName: '田辺市', percent: 20, people: tanabe * 0.2, sourceNames: undefined }),
+    );
+    expect(text('#alloc-summary')).toMatch(/^2100年に田辺市の人口を20%（約2,376人）増やすと/);
+    expect(q('#alloc-percent').getAttribute('aria-valuetext')).toBe('プラス20%、約2,376人');
   });
 
   test('a new scenario recomputes from the new series', () => {
@@ -517,6 +580,71 @@ describe('mountAllocation', () => {
     for (const b of el.querySelectorAll('button')) expect(b.type).toBe('button');
     const ids = [...el.querySelectorAll('[id]')].map((n) => n.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  test('the summary and the error are rewritten only when their text changes', () => {
+    const { q, store } = mount();
+    const watch = (obs: MutationObserver, id: string) =>
+      obs.observe(q(id), { childList: true, characterData: true, subtree: true, attributes: true });
+    const obs = new MutationObserver(() => {});
+    watch(obs, '#alloc-summary');
+    watch(obs, '#alloc-error');
+    store.set({ selectedArea: '30206' }); // the town is offered, the target stays Wakayama: the same sentence
+    expect(obs.takeRecords()).toHaveLength(0);
+    store.set({ selectedPref: '13' }); // retargets: the sentence changes
+    expect(obs.takeRecords().length).toBeGreaterThan(0);
+    // an error that stays the same is not announced again
+    q<HTMLButtonElement>('[data-source="regions"]').click();
+    const kanto = q<HTMLInputElement>('input[data-region="kanto"]');
+    kanto.checked = false;
+    kanto.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(q<HTMLElement>('#alloc-error').hidden).toBe(false);
+    obs.takeRecords();
+    store.set({ year: 2050 });
+    store.set({ selectedPref: '30' });
+    expect(obs.takeRecords()).toHaveLength(0);
+    obs.disconnect();
+  });
+
+  test('the teardown stops listening to the store and cancels a pending update', () => {
+    const active = new Set<Listener>();
+    const { q, store, teardown, text } = mount({}, (s) => tracked(s, active));
+    expect(active.size).toBe(1);
+    const before = text('#alloc-summary');
+    const input = q<HTMLInputElement>('#alloc-percent');
+    input.value = '30';
+    input.dispatchEvent(new Event('input', { bubbles: true })); // an update is now pending
+    teardown();
+    expect(active.size).toBe(0);
+    return raf().then(() => {
+      expect(text('#alloc-summary')).toBe(before); // the pending update never ran
+      store.set({ year: 2060 });
+      expect(text('#alloc-summary')).toBe(before); // nothing listens any more
+      q<HTMLButtonElement>('[data-source="regions"]').click(); // and the dead panel ignores clicks
+      expect(q('[data-source="regions"]').getAttribute('aria-pressed')).toBe('false');
+      teardown(); // twice is fine
+    });
+  });
+
+  test('mounting twice into the same element ends the first mount and keeps one heading badge', () => {
+    const active = new Set<Listener>();
+    const ctx = makeRealContext();
+    const store = tracked(ctx.store, active);
+    const el = document.createElement('section');
+    el.innerHTML = '<h2 class="panel-title">人口の割り振り</h2>';
+    document.body.append(el);
+    const first = mountAllocation(el, { ...ctx, store });
+    const second = mountAllocation(el, { ...ctx, store });
+    expect(active.size).toBe(1);
+    expect(el.querySelectorAll('.panel-title .badge-estimate')).toHaveLength(1); // 2100 is an estimate year
+    expect(el.querySelector('.panel-title')!.textContent).toBe('人口の割り振り 試算');
+    expect(el.querySelectorAll('#alloc-target')).toHaveLength(1);
+    first();
+    expect(active.size).toBe(1);
+    ctx.store.set({ year: 2050 });
+    expect(el.querySelectorAll('.panel-title .badge-estimate')).toHaveLength(0);
+    second();
+    expect(active.size).toBe(0);
   });
 
   test('the number of towns shown for a facility matches the engine', () => {

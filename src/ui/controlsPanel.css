@@ -109,9 +109,6 @@
 .alloc-name {
   font-weight: 600;
 }
-.alloc-essential {
-  margin-left: var(--sp-2);
-}
 .alloc-more {
   margin-top: var(--sp-3);
 }

@@ -300,7 +300,7 @@ const TEMPLATE = `
   </div>
   <div class="alloc-notes">
     <p class="note">人口の差は全国で見ると小さいので、人口の目安をまたぐ町の数で示しています。</p>
-    <p class="note">三大都市圏の町は、表の対象外ですが、参考として数えています。</p>
+    <p class="note">国土交通省の目安は三大都市圏を除く統計ですが、ここでは三大都市圏の町も同じ目安で数えています。</p>
     <p class="note">「人口の目安」は、国土交通省の統計で、その施設がある確率が50%になる人口の大きさです。「目安以上」は、その大きさ以上の町のことです。</p>
     <p class="note">実際の人口の動きの見通しではなく、「もし割り振ったら」の計算です。</p>
   </div>`;
@@ -397,11 +397,31 @@ function signedPercent(p: number): string {
   return `${p < 0 ? '−' : '+'}${Math.abs(p)}%`;
 }
 
-export function mountAllocation(el: HTMLElement, ctx: PanelContext): void {
+/** Write text into a live region only when it differs, so a screen reader is not told the same thing again. */
+function setText(el: HTMLElement, text: string): void {
+  if (el.textContent !== text) el.textContent = text;
+}
+
+/** Remove a badge (and the space before it) that an earlier mount left in the heading. */
+function resetHeadingBadge(title: Element): void {
+  for (const b of title.querySelectorAll(':scope > .badge-estimate')) {
+    const gap = b.previousSibling;
+    if (gap?.nodeType === Node.TEXT_NODE && gap.textContent === ' ') gap.remove();
+    b.remove();
+  }
+}
+
+/** The teardown of the panel currently mounted in an element: a second mount into it ends the first. */
+const mounted = new WeakMap<HTMLElement, () => void>();
+
+/** Mount the panel into `el`. Returns a teardown that stops listening to the store and cancels a pending update. */
+export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void {
   const { store, data } = ctx;
+  mounted.get(el)?.();
 
   const title = el.querySelector('.panel-title');
   el.replaceChildren(...(title ? [title] : []));
+  if (title) resetHeadingBadge(title);
   el.insertAdjacentHTML('beforeend', TEMPLATE); // static text only: nothing from data is interpolated
 
   const q = <T extends Element>(sel: string) => el.querySelector<T>(sel)!;
@@ -430,6 +450,7 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): void {
   let sourceMode: AllocationForm['sourceMode'] = 'proportional';
   const regionIds = new Set<RegionId>(['kanto']);
   let pending: number | undefined;
+  let alive = true;
 
   function pickPref(s: AppState): string {
     if (s.selectedPref !== undefined && data.prefNames.has(s.selectedPref)) return s.selectedPref;
@@ -445,6 +466,7 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): void {
     box.dataset.region = id;
     box.checked = regionIds.has(id);
     box.addEventListener('change', () => {
+      if (!alive) return;
       if (box.checked) regionIds.add(id);
       else regionIds.delete(id);
       renderAll();
@@ -507,9 +529,9 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): void {
   }
 
   function showError(message: string): void {
-    errorEl.hidden = false;
-    errorEl.textContent = message;
-    summaryEl.textContent = '';
+    if (errorEl.hidden) errorEl.hidden = false;
+    setText(errorEl, message);
+    setText(summaryEl, '');
     detailEl.replaceChildren();
   }
 
@@ -527,15 +549,18 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): void {
     paintPercent(targetPeople(form.target, at));
     try {
       const c = computeAllocation(data, s.series, s.year, form, at);
-      errorEl.hidden = true;
-      errorEl.textContent = '';
-      summaryEl.textContent = describeAllocation({
-        year: s.year,
-        targetName: targetName(form),
-        percent: form.percent,
-        people: c.input.deltaPeople,
-        sourceNames: form.sourceMode === 'regions' ? form.regionIds.map((id) => REGION_NAMES[id]) : undefined,
-      });
+      if (!errorEl.hidden) errorEl.hidden = true;
+      setText(errorEl, '');
+      setText(
+        summaryEl,
+        describeAllocation({
+          year: s.year,
+          targetName: targetName(form),
+          percent: form.percent,
+          people: c.input.deltaPeople,
+          sourceNames: form.sourceMode === 'regions' ? form.regionIds.map((id) => REGION_NAMES[id]) : undefined,
+        }),
+      );
       detailEl.replaceChildren(detailElement(c.summary));
     } catch (e) {
       if (!(e instanceof RangeError)) console.error('allocation failed', e);
@@ -544,23 +569,26 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): void {
   }
 
   targetSelect.addEventListener('change', () => {
+    if (!alive) return;
     targetValue = targetSelect.value;
     renderAll();
   });
   percentInput.addEventListener('input', () => {
+    if (!alive) return;
     percent = Number(percentInput.value);
     paintPercent(targetPeople(currentForm().target, populations(store.get())));
     if (pending === undefined) pending = requestAnimationFrame(renderAll);
   });
   for (const b of sourceButtons) {
     b.addEventListener('click', () => {
+      if (!alive) return;
       sourceMode = b.dataset.source === 'regions' ? 'regions' : 'proportional';
       renderAll();
     });
   }
 
   // The map drives the default: moving to another prefecture retargets; a selected town is offered as a choice.
-  store.subscribe((s, prev) => {
+  const unsubscribe = store.subscribe((s, prev) => {
     const selChanged = s.selectedPref !== prev.selectedPref || s.selectedArea !== prev.selectedArea;
     if (selChanged) {
       if (s.selectedPref !== undefined && s.selectedPref !== prev.selectedPref) targetValue = `pref:${pickPref(s)}`;
@@ -573,4 +601,15 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): void {
 
   rebuildTargetOptions(store.get());
   renderAll();
+
+  const teardown = (): void => {
+    if (!alive) return;
+    alive = false;
+    unsubscribe();
+    if (pending !== undefined) cancelAnimationFrame(pending);
+    pending = undefined;
+    if (mounted.get(el) === teardown) mounted.delete(el);
+  };
+  mounted.set(el, teardown);
+  return teardown;
 }
