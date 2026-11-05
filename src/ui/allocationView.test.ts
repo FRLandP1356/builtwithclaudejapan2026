@@ -121,6 +121,13 @@ describe('allocationLines and countMarkers', () => {
     expect(allocationLines(none, 'pref', '02', 2100)).toEqual(['割り振りによる変化 −5.0%']); // a prefecture without crossings gets no facility line
   });
 
+  test('a prefecture entry with no towns on either side gives no facility line (never 「施設F：undefined」)', () => {
+    const view = allocationView(overlay, totals, groups);
+    view.prefCounts.set('03', { gained: 0, lost: 0 }); // not something real data makes, but the guard must hold
+    expect(allocationLines(view, 'pref', '03', 2100)).toEqual(['割り振りによる変化 ±0%']);
+    expect(allocationLines(view, 'pref', '03', 2100).join('')).not.toContain('undefined');
+  });
+
   test('one marker per prefecture with crossings: mixed or loss', () => {
     expect(countMarkers(v)).toEqual([
       { code: '01', text: '+1 −1', kind: 'mixed' },

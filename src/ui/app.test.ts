@@ -757,6 +757,26 @@ describe('allocation overlay on the map', () => {
       expect(store.get().allocation).toBeUndefined();
     });
 
+    test('a modal dialog made of a div (role=dialog, aria-modal=true) keeps Escape for itself; a non-modal one does not', async () => {
+      const { root, store } = await mount();
+      store.set({ year: 2100, allocation: overlay() });
+      const range = root.querySelector<HTMLInputElement>('#year-range')!;
+      const modal = document.createElement('div');
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      document.body.append(modal);
+      esc(range);
+      expect(store.get().allocation).toBeDefined();
+      modal.setAttribute('aria-modal', 'false'); // a floating panel: the page behind still takes Escape
+      esc(range);
+      expect(store.get().allocation).toBeUndefined();
+      store.set({ allocation: overlay() });
+      modal.removeAttribute('aria-modal');
+      esc(range);
+      expect(store.get().allocation).toBeUndefined();
+      modal.remove();
+    });
+
     test('other keys do nothing, and Escape with no overlay is harmless', async () => {
       const { root, store } = await mount();
       const range = root.querySelector<HTMLInputElement>('#year-range')!;
