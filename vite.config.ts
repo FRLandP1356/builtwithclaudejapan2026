@@ -2,5 +2,6 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   base: './',
-  build: { outDir: 'dist', sourcemap: true },
+  // No sourcemap in the published build: it added 779 KB to dist and nothing reads it.
+  build: { outDir: 'dist', sourcemap: false },
 });

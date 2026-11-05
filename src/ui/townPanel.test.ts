@@ -11,8 +11,9 @@ import { DEFAULT_SCENARIO, type Area, type Groups, type Scenario } from '../engi
 import { deriveTotals } from './derive';
 import { evaluateFacilities, PERMANENT_NOTE, summaryLine } from './facilityPanel';
 import { formatPct, formatPop } from './format';
+import { phrases } from './phrases';
 import { PYRAMID_HALF_WIDTH, pyramidScale } from './pyramid';
-import { formatAxisCount, SERIES_VIEW } from './seriesChart';
+import { formatAxisCount, SERIES_VIEW, TABLE_NOTE } from './seriesChart';
 import { createAppStore, type AllocationOverlay, type Store } from './state';
 import { ageShares, mountTownPanel } from './townPanel';
 
@@ -159,6 +160,49 @@ describe('mountTownPanel: updates only what changed', () => {
     expect(q('path.line-official')).toBe(official);
     expect(q('.chart-marker')!.getAttribute('x1')).not.toBe(x0);
     expect(q('.chart-marker-label')!.textContent).toBe('2075年');
+  });
+
+  test('the chart prints a year once: on an axis year (2100年) the marker label gives way to the axis label', () => {
+    const { q, store, section } = setup({ selectedArea: '30206', year: 2075 });
+    const printed = (label: string) => [...section.querySelectorAll('svg.series-svg text')].filter((t) => t.textContent === label).length;
+    expect(printed('2075年')).toBe(1); // not an axis year: the marker label says it
+    expect(printed('2100年')).toBe(1); // the axis label
+    store.set({ year: 2050 }); // the official / estimate boundary is not an axis year: its label must stay
+    expect(printed('2050年')).toBe(1);
+    expect(q('.chart-marker-label')!.textContent).toBe('2050年');
+    for (const year of [2100, 2020, 2060, 2040, 2080]) {
+      store.set({ year });
+      expect(printed(`${year}年`), `${year}年 printed`).toBe(1);
+      expect(q('.chart-marker-label')!.textContent).toBe('');
+    }
+    expect(q('.chart-marker')!.getAttribute('x1')).toBe(q('.dot-marker')!.getAttribute('cx')); // the marker itself still follows the year
+    store.set({ year: 2095 });
+    expect(printed('2095年')).toBe(1);
+    expect(printed('2100年')).toBe(1);
+    expect(q('.chart-marker-label')!.textContent).toBe('2095年');
+    store.set({ year: 2100 });
+    store.set({ year: 2085 });
+    expect(q('.chart-marker-label')!.textContent).toBe('2085年');
+  });
+
+  test('the data table carries a quiet note that the app recomputes the official method, under the table, without changing a number', () => {
+    const { q, section } = setup({ selectedArea: '30206', year: 2050 });
+    const note = q('.series-figure .chart-table .chart-table-note')!;
+    expect(note.textContent).toBe(TABLE_NOTE);
+    expect(note.classList.contains('note')).toBe(true);
+    expect(note.textContent).toContain('社人研が発表した値');
+    expect(note.textContent).toContain('公表された仮定から公式の方法で計算し直しています');
+    expect(note.textContent).toContain('町では数人、都道府県では数十人ほど違うことがあります');
+    expect(note.textContent).not.toContain('予測');
+    expect(section.querySelectorAll('.chart-table-note')).toHaveLength(1); // only the series table has it
+    // laid out as no-break phrases, one span per phrase (2 lines at 390px break between them, not inside)
+    const keeps = [...note.querySelectorAll(':scope > .keep')].map((k) => k.textContent);
+    expect(keeps).toEqual(phrases(TABLE_NOTE));
+    expect(keeps.length).toBeGreaterThanOrEqual(5);
+    expect(q('.series-figure .chart-table')!.lastElementChild).toBe(note); // after the table wrapper
+    expect(note.previousElementSibling?.classList.contains('table-wrap')).toBe(true);
+    const rows = chartRows(section);
+    expect([rows.get(2050)![0], rows.get(2050)![1]]).toEqual(['42,309', '42,311']); // numbers untouched
   });
 
   test('the 試算 badge sits on the panel heading only after 2050', () => {
@@ -316,6 +360,30 @@ describe('the official line, through the panel', () => {
     expect(rows.get(2025)![0]).toBe(fmt(tanabe.official[2025]));
     expect(rows.get(2025)![1]).toBe('－'); // the estimate line starts at 2050
     expect(rows.get(2100)![0]).toBe('－');
+  });
+
+  test('the table note\'s claim holds on the real data in every official year: the app\'s numbers differ from the published ones by a few people in a town, a few dozen in a prefecture', () => {
+    const series = runner.run(DEFAULT_SCENARIO);
+    const officialYears = [2025, 2030, 2035, 2040, 2045, 2050]; // 「2050年までの」 numbers
+    for (const year of officialYears) {
+      let worstTown = 0;
+      let country = 0;
+      const prefDiff = new Map<string, number>();
+      for (const a of areas) {
+        const d = total(series.get(a.code)![year]) - a.official[year];
+        worstTown = Math.max(worstTown, Math.abs(d));
+        country += d;
+        prefDiff.set(a.prefCode, (prefDiff.get(a.prefCode) ?? 0) + d);
+      }
+      const worstPref = Math.max(...[...prefDiff.values()].map(Math.abs));
+      expect(worstTown, `${year}: worst town`).toBeGreaterThan(1); // so the note is needed
+      expect(worstTown, `${year}: worst town`).toBeLessThan(10); // 数人: a single digit
+      expect(worstPref, `${year}: worst prefecture`).toBeGreaterThan(10);
+      expect(worstPref, `${year}: worst prefecture`).toBeLessThan(100); // 数十人: two digits
+      expect(Math.abs(country), `${year}: whole country`).toBeLessThan(100);
+    }
+    expect(TABLE_NOTE).toContain('2050年までの地図や町の数字は');
+    expect(TABLE_NOTE).toContain('町では数人、都道府県では数十人ほど違うことがあります');
   });
 
   test('a prefecture sums every area of it, villages (no age assumptions) included', () => {

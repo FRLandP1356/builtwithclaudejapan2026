@@ -8,7 +8,7 @@
 import { facilityStatus, type Status } from '../engine/facilities';
 import type { Facility } from '../engine/types';
 import { isMetroPref } from './metro';
-import { phraseNodes } from './seriesChart';
+import { phraseNodes } from './phrases';
 import { ESTIMATE_BADGE, ESTIMATE_NOTE } from './sources';
 
 export const PERMANENT_NOTE = '国土交通省の表（2009〜2012年の統計、三大都市圏を除く）にもとづく人口の目安です。施設の閉鎖を予測するものではありません。';

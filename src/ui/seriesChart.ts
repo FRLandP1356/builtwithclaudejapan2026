@@ -4,6 +4,7 @@
 // tested without a DOM. Colours come from the theme tokens through CSS classes (src/ui/townPanel.css); nothing here
 // writes a raw colour.
 import { formatPop } from './format';
+import { phraseNodes } from './phrases';
 import { OFFICIAL_END_YEAR } from './sources';
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -55,25 +56,6 @@ export function textWidth(s: string): number {
 }
 
 const exact = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 0 });
-
-/**
- * Split a sentence into phrases that should stay on one line: after 。 and 、 and before （. Text that is laid out as
- * one inline-block per phrase wraps between phrases instead of in the middle of a number or a bracket.
- */
-export function phrases(text: string): string[] {
-  return text.split(/(?<=[。、])|(?=（)/).filter((p) => p.length > 0);
-}
-
-/** The phrases of `parts` (or of a sentence) as inline-block spans: same text, kinder line breaks. */
-export function phraseNodes(textOrParts: string | readonly string[]): HTMLSpanElement[] {
-  const list = typeof textOrParts === 'string' ? phrases(textOrParts) : textOrParts;
-  return list.map((part) => {
-    const span = document.createElement('span');
-    span.className = 'keep';
-    span.textContent = part;
-    return span;
-  });
-}
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -199,6 +181,10 @@ export interface SeriesChartView {
   destroy(): void;
 }
 
+/** Under the data table: the 公式推計 column is the published figure; this app's own numbers are recomputed from the published assumptions. */
+export const TABLE_NOTE =
+  '公式推計の列は、社人研が発表した値です。このアプリは、公表された仮定から公式の方法で計算し直しています。そのため、2050年までの地図や町の数字は、発表値と、町では数人、都道府県では数十人ほど違うことがあります。';
+
 const W = 360;
 const H = 232;
 const TOP = 32;
@@ -231,7 +217,10 @@ export function mountSeriesChart(host: HTMLElement): SeriesChartView {
   const table = document.createElement('table');
   table.className = 'data-table';
   wrap.append(table);
-  details.append(sum, wrap);
+  const tableNote = document.createElement('p');
+  tableNote.className = 'note chart-table-note';
+  tableNote.replaceChildren(...phraseNodes(TABLE_NOTE));
+  details.append(sum, wrap, tableNote);
   fig.append(svg, legend, summary, details);
   host.append(fig);
 
@@ -327,7 +316,8 @@ export function mountSeriesChart(host: HTMLElement): SeriesChartView {
     markerEls.dot.setAttribute('cy', String(plot.y(m.value)));
     markerEls.dot.setAttribute('class', `dot dot-marker ${m.line === 'official' ? 'dot-official' : 'dot-estimate'}`);
     markerEls.label.setAttribute('x', String(Math.min(Math.max(mx, 30), W - 30)));
-    markerEls.label.textContent = `${m.year}年`;
+    // The axis already prints this year when it is a tick (2100年 under the marker): say it once.
+    markerEls.label.textContent = X_TICKS.includes(m.year) ? '' : `${m.year}年`;
   }
 
   function renderTable(points: SeriesPoints, place: string): void {

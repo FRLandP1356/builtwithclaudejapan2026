@@ -3,6 +3,7 @@
 //
 // Screen readers: the range input carries the year through aria-valuetext (「2055年」), so the big numeral is
 // aria-live="off" and the note is a role="status" region that is rewritten only when the year crosses 2050.
+import { phraseNodes } from './phrases';
 import { ESTIMATE_BADGE, ESTIMATE_NOTE, OFFICIAL_END_YEAR, OFFICIAL_NOTE } from './sources';
 
 export interface YearSliderOptions {
@@ -20,6 +21,8 @@ export interface YearSlider {
   update(year: number): void;
   /** Stop playing, if playing. */
   stop(): void;
+  /** Move keyboard focus to the range input (the map's skip link lands here). */
+  focus(): void;
   destroy(): void;
 }
 
@@ -72,7 +75,8 @@ export function mountYearSlider(el: HTMLElement, opts: YearSliderOptions): YearS
       const badge = document.createElement('span');
       badge.className = 'badge-estimate';
       badge.textContent = ESTIMATE_BADGE;
-      note.replaceChildren(badge, document.createTextNode(ESTIMATE_NOTE));
+      // One no-break span per phrase, so 「（予測ではありません）」 wraps as a whole instead of 「…ありませ / ん）」 at 390px.
+      note.replaceChildren(badge, ...phraseNodes(ESTIMATE_NOTE));
     } else {
       note.textContent = OFFICIAL_NOTE;
     }
@@ -142,6 +146,7 @@ export function mountYearSlider(el: HTMLElement, opts: YearSliderOptions): YearS
   return {
     update: render,
     stop,
+    focus: () => input.focus(),
     destroy() {
       stop();
       ac.abort();

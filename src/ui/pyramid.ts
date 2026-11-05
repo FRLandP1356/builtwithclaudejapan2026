@@ -4,7 +4,8 @@
 // classes in src/ui/townPanel.css; the two halves are also told apart by side and by the direct labels 男 and 女.
 import type { Pop } from '../engine/types';
 import { formatPop } from './format';
-import { formatAxisCount, niceScale, phraseNodes, svgEl, textWidth, type NiceScale } from './seriesChart';
+import { phraseNodes } from './phrases';
+import { formatAxisCount, niceScale, svgEl, textWidth, type NiceScale } from './seriesChart';
 
 export interface PyramidRow {
   age: string;

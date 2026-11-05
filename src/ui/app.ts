@@ -12,13 +12,14 @@ import { mountNationalMap } from '../map/nationalMap';
 import { mountPrefectureMap } from '../map/prefectureMap';
 import { mountAllocation } from './allocationPanel';
 import { mountControls } from './controls';
-import { allocationLines, allocationView, changeOf, countMarkers, placeNumbers, type AllocationView, type PlaceKind, type PlaceNumbers } from './allocationView';
+import { allocationLines, allocationView, changeOf, countMarkers, figureChanged, placeNumbers, type AllocationView, type PlaceKind, type PlaceNumbers } from './allocationView';
 import { deriveTotals, ratioAt, yearIndex, type Totals } from './derive';
 import { formatPct, formatPop } from './format';
 import { breadcrumbs, buildSearchIndex, goUp, levelOf, pickArea, pickPref, prefOfArea, type Selection } from './nav';
 import { mountSearch } from './search';
+import { phrases } from './phrases';
 import { mountAIPanel } from './aiPanel';
-import { APP_LEAD, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, SOURCES } from './sources';
+import { allocatedBasisNote, APP_LEAD, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, SOURCES, type SourceLine } from './sources';
 import { createAppStore, DEFAULT_YEAR, type AllocationOverlay, type AppState, type PanelContext, type Store } from './state';
 import { mountTownPanel } from './townPanel';
 import { mountYearSlider } from './yearSlider';
@@ -53,6 +54,8 @@ const PANEL_TITLES: ReadonlyArray<{ key: keyof PanelSlots; id: string; title: st
 
 export const ALLOC_BADGE = '割り振り後';
 export const ALLOC_CLEAR = '割り振りを地図から消す';
+/** The skip link at the start of the map: a keyboard user can leave the map without tabbing through it. */
+export const SKIP_TO_YEAR = '地図をとばして、年の選択へ';
 
 // -----------------------------------------------------------------------------------------------------------------
 // Panel registry: one mount call per slot; each returns its teardown, which `destroy()` calls.
@@ -67,16 +70,22 @@ function mountPanels(ctx: PanelContext, slots: PanelSlots): Array<() => void> {
 }
 // -----------------------------------------------------------------------------------------------------------------
 
-/** A finished-looking empty state: one quiet line under the panel heading. */
-export function mountPlaceholder(el: HTMLElement, line: string): void {
-  const p = document.createElement('p');
-  p.className = 'panel-empty';
-  p.textContent = line;
-  el.append(p);
-}
-
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
+
+/** Text as no-break phrases (`.keep`), so a line breaks between phrases, not inside 「R2JHf 450」 or 「（2026年11月5日取得）」. */
+function phraseHtml(text: string): string {
+  return phrases(text)
+    .map((p) => `<span class="keep">${escapeHtml(p)}</span>`)
+    .join('');
+}
+
+/** One footer entry: what it is, then the page as a link whose text is the URL, the day it was read, and the approval line. */
+export function sourceHtml(s: SourceLine): string {
+  const link = `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener">${escapeHtml(s.url)}</a>`;
+  const approval = s.approval ? `<span class="src-approval">${phraseHtml(s.approval)}</span>` : '';
+  return `<dt>${escapeHtml(s.label)}</dt><dd><span class="src-text">${phraseHtml(s.text)}</span><span class="src-where">${link} ${phraseHtml(`（${s.retrieved}取得）`)}</span>${approval}</dd>`;
 }
 
 function headerHtml(): string {
@@ -130,8 +139,22 @@ export async function mountApp(root: HTMLElement, options: AppOptions = {}): Pro
   }
 }
 
-function isFormField(el: EventTarget | null): boolean {
-  return el instanceof HTMLElement && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+/** Input types that take no typed text: Esc has no meaning in them, so it may clear the allocation from there. */
+const NON_TEXT_INPUT_TYPES: ReadonlySet<string> = new Set(['range', 'checkbox', 'radio', 'button', 'submit', 'reset', 'image', 'file', 'color']);
+
+/**
+ * Whether Esc, pressed with focus on `el`, already means something there: a text field (clearing it or closing its
+ * list), a select (closing its list) or an editable region. A range slider or a checkbox does not use Esc.
+ */
+function escapeBelongsToField(el: EventTarget | null): boolean {
+  if (!(el instanceof HTMLElement)) return false;
+  if (el.isContentEditable || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+  return el instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(el.type);
+}
+
+/** An open dialog closes itself on Esc (and keeps focus inside it), so the allocation stays. */
+function dialogIsOpen(doc: Document): boolean {
+  return doc.querySelector('dialog[open], [role="dialog"][aria-modal="true"]') !== null;
 }
 
 function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): AppHandle {
@@ -163,6 +186,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
           <button type="button" class="btn btn-quiet alloc-clear">${ALLOC_CLEAR}</button>
         </div>
         <div class="map-stage">
+          <a class="skip-link" href="#year-range">${SKIP_TO_YEAR}</a>
           <div class="map-host map-host-national"></div>
           <div class="map-overlay" hidden></div>
         </div>
@@ -180,7 +204,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
       </section>
     </main>
     <footer class="app-foot">
-      <dl>${SOURCES.map((s) => `<dt>${s.label}</dt><dd>${s.text}</dd>`).join('')}</dl>
+      <dl>${SOURCES.map(sourceHtml).join('')}</dl>
       <p>${FOOT_NOTE}</p>
     </footer>`;
 
@@ -194,6 +218,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   const allocName = q<HTMLElement>('.alloc-bar-name');
   const allocStale = q<HTMLElement>('.alloc-bar-stale');
   const allocClear = q<HTMLButtonElement>('.alloc-clear');
+  const skipLink = q<HTMLAnchorElement>('.skip-link');
   const stage = q<HTMLDivElement>('.map-stage');
   const nationalHost = q<HTMLDivElement>('.map-host-national');
   const overlay = q<HTMLDivElement>('.map-overlay');
@@ -397,7 +422,10 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     return { name: '日本', kind: 'japan', code: '' };
   }
 
-  /** Name, year, population, ratio and marks: the 試算/公式 mark always, 割り振り後 when the numbers include it. */
+  /**
+   * Name, year, population, ratio and marks: the 試算 / 公式推計 / 実績 mark, plus 割り振り後 when the numbers include an
+   * allocation; up to 2050 that replaces the 公式推計 / 実績 mark with a note that it is this app's own calculation.
+   */
   function renderHeadline(s: AppState): void {
     const place = placeOf(s);
     headName.textContent = place.name;
@@ -409,9 +437,6 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     const b = document.createElement('b');
     b.textContent = formatPop(n.pop);
     const badgeInfo = badgeFor(s.year);
-    const badge = document.createElement('span');
-    badge.className = badgeInfo.estimate ? 'badge-estimate' : 'badge-official';
-    badge.textContent = badgeInfo.text;
     // While the numbers include the allocation, the number without it stays in sight (the town panel shows that one).
     const before = beforeText(n); // the country's total does not change: no second number there
     // Phrases that must not break inside (「2020年 / 比」 at 390px): each is one nowrap span; lines break between them.
@@ -423,12 +448,28 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     };
     const parts: Node[] = [keep(`${s.year}年 `, b)];
     if (before) parts.push(keep(before));
-    parts.push(document.createTextNode('　'), keep(`2020年比 ${formatPct(n.ratio)}`), document.createTextNode('　'), badge);
+    parts.push(document.createTextNode('　'), keep(`2020年比 ${formatPct(n.ratio)}`), document.createTextNode('　'));
+    // An allocation up to 2050 that changes this place's figure makes it this app's own calculation: the 公式推計 / 実績
+    // mark would be wrong, so 割り振り後 comes with a note on what it is based on instead. Where the figure cannot change
+    // (the whole country) the original mark stays. After 2050 the 試算 mark stays and 割り振り後 follows.
+    const basisNote = figureChanged(n) ? allocatedBasisNote(s.year) : undefined;
+    if (!basisNote) {
+      const badge = document.createElement('span');
+      badge.className = badgeInfo.estimate ? 'badge-estimate' : 'badge-official';
+      badge.textContent = badgeInfo.text;
+      parts.push(badge);
+    }
     if (n.allocated) {
       const alloc = document.createElement('span');
       alloc.className = 'badge-alloc';
       alloc.textContent = ALLOC_BADGE;
-      parts.push(document.createTextNode(' '), alloc);
+      if (!basisNote) parts.push(document.createTextNode(' '));
+      parts.push(alloc);
+      if (basisNote) {
+        const note = keep(basisNote);
+        note.classList.add('head-basis');
+        parts.push(document.createTextNode(' '), note);
+      }
     }
     headNum.replaceChildren(...parts);
   }
@@ -461,10 +502,19 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   const ac = new AbortController();
   backBtn.addEventListener('click', () => store.set(goUp(store.get())), { signal: ac.signal });
   allocClear.addEventListener('click', () => store.set({ allocation: undefined }), { signal: ac.signal });
+  skipLink.addEventListener(
+    'click',
+    (e) => {
+      e.preventDefault(); // focus the slider ourselves: the hash would change the address and jump the page
+      slider.focus();
+    },
+    { signal: ac.signal },
+  );
   root.ownerDocument.addEventListener(
     'keydown',
     (e) => {
-      if (e.key !== 'Escape' || e.defaultPrevented || isFormField(e.target) || !store.get().allocation) return;
+      if (e.key !== 'Escape' || e.defaultPrevented || !store.get().allocation) return;
+      if (escapeBelongsToField(e.target) || dialogIsOpen(root.ownerDocument)) return;
       store.set({ allocation: undefined });
     },
     { signal: ac.signal },
