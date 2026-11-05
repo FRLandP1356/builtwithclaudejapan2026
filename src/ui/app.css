@@ -690,6 +690,26 @@
 .app-foot dt {
   color: var(--ink-2);
 }
+.app-foot dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* Each source: what it is; then its page (the URL is the link text, so it may break anywhere) and when it was read;
+   then the approval line the provider asks to keep. One line each on a wide screen, stacked on a phone. */
+.app-foot .src-text,
+.app-foot .src-where,
+.app-foot .src-approval {
+  display: block;
+}
+.app-foot .src-where,
+.app-foot .src-approval {
+  margin-top: var(--sp-1);
+}
+.app-foot a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .app-foot p {
   margin-top: var(--sp-3);
 }

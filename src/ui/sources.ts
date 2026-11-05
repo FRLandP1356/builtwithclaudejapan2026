@@ -39,21 +39,36 @@ export function allocatedBasisNote(year: number): string | undefined {
 
 export interface SourceLine {
   label: string;
+  /** What the figure is and how this app processed it. */
   text: string;
+  /** The page of the source, shown as a link whose visible text is the URL itself. */
+  url: string;
+  /** The day the page was read (JST), as in docs/sources.md. */
+  retrieved: string;
+  /** A line the provider asks to be kept with the data, shown last. */
+  approval?: string;
 }
 
+/** The three sources, in the footer's order. URLs and retrieval dates are those of docs/sources.md (read 2026-11-05 JST). */
 export const SOURCES: readonly SourceLine[] = [
   {
     label: '人口',
     text: '国立社会保障・人口問題研究所「日本の地域別将来推計人口（令和5年推計）」を加工して作成（公共データ利用規約 第1.0版（PDL1.0））',
+    url: 'https://www.ipss.go.jp/pp-shicyoson/j/shicyoson23/t-page.asp',
+    retrieved: '2026年11月5日',
   },
   {
     label: '境界',
-    text: '国土交通省「国土数値情報（行政区域データ）」（2021年版）を加工して作成（簡略化と社人研の地域に合わせた結合。国が作成した地図ではありません）。測量法に基づく国土地理院長承認（複製）R2JHf 450',
+    text: '国土交通省「国土数値情報（行政区域データ）」（2021年版）を加工して作成（簡略化と社人研の地域に合わせた結合。国が作成した地図ではありません）',
+    url: 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2021.html',
+    retrieved: '2026年11月5日',
+    approval: '測量法に基づく国土地理院長承認（複製）R2JHf 450',
   },
   {
     label: '施設の目安',
-    text: '国土交通省「サービス施設の立地する確率が50%・80%となる自治体の人口規模（三大都市圏を除く）」（2009〜2012年の統計）',
+    text: '国土交通省国土政策局「サービス施設の立地する確率が50%・80%となる自治体の人口規模（三大都市圏を除く）」（2009〜2012年の統計）を加工して作成（図の数値を施設ごとの人口の目安として転記）',
+    url: 'https://www.mlit.go.jp/common/001042019.pdf',
+    retrieved: '2026年11月5日',
   },
 ];
 

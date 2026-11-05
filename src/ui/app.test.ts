@@ -4,7 +4,8 @@ import { loadSampleAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
 import { makeTopology } from '../../test/helpers/makeTopology';
 import { allocationColor, changeColor, RATIO_MAX } from '../map/colors';
-import { ALLOC_BADGE, ALLOC_CLEAR, mountApp, SKIP_TO_YEAR, type AppHandle } from './app';
+import { ALLOC_BADGE, ALLOC_CLEAR, mountApp, SKIP_TO_YEAR, sourceHtml, type AppHandle } from './app';
+import { SOURCES } from './sources';
 import { total } from '../engine/aggregate';
 import { formatPct, formatPop } from './format';
 import type { AllocationOverlay } from './state';
@@ -100,6 +101,47 @@ describe('mountApp shell', () => {
     store.set({ year: 2055 });
     expect(badge()).toBe('試算');
     expect(root.querySelector('.map-headline-num [class^="badge-"]')!.className).toBe('badge-estimate');
+  });
+});
+
+describe('footer attribution', () => {
+  test('each source is a label and a text that says it was processed, then its page as a link showing the URL, then the day it was read', async () => {
+    const { root } = await mount();
+    const entries = [...root.querySelectorAll('.app-foot dl dd')];
+    expect([...root.querySelectorAll('.app-foot dl dt')].map((d) => d.textContent)).toEqual(['人口', '境界', '施設の目安']);
+    expect(entries).toHaveLength(SOURCES.length);
+    entries.forEach((dd, i) => {
+      const src = SOURCES[i];
+      expect(dd.querySelector('.src-text')!.textContent).toBe(src.text);
+      const links = dd.querySelectorAll('a');
+      expect(links).toHaveLength(1);
+      expect(links[0].getAttribute('href')).toBe(src.url);
+      expect(links[0].textContent).toBe(src.url); // the URL itself is the visible text
+      expect(links[0].getAttribute('rel')).toBe('noopener');
+      expect(links[0].getAttribute('target')).toBe('_blank');
+      expect(dd.querySelector('.src-where')!.textContent).toBe(`${src.url}（2026年11月5日取得）`);
+    });
+  });
+
+  test('the facility line says 加工して作成 and the boundary line keeps the approval number, last', async () => {
+    const { root } = await mount();
+    const [, boundary, facility] = [...root.querySelectorAll('.app-foot dl dd')];
+    expect(facility.textContent).toContain('国土交通省国土政策局「サービス施設の立地する確率が50%・80%となる自治体の人口規模（三大都市圏を除く）」（2009〜2012年の統計）を加工して作成');
+    expect(facility.querySelector('.src-approval')).toBeNull();
+    expect(boundary.querySelector('.src-approval')!.textContent).toBe('測量法に基づく国土地理院長承認（複製）R2JHf 450');
+    expect(boundary.lastElementChild).toBe(boundary.querySelector('.src-approval'));
+    expect(root.querySelectorAll('.app-foot .src-approval')).toHaveLength(1);
+    expect(root.querySelector('.app-foot')!.textContent).not.toContain('予測');
+  });
+
+  test('sourceHtml escapes what it prints, so a stray character cannot add markup', () => {
+    const html = sourceHtml({ label: 'a<b', text: 'x & "y"', url: 'https://e.test/?a=1&b="2"', retrieved: '2026年1月1日', approval: '<i>' });
+    const box = document.createElement('dl');
+    box.innerHTML = html;
+    expect(box.querySelectorAll('i, b')).toHaveLength(0);
+    expect(box.querySelector('a')!.getAttribute('href')).toBe('https://e.test/?a=1&b="2"');
+    expect(box.querySelector('.src-text')!.textContent).toBe('x & "y"');
+    expect(box.querySelector('.src-approval')!.textContent).toBe('<i>');
   });
 });
 

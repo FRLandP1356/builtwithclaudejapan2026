@@ -18,7 +18,7 @@ import { formatPct, formatPop } from './format';
 import { breadcrumbs, buildSearchIndex, goUp, levelOf, pickArea, pickPref, prefOfArea, type Selection } from './nav';
 import { mountSearch } from './search';
 import { mountAIPanel } from './aiPanel';
-import { allocatedBasisNote, APP_LEAD, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, SOURCES } from './sources';
+import { allocatedBasisNote, APP_LEAD, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, SOURCES, type SourceLine } from './sources';
 import { createAppStore, DEFAULT_YEAR, type AllocationOverlay, type AppState, type PanelContext, type Store } from './state';
 import { mountTownPanel } from './townPanel';
 import { mountYearSlider } from './yearSlider';
@@ -79,6 +79,13 @@ export function mountPlaceholder(el: HTMLElement, line: string): void {
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
+
+/** One footer entry: what it is, then the page as a link whose text is the URL, the day it was read, and the approval line. */
+export function sourceHtml(s: SourceLine): string {
+  const link = `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener">${escapeHtml(s.url)}</a>`;
+  const approval = s.approval ? `<span class="src-approval">${escapeHtml(s.approval)}</span>` : '';
+  return `<dt>${escapeHtml(s.label)}</dt><dd><span class="src-text">${escapeHtml(s.text)}</span><span class="src-where">${link}（${escapeHtml(s.retrieved)}取得）</span>${approval}</dd>`;
 }
 
 function headerHtml(): string {
@@ -197,7 +204,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
       </section>
     </main>
     <footer class="app-foot">
-      <dl>${SOURCES.map((s) => `<dt>${s.label}</dt><dd>${s.text}</dd>`).join('')}</dl>
+      <dl>${SOURCES.map(sourceHtml).join('')}</dl>
       <p>${FOOT_NOTE}</p>
     </footer>`;
 
