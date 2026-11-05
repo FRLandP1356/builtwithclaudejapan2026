@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MAX_BODY_BYTES, MAX_MESSAGES, MAX_TOTAL_TEXT_CHARS, validateChatBody } from '../../worker/validate';
 import { makeEngineContext } from '../../test/helpers/engineContext';
-import { ask, CLIENT_LIMITS, formatToolResult, MAX_TOOL_RESULT_CHARS, measureRequest } from './client';
+import { ask, CLIENT_LIMITS, formatToolResult, MAX_TOOL_RESULT_CHARS, measureRequest, MSG_NOT_AVAILABLE } from './client';
 import type { AskOptions, AskResult, Block, Message } from './client';
 import type { CachedAnswer, CachedAnswers } from './cached';
 import { checkNumbers } from './numberCheck';
@@ -625,16 +625,19 @@ describe('errors', () => {
     expect(saved).toMatchObject({ status: 'ok', fromCache: true, answer: '保存済みの答えです。' });
   });
 
+  // The default address is covered in 'an endpoint that is not there': a failed connection there means nothing is deployed.
+  const CONFIGURED = 'https://worker.example.test/api/chat';
+
   it('network_failure: unavailable, or the saved answer when there is one', async () => {
-    const none = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn });
+    const none = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn, endpoint: CONFIGURED });
     expect(none).toMatchObject({ status: 'unavailable', message: UNAVAILABLE });
 
     const fetchFn = script(new TypeError('Failed to fetch')).fetchFn;
-    const saved = await ask(TOKYO_QUESTION, ctx, { fetchFn, cache, history: HISTORY });
+    const saved = await ask(TOKYO_QUESTION, ctx, { fetchFn, endpoint: CONFIGURED, cache, history: HISTORY });
     expect(saved).toMatchObject({ status: 'ok', fromCache: true, answer: '保存済みの答えです。' });
   });
 
-  it('a_200_that_is_not_json_or_has_no_content_is_treated_like_an_upstream_failure', async () => {
+  it('a_200_that_is_not_json_or_has_no_content_is_unavailable', async () => {
     const html = await ask('q', ctx, { fetchFn: script(new Response('<html>oops</html>', { status: 200 })).fetchFn });
     expect(html.status).toBe('unavailable');
     const noContent = await ask('q', ctx, { fetchFn: script(jsonResponse({ hello: 'world' })).fetchFn });
@@ -657,7 +660,7 @@ describe('errors', () => {
   it.each([
     [403, { error: 'origin_not_allowed' }],
     [400, { error: 'invalid_messages' }],
-    [404, { error: 'not_found' }],
+    [401, { error: 'unauthorized' }],
   ])('%i %j: a generic error message, no saved answer, no retry', async (status, body) => {
     const s = script(jsonResponse(body, status), textResponse('should not be reached'));
     const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: s.fetchFn, cache, history: HISTORY });
@@ -708,8 +711,158 @@ describe('errors', () => {
 
   it('an_abort_error_that_did_not_come_from_the_users_signal_is_just_a_network_failure', async () => {
     const timeout = new DOMException('The operation timed out', 'AbortError');
-    const result = await ask('q', ctx, { fetchFn: script(timeout).fetchFn, signal: new AbortController().signal });
+    const result = await ask('q', ctx, { fetchFn: script(timeout).fetchFn, endpoint: CONFIGURED, signal: new AbortController().signal });
     expect(result).toMatchObject({ status: 'unavailable', message: UNAVAILABLE });
+  });
+});
+
+// "Not available" (no Worker behind the endpoint: say so, do not suggest trying again) against "try again later" (the
+// AI is busy or down right now). Ruling 36.
+describe('an endpoint that is not there', () => {
+  const EXPLICIT = 'https://worker.example.test/api/chat';
+  const HISTORY: Message[] = [
+    { role: 'user', content: '最初の質問' },
+    { role: 'assistant', content: [{ type: 'text', text: '最初の答え' }] },
+  ];
+  const html = (): Response => new Response('<!doctype html><title>2100年の日本</title>', { status: 200, headers: { 'content-type': 'text/html' } });
+  /** A 200 whose body breaks off on the way: a transport failure, not a page that is not JSON. */
+  const brokenBody = (): Response =>
+    new Response(new ReadableStream({ start: (controller) => controller.error(new TypeError('terminated')) }), { status: 200 });
+
+  const NOT_AVAILABLE_TEXT =
+    'このバージョンでは、AIへの質問は使えません（AIの接続先がまだ用意されていません）。地図、数値、前提の調整、人口の割り振りはそのまま使えます。';
+
+  it('the message names the three facts: not available now, why, and what still works', () => {
+    expect(MSG_NOT_AVAILABLE).toBe(NOT_AVAILABLE_TEXT);
+    expect(MSG_NOT_AVAILABLE).not.toContain('時間をおいて');
+    expect(MSG_NOT_AVAILABLE).not.toContain('もう一度');
+  });
+
+  it.each([
+    ['404', () => jsonResponse({ error: 'not_found' }, 404)],
+    ['404 with an HTML body', () => new Response('<h1>Not found</h1>', { status: 404 })],
+    ['405', () => new Response('Method Not Allowed', { status: 405 })],
+    ['200 with the index page', html],
+    ['200 with an empty body', () => new Response('', { status: 200 })],
+    ['200 with JSON that is not a model message', () => jsonResponse({ hello: 'world' })],
+    ['200 with JSON whose content is not a list', () => jsonResponse({ content: 'text' })],
+  ])('%s: not available, with the reason, after one request, and nothing is retried', async (_name, response) => {
+    const s = script(response(), textResponse('should not be reached'));
+    const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: s.fetchFn, endpoint: EXPLICIT });
+    expect(result).toMatchObject({ status: 'unavailable', reason: 'not_configured', message: NOT_AVAILABLE_TEXT, answer: '', fromCache: false, unverified: [] });
+    expect(result.messages).toEqual([]);
+    expect(s.mock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a_failed_connection_to_the_default_address_is_not_available: nothing is deployed there', async () => {
+    const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn });
+    expect(result).toMatchObject({ status: 'unavailable', reason: 'not_configured', message: NOT_AVAILABLE_TEXT });
+    // the address written out is the same address
+    const written = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn, endpoint: '/api/chat' });
+    expect(written.reason).toBe('not_configured');
+    // a body that breaks off at the default address is a failed connection too
+    const cut = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(brokenBody()).fetchFn });
+    expect(cut).toMatchObject({ status: 'unavailable', reason: 'not_configured' });
+  });
+
+  it('a_failed_connection_to_a_configured_address_is_try_again_later: the Worker may well be there', async () => {
+    const down = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn, endpoint: EXPLICIT });
+    expect(down.status).toBe('unavailable');
+    expect(down.reason).toBeUndefined();
+    expect(down.message).toBe(UNAVAILABLE);
+    const cut = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(brokenBody()).fetchFn, endpoint: EXPLICIT });
+    expect(cut.status).toBe('unavailable');
+    expect(cut.reason).toBeUndefined();
+    expect(cut.message).toBe(UNAVAILABLE);
+  });
+
+  it('a_page_that_is_not_JSON_is_not_available_even_at_a_configured_address', async () => {
+    const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(html()).fetchFn, endpoint: EXPLICIT });
+    expect(result.reason).toBe('not_configured');
+  });
+
+  it('offline_is_not_the_same_as_not_deployed: a failed connection while the browser has no network is try again later', async () => {
+    vi.stubGlobal('navigator', { onLine: false });
+    try {
+      const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn });
+      expect(result.status).toBe('unavailable');
+      expect(result.reason).toBeUndefined();
+      expect(result.message).toBe(UNAVAILABLE);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    vi.stubGlobal('navigator', { onLine: true });
+    try {
+      const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn });
+      expect(result.reason).toBe('not_configured');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each([
+    [429, { error: 'rate_limited', cached: true }],
+    [500, { error: 'boom' }],
+    [502, { error: 'upstream_error' }],
+    [503, { error: 'service_unavailable' }],
+  ])('%i stays try again later, with no reason, at the default address and at a configured one', async (status, body) => {
+    for (const endpoint of [undefined, EXPLICIT]) {
+      const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(jsonResponse(body, status)).fetchFn, ...(endpoint ? { endpoint } : {}) });
+      expect(result).toMatchObject({ status: 'unavailable', message: UNAVAILABLE });
+      expect(result.reason).toBeUndefined();
+    }
+  });
+
+  it('403_400_and_413_are_not_called_not_available', async () => {
+    for (const [status, body] of [[403, { error: 'origin_not_allowed' }], [400, { error: 'invalid_messages' }], [413, { error: 'body_too_large' }]] as const) {
+      const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(jsonResponse(body, status)).fetchFn });
+      expect(result.status).toBe('unavailable');
+      expect(result.reason).toBeUndefined();
+      expect(result.message).not.toBe(NOT_AVAILABLE_TEXT);
+    }
+  });
+
+  it('no_other_status_carries_a_reason', async () => {
+    const ok = await ask('こんにちは', ctx, { fetchFn: script(textResponse('はい。')).fetchFn });
+    expect(ok.reason).toBeUndefined();
+    const error = await ask('こんにちは', ctx, { fetchFn: script(modelResponse([], 'end_turn')).fetchFn });
+    expect(error.status).toBe('error');
+    expect(error.reason).toBeUndefined();
+  });
+
+  it('a_verified_saved_answer_for_the_same_question_still_stands_in_for_the_missing_AI', async () => {
+    const s = script(jsonResponse({ error: 'not_found' }, 404));
+    const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: s.fetchFn, cache: cacheOf(verifiedEntry()), history: HISTORY });
+    expect(result).toMatchObject({ status: 'ok', fromCache: true, answer: '保存済みの答えです。' });
+    expect(result.reason).toBeUndefined();
+    // a pending placeholder never does
+    const pending = await ask(TOKYO_QUESTION, ctx, {
+      fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn,
+      cache: cacheOf(verifiedEntry({ status: 'pending', answer: '' })),
+      history: HISTORY,
+    });
+    expect(pending).toMatchObject({ status: 'unavailable', reason: 'not_configured', fromCache: false });
+    // and a verified answer to another question does not either
+    const other = await ask('別の質問です', ctx, { fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn, cache: cacheOf(verifiedEntry()), history: HISTORY });
+    expect(other.reason).toBe('not_configured');
+    expect(other.messages).toEqual(HISTORY);
+  });
+
+  it('a_404_in_a_later_round_keeps_the_trace_so_far', async () => {
+    const s = script(toolUseResponse(toolUse('toolu_1', 'find_area', { query: '東京' })), jsonResponse({ error: 'not_found' }, 404));
+    const result = await ask('東京', ctx, { fetchFn: s.fetchFn });
+    expect(result).toMatchObject({ status: 'unavailable', reason: 'not_configured' });
+    expect(result.trace.map((t) => t.tool)).toEqual(['find_area']);
+  });
+
+  it('a_user_abort_while_the_body_is_read_is_still_an_abort, not_available', async () => {
+    const controller = new AbortController();
+    const body = new ReadableStream({ start: (c) => controller.signal.addEventListener('abort', () => c.error(controller.signal.reason)) });
+    const s = script(() => {
+      queueMicrotask(() => controller.abort());
+      return new Response(body, { status: 200 });
+    });
+    await expect(ask('q', ctx, { fetchFn: s.fetchFn, signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
   });
 });
 

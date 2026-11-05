@@ -10,7 +10,10 @@
 //      Still unchecked: the answer comes back with status 'unverified_numbers' and the numbers, for the UI to warn.
 //      Most upstream requests one ask can make: maxRounds + min(3, maxRounds) = 9 at the defaults.
 //   4. If the AI cannot be reached (limit, outage, network) the saved answer for the same question is used when there
-//      is one; otherwise status 'unavailable'. A user abort is never converted: ask() rejects with the AbortError.
+//      is one; otherwise status 'unavailable'. When nothing answers as the Worker at all (404 or 405, a 200 that is not
+//      the model's JSON, or no connection at the default same-origin address, where nothing is deployed) the result is
+//      'unavailable' with reason 'not_configured': the AI is not part of this build, and trying again will not help.
+//      A user abort is never converted: ask() rejects with the AbortError.
 //   5. Before EVERY request the size is measured against the Worker's limits (with a margin). The oldest whole
 //      question-and-answer exchanges of `history` are dropped until it fits (result.trimmed); if even the current
 //      question and tool loop do not fit, nothing is sent (status 'unavailable', needsNewConversation).
@@ -90,6 +93,11 @@ export interface AskResult {
   unverified: string[];
   fromCache: boolean;
   status: 'ok' | 'unverified_numbers' | 'unavailable' | 'error';
+  /**
+   * Present with status 'unavailable' when the AI is not there at all in this build (no Worker is deployed behind the
+   * endpoint), as opposed to being busy or down right now. The UI says so plainly and does not suggest trying again.
+   */
+  reason?: 'not_configured';
   /** A short Japanese note for the user, when there is something to say. */
   message?: string;
   /** The conversation to pass as `history` next time. After a failure it is the history as it was (trimmed, if it was). */
@@ -122,6 +130,9 @@ export const CLIENT_LIMITS = { maxMessages: 36, maxChars: 40_000, maxBytes: 56_0
 const TRUNCATION_MARKER = '…（結果が長すぎるため、ここから先は省略しました）';
 
 const MSG_UNAVAILABLE = 'いまはAIに接続できません。保存済みの質問を試してください。';
+/** Nothing is deployed behind the endpoint: not a matter of waiting. Three facts: not available, why, what still works. */
+export const MSG_NOT_AVAILABLE =
+  'このバージョンでは、AIへの質問は使えません（AIの接続先がまだ用意されていません）。地図、数値、前提の調整、人口の割り振りはそのまま使えます。';
 const MSG_SAVED = 'いまはAIに接続できないため、保存済みの答えを表示しています。';
 const MSG_TOO_LONG = '質問が長すぎます。';
 const MSG_REJECTED = 'AIへの問い合わせでエラーが起きました。時間をおいて、もう一度お試しください。';
@@ -272,8 +283,11 @@ function rebuildBlocks(raw: unknown): Block[] {
 // One request to the Worker
 // ---------------------------------------------------------------------------------------------------------------
 
-/** Why a request did not give a usable response. 'unreachable' is the only kind a saved answer can stand in for. */
-type FailureKind = 'unreachable' | 'too_long' | 'rejected';
+/**
+ * Why a request did not give a usable response. A saved answer can stand in for 'unreachable' (busy or down right now)
+ * and 'not_configured' (nothing is deployed); the others are about the request itself.
+ */
+type FailureKind = 'unreachable' | 'not_configured' | 'too_long' | 'rejected';
 
 class RequestFailure extends Error {
   kind: FailureKind;
@@ -299,15 +313,32 @@ interface ModelTurn {
 
 function failureForStatus(status: number): RequestFailure {
   if (status === 413) return new RequestFailure('too_long');
+  // 404 and 405: the address answers, but nothing there takes a POST (a static host, a Worker that was never deployed).
+  if (status === 404 || status === 405) return new RequestFailure('not_configured');
   // 429 (daily limit; the body says cached: true) and 5xx (502 upstream, 503 not configured / store down) are the
-  // AI being unavailable right now. Everything else (403 origin, 400 body, 404, 405) is a problem with the request.
+  // AI being unavailable right now. Everything else (403 origin, 400 body) is a problem with the request.
   if (status === 429 || status >= 500) return new RequestFailure('unreachable');
   return new RequestFailure('rejected');
 }
 
-/** An abort the caller asked for passes through untouched; anything else that broke the transport is 'unreachable'. */
-function transportFailure(error: unknown, signal: AbortSignal | undefined): unknown {
-  return signal?.aborted ? error : new RequestFailure('unreachable');
+/** The browser says it has no network at all: a failed request then says nothing about whether a Worker is deployed. */
+function isOffline(): boolean {
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
+/**
+ * An abort the caller asked for passes through untouched; anything else that broke the transport is 'unreachable',
+ * except at the default same-origin address (nothing is deployed there in a build without a Worker) while the browser
+ * is online: then it is 'not_configured'. A failure to reach an address someone configured is always 'unreachable'.
+ */
+function transportFailure(error: unknown, env: Env): unknown {
+  if (env.signal?.aborted) return error;
+  return new RequestFailure(env.endpoint === DEFAULT_ENDPOINT && !isOffline() ? 'not_configured' : 'unreachable');
+}
+
+/** JSON.parse and Response.json() throw a SyntaxError for text that is not JSON (checked by name: it may come from another realm). */
+function isSyntaxError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'SyntaxError';
 }
 
 async function callModel(messages: Message[], env: Env): Promise<ModelTurn> {
@@ -325,7 +356,7 @@ async function callModel(messages: Message[], env: Env): Promise<ModelTurn> {
   try {
     response = await env.fetchFn(env.endpoint, init);
   } catch (error) {
-    throw transportFailure(error, env.signal);
+    throw transportFailure(error, env);
   }
   if (!response.ok) throw failureForStatus(response.status);
 
@@ -333,9 +364,13 @@ async function callModel(messages: Message[], env: Env): Promise<ModelTurn> {
   try {
     data = await response.json();
   } catch (error) {
-    throw transportFailure(error, env.signal);
+    if (env.signal?.aborted) throw error;
+    // A page that is not JSON (a static host answering with its index.html) means no Worker is there. A body that was
+    // cut off on the way is a transport failure like any other.
+    throw isSyntaxError(error) ? new RequestFailure('not_configured') : transportFailure(error, env);
   }
-  if (!isRecord(data) || !Array.isArray(data.content)) throw new RequestFailure('unreachable');
+  // A 200 that is JSON but not a model message is not our Worker either.
+  if (!isRecord(data) || !Array.isArray(data.content)) throw new RequestFailure('not_configured');
   return {
     content: rebuildBlocks(data.content),
     stopReason: typeof data.stop_reason === 'string' ? data.stop_reason : '',
@@ -489,6 +524,8 @@ function messageForFailure(kind: FailureKind): string {
       return MSG_TOO_LONG;
     case 'rejected':
       return MSG_REJECTED;
+    case 'not_configured':
+      return MSG_NOT_AVAILABLE;
     default:
       return MSG_UNAVAILABLE;
   }
@@ -590,10 +627,12 @@ async function converse(question: string, cache: CachedAnswers | null, conversat
       return result;
     }
     if (!(error instanceof RequestFailure)) throw error; // a user abort, or a bug: not for us to hide
-    if (error.kind === 'unreachable') {
+    if (error.kind === 'unreachable' || error.kind === 'not_configured') {
       const saved = findCached(cache, question);
       if (saved) return savedAnswerResult(saved, currentHistory(conversation), question, MSG_SAVED);
     }
-    return failureResult('unavailable', messageForFailure(error.kind), '', conversation);
+    const failed = failureResult('unavailable', messageForFailure(error.kind), '', conversation);
+    if (error.kind === 'not_configured') failed.reason = 'not_configured';
+    return failed;
   }
 }
