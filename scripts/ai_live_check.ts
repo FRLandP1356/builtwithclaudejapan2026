@@ -144,6 +144,9 @@ const LONG_QUESTIONS_B: string[] = [
 
 const ONE_LINER = 'こんにちは。';
 
+/** "2060年から" / "2060〜" / "2060年以降": the first estimated year is 2055, so this is a wrong statement. */
+const STARTS_IN_2060 = /2060\s*年?\s*(から|〜|～|~|以降|より)/;
+
 const FORBIDDEN_WORDS = ['予測', '予想', '残せない', '維持できない', 'なくなる', '残すべき', 'やめるべき', '優先すべき'];
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -235,6 +238,8 @@ interface Opts {
   paceMs: number;
   retryWaitMs: number;
   dryRun: boolean;
+  /** Phase 1 only: ask just these saved questions (ids q1..q5); null = all. */
+  only: Set<string> | null;
   root: string;
 }
 
@@ -606,6 +611,8 @@ interface NumbersCheck {
   forbiddenWordHits: string[];
   toolNameLeaks: string[];
   toolsInTrace: string[];
+  /** The text says the app's estimates start in 2060 (they start in 2055, the first 5-year step after the official end). */
+  saysEstimatesStartIn2060: boolean;
 }
 
 function numbersCheck(h: Harness, result: AskResult): NumbersCheck {
@@ -622,14 +629,19 @@ function numbersCheck(h: Harness, result: AskResult): NumbersCheck {
     forbiddenWordHits: FORBIDDEN_WORDS.filter((w) => answer.includes(w)),
     toolNameLeaks: h.toolNames.filter((n) => answer.includes(n)),
     toolsInTrace: [...new Set(result.trace.map((t) => t.tool))],
+    saysEstimatesStartIn2060: STARTS_IN_2060.test(answer),
   };
 }
 
-/** True when `a` is a better saved answer than `b`: usable beats unusable, a clean one beats one with unverified numbers. */
-function betterAnswer(a: AskResult | null, b: AskResult | null): boolean {
-  if (!okStatus(a)) return false;
-  if (!okStatus(b)) return true;
-  return a!.unverified.length < b!.unverified.length;
+/** What is wrong with a saved answer: numbers the tools did not return, and a wrong first estimated year. */
+function defects(r: AskResult | null, h: Harness): number {
+  if (!okStatus(r)) return Number.POSITIVE_INFINITY;
+  return r!.unverified.length + (STARTS_IN_2060.test(r!.answer) ? 1 : 0) + (h.toolNames.some((n) => r!.answer.includes(n)) ? 1 : 0);
+}
+
+/** True when `a` is a better saved answer than `b`: usable beats unusable, fewer defects beats more. */
+function betterAnswer(a: AskResult | null, b: AskResult | null, h: Harness): boolean {
+  return defects(a, h) < defects(b, h);
 }
 
 async function phase1(h: Harness): Promise<void> {
@@ -638,16 +650,17 @@ async function phase1(h: Harness): Promise<void> {
   for (let i = 0; i < h.sampleQuestions.length; i++) {
     if (state.stop) break;
     const question = h.sampleQuestions[i]!;
-    // Ask once; if the answer is unusable or still has numbers the tools did not return, ask once more and keep the better one.
+    if (h.opts.only && !h.opts.only.has(`q${i + 1}`)) continue;
+    // Ask; if the answer is unusable or still has numbers the tools did not return, ask again (3 tries in all) and keep the better one.
     let best: { result: AskResult | null; entry: AskEntry } | null = null;
     let totalCalls = 0;
     const attempts: Rec[] = [];
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
       const got = await runAsk(h, '1', `q${i + 1}${attempt > 1 ? '_again' : ''}`, question);
       totalCalls += got.entry.callSeqs.length;
       attempts.push({ askId: got.entry.id, status: got.entry.status, unverified: got.entry.unverified, calls: got.entry.callSeqs.length });
-      if (best === null || betterAnswer(got.result, best.result)) best = got;
-      if ((okStatus(best.result) && best.result!.status === 'ok') || state.stop) break;
+      if (best === null || betterAnswer(got.result, best.result, h)) best = got;
+      if (defects(best.result, h) === 0 || state.stop) break;
       out('    (not clean; asking this sample question once more)');
     }
     const result = best?.result ?? null;
@@ -663,6 +676,7 @@ async function phase1(h: Harness): Promise<void> {
         'Pending: the owner reads it before it becomes verified.',
         result.unverified.length ? `Numbers not found in the tool results: ${result.unverified.join(', ')}.` : 'Every number in the answer was found in the tool results.',
         check.yearAfter2050WithoutLabelInText ? 'Names a year after 2050 without the word 試算 in the text (the app adds its own label).' : '',
+        check.saysEstimatesStartIn2060 ? 'WRONG: says the estimates start in 2060 (the first estimated year is 2055).' : '',
         check.forbiddenWordHits.length ? `Contains words the system prompt avoids: ${check.forbiddenWordHits.join(', ')}.` : '',
       ].filter(Boolean);
       cached.answers[index] = {
@@ -960,7 +974,7 @@ function parseArgs(argv: string[], root: string): Opts {
     return i >= 0 ? argv[i + 1] : undefined;
   };
   if (argv.includes('--help')) {
-    out('node scripts/ai_live_check.ts [--phases 1,2,3,3b,7] [--log <file>] [--answers <file>] [--dry-run]');
+    out('node scripts/ai_live_check.ts [--phases 1,2,3,3b,7] [--only q1,q3] [--log <file>] [--answers <file>] [--dry-run]');
     process.exit(0);
   }
   const endpoint = get('--endpoint') ?? WORKER_URL;
@@ -975,6 +989,7 @@ function parseArgs(argv: string[], root: string): Opts {
     paceMs: real ? Math.max(paceMs, PACE_MS) : paceMs,
     retryWaitMs: real ? Math.max(retryWaitMs, RETRY_WAIT_MS) : retryWaitMs,
     dryRun: argv.includes('--dry-run'),
+    only: get('--only') ? new Set(get('--only')!.split(',').map((x) => x.trim()).filter(Boolean)) : null,
     root,
   };
 }
