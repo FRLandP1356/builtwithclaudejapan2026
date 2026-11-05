@@ -342,7 +342,7 @@ describe('get_series', () => {
     expect(fade.scenario).toEqual({ ...DEFAULT_SCENARIO, migMode: 'fade' });
   });
 
-  it('Japan ("00") reproduces the engine results: 2100 hold 6,328万 and fade 5,851万 (Ruling 19)', () => {
+  it('Japan ("00") reproduces the engine results: 2100 hold 6,328万 and fade 5,852万 (Ruling 19)', () => {
     const hold = call('get_series', { areaCode: '00', years: [2020, 2100] });
     expect(hold.area).toEqual({ code: '00', name: '日本' });
     expect(Math.abs(hold.rows[1].population - 63_280_000) / 63_280_000).toBeLessThan(0.005);
@@ -488,7 +488,7 @@ describe('run_projection', () => {
     expect(r.rows[2].differencePercent).toBeLessThan(0);
   });
 
-  it('Japan under fade is about 5,851万 in 2100 and a raised child-woman ratio is higher than the default', () => {
+  it('Japan under fade is about 5,852万 in 2100 and a raised child-woman ratio is higher than the default', () => {
     const fade = call('run_projection', { areaCode: '00', scenario: { migMode: 'fade' } });
     expect(Math.abs(fade.rows[2].scenarioPopulation - 58_510_000) / 58_510_000).toBeLessThan(0.005);
     const cwr = call('run_projection', { areaCode: '00', scenario: { cwrMult: 1.2 } });
