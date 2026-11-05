@@ -164,7 +164,7 @@ bash pipeline/build_geometry.sh       # boundary TopoJSON (public/data/geo); dow
 python3 -m pipeline.check_codes       # cross-check IPSS area codes against the boundaries
 ```
 
-The AI proxy (Worker): see [worker/README.md](worker/README.md) for its behaviour and settings and [docs/ai-endpoint.md](docs/ai-endpoint.md) for how the page finds it. Deploying it needs an Anthropic API key, a spend limit and a KV namespace, which the author sets up (the key is never written in code or config files). No Worker is deployed in this version.
+The AI proxy (Worker): see [worker/README.md](worker/README.md) for its behaviour and settings and [docs/ai-endpoint.md](docs/ai-endpoint.md) for how the page finds it. Deploying it needs an Anthropic API key, a spend limit on its workspace, the Cloudflare Workers Paid plan and a KV namespace, which the author sets up (the key is never written in code or config files). No Worker is deployed in this version.
 
 ### Repository layout
 
@@ -183,12 +183,14 @@ The AI proxy (Worker): see [worker/README.md](worker/README.md) for its behaviou
 
 ## Limits and unfinished items
 
-- The public page is not published. The Worker for free-text AI questions is not published either, and the AI's saved answers have not been created. So **in this version the AI questions do not work (neither the sample questions nor free text)**.
+- **Nothing has been published.** There is no public page, no proxy (Worker) for the AI and no saved AI answer yet. So **in this version the AI questions do not work (neither the sample questions nor free text)**.
+- **Whether the live Anthropic API accepts what the Worker sends has not been checked.** The request the Worker sends upstream (model `claude-sonnet-5-5`, `max_tokens` 3000, `effort` low, adaptive thinking with `block_binding`, a cache marker on the system prompt, redirects not followed) was built against the official documentation and checked only by tests against fake responses. It has never been sent to the real API. Step 9 of the deploy checklist in [worker/README.md](worker/README.md) is where this is checked.
+- **The cost estimate is not a guarantee.** The Worker's estimate is about 0.17 dollars for a worst single call and about 68 dollars for a worst day of 400 calls. But the daily count is a best-effort mechanism, and concurrent requests or failed writes let calls through beyond the limits (how counting works is in [worker/README.md](worker/README.md)). The only reliable stop on spending is the spend limit that must be set on the Anthropic workspace before publishing.
 - Whether the 測量法 approval line on the N03 boundary data must be shown on derived data is unconfirmed ([docs/sources.md](docs/sources.md), open items). The permission of the original provider (the Geospatial Information Authority of Japan) is confirmed only as far as MLIT states it in its terms. The IPSS terms page could not be re-read when the sources were consolidated.
-- The Worker code was reviewed repeatedly by Claude, but a review by another company's AI could not be done because of usage limits and permissions ([docs/dev-log.md](docs/dev-log.md)). Before publishing, a spend limit on the Anthropic workspace is required (it is the only reliable way to cap spending). The per-day request limits are best-effort and weak against concurrent requests.
+- **No review by another vendor's AI took place.** Codex had hit its usage limit and Antigravity was blocked by its permission settings ([docs/dev-log.md](docs/dev-log.md)). Every review of the Worker code was also by Claude (the per-task reviews, a security review and a whole-branch review by Claude Opus 5.5, and Claude Code's automated security check). Publishing the Worker needs the author's approval, and the author decides this point too.
 - Not in this version: an on-screen marker for the 13 villages, past census series, and the research-data reference line.
-- The screens were checked at 390 px (phone) and 1512 px (PC) widths with no horizontal scrolling.
+- The screens were checked in the final whole-branch review (commit b04bf82) at 390, 768, 1024 and 1512 px widths with no horizontal scrolling (at 320 px only a table scrolls sideways inside itself). After the fix wave each stream checked 390 px and a wide screen. There is no record of a screen check of the whole of commit fa21f09.
 
 ## Licence
 
-No LICENSE file is set in this repository. The code is published for judging, and the choice of licence is left open. The data sources keep their own terms, listed above.
+No LICENSE file is set in this repository. The code is meant to be published for judging, and the choice of licence is left open (nothing has been published yet). The data sources keep their own terms, listed above.
