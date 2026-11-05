@@ -69,14 +69,6 @@ function mountPanels(ctx: PanelContext, slots: PanelSlots): Array<() => void> {
 }
 // -----------------------------------------------------------------------------------------------------------------
 
-/** A finished-looking empty state: one quiet line under the panel heading. */
-export function mountPlaceholder(el: HTMLElement, line: string): void {
-  const p = document.createElement('p');
-  p.className = 'panel-empty';
-  p.textContent = line;
-  el.append(p);
-}
-
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
