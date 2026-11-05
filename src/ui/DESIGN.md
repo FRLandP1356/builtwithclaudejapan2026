@@ -111,7 +111,10 @@
 | 印 | `.markers`（`aria-hidden`。数は面の `aria-label` とツールチップにある）`.marker`（`.marker-gain` `.marker-loss` `.marker-mixed`、`data-for`＝県コード）`.marker-dot` | 全国の地図で、焦点の施設について県ごとに目安をまたいだ町の数。県の中心に墨の点、その少し上に紙色の下地と 12px 太字の「+n −n」（小さい県の色を隠さない）。大きさは `choropleth.ts` 先頭の `MARKER_*` 定数（画面の px）で、地図の縮尺の逆数を掛けて、スマホ幅でも同じ大きさに保つ |
 | 離島 | `.map-inset` `.inset-bg` `.inset-frame` `.inset-label` `.hit` | 遠い島は別の縮尺の枠に |
 | 割り振りの行 | `.alloc-bar`（「地図に反映中の割り振り：」）`.alloc-bar-name`（「和歌山県 +10%」）`.alloc-bar-stale`（「この割り振りは◯年の計算です」）`.alloc-clear`（「割り振りを地図から消す」、40px。Esc でも消える。入力欄の中の Esc は欄のもの） | 地図の上、見出しの下。消えた時にこの行にフォーカスがあれば、見出しの地名へ移す |
+| 地図の最初の跳び先 | `.skip-link`（`.map-stage` の最初の子。「地図をとばして、年の選択へ」。焦点が無い間は画面の外、焦点が来ると地図の左上に藍の枠のボタンとして出る（配置は変わらない）。押すと年のつまみに焦点を移す） | 地図の Tab 停止を飛ばす |
 | 凡例 | `.legend`（`data-mode="ratio" | "allocation"`）`.legend-title` `.legend-bar` `.legend-ticks` `.legend-tick` | 割り振り中は「割り振りによる人口の変化（%）」に切り替わる |
+
+キーボード：地図は Tab 停止が 1 つだけ（`tabindex` が 0 の地域は選択中の地域、無ければ最初の地域。ほかは -1）。地図の中は矢印キーで、その向きにある中心点のいちばん近い地域へ移る（`src/map/keyboard.ts` の `nearestInDirection`：その向きに厳密にある地域だけ、横のずれは 2 倍に数える、同点は Tab 順で先のもの、端では動かない）。Home・End は Tab 順の最初と最後。Enter・Space は選ぶ。Alt・Ctrl・Cmd・Shift つきのキーはブラウザに任せる。焦点を持った地域が Tab 停止になる（選択が変わった時だけ選択中の地域に戻す）。町は検索欄からも選べる。
 
 目印だけの class（css の規則が無く、テストやスクリプトが要素を探すためのもの）：`.ai-allocations` `.ai-basis` `.ai-cancel` `.ai-form` `.ai-links` `.ai-message` `.ai-trace` `.ai-trace-result` `.ai-trimmed` `.alloc-clear` `.alloc-map-actions` `.alloc-map-status` `.alloc-map-toggle` `.alloc-table-hidden` `.alloc-table-visible` `.map-inset`。見た目は一緒に付く共通の class（`.btn`・`.note`・`.data-table` など）が決める。`.marker-mixed`（増えた町と減った町の両方がある県）は独自の色を持たず、印の文字は墨のまま。
 

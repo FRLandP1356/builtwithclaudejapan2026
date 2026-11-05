@@ -4,7 +4,7 @@ import { loadSampleAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
 import { makeTopology } from '../../test/helpers/makeTopology';
 import { allocationColor, changeColor, RATIO_MAX } from '../map/colors';
-import { ALLOC_BADGE, ALLOC_CLEAR, mountApp, type AppHandle } from './app';
+import { ALLOC_BADGE, ALLOC_CLEAR, mountApp, SKIP_TO_YEAR, type AppHandle } from './app';
 import { total } from '../engine/aggregate';
 import { formatPct, formatPop } from './format';
 import type { AllocationOverlay } from './state';
@@ -100,6 +100,67 @@ describe('mountApp shell', () => {
     store.set({ year: 2055 });
     expect(badge()).toBe('試算');
     expect(root.querySelector('.map-headline-num [class^="badge-"]')!.className).toBe('badge-estimate');
+  });
+});
+
+describe('keyboard order through the map', () => {
+  const tabStops = (host: Element | null) =>
+    [...(host?.querySelectorAll('[tabindex]') ?? [])].filter((e) => Number(e.getAttribute('tabindex')) >= 0);
+
+  test('the visible map is a single Tab stop, on the national map and on a prefecture', async () => {
+    const { root, visibleHost, store } = await mount();
+    expect(visibleHost()?.querySelectorAll('path.area')).toHaveLength(3);
+    expect(tabStops(visibleHost())).toHaveLength(1);
+    expect(tabStops(visibleHost())[0].getAttribute('data-code')).toBe(visibleHost()!.querySelector('path.area')!.getAttribute('data-code'));
+    store.set({ selectedPref: '30' });
+    await settle();
+    expect(visibleHost()?.querySelectorAll('path.area')).toHaveLength(3);
+    expect(tabStops(visibleHost())).toHaveLength(1);
+    // From the search box on, the only stops before the year slider are the skip link and that one area.
+    const between = [...root.querySelectorAll('.map-stage a[href], .map-stage [tabindex]')].filter(
+      (e) => !e.closest('[hidden]') && Number(e.getAttribute('tabindex') ?? 0) >= 0,
+    );
+    expect(between.map((e) => e.getAttribute('data-code') ?? e.className)).toEqual(['skip-link', visibleHost()!.querySelector('path.area')!.getAttribute('data-code')]);
+  });
+
+  test('the selected town is the map\'s Tab stop; selecting by keyboard (Enter) still selects', async () => {
+    const { visibleHost, store } = await mount();
+    store.set({ selectedPref: '30' });
+    await settle();
+    store.set({ selectedArea: '30206' });
+    expect(tabStops(visibleHost()).map((e) => e.getAttribute('data-code'))).toEqual(['30206']);
+    const other = visibleHost()!.querySelector<SVGPathElement>('path.area:not([data-code="30206"])')!;
+    other.focus();
+    other.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(store.get().selectedArea).toBe(other.getAttribute('data-code'));
+    expect(tabStops(visibleHost()).map((e) => e.getAttribute('data-code'))).toEqual([other.getAttribute('data-code')]);
+  });
+
+  test('a skip link at the start of the map moves focus to the year slider', async () => {
+    const { root } = await mount();
+    const stage = root.querySelector('.map-stage')!;
+    const link = stage.querySelector<HTMLAnchorElement>('.skip-link')!;
+    expect(link.textContent).toBe(SKIP_TO_YEAR);
+    expect(SKIP_TO_YEAR).toBe('地図をとばして、年の選択へ');
+    expect(stage.firstElementChild).toBe(link); // before every map area in Tab order
+    const range = root.querySelector<HTMLInputElement>('#year-range')!;
+    expect(link.getAttribute('href')).toBe(`#${range.id}`);
+    expect(link.compareDocumentPosition(range) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(link.compareDocumentPosition(stage.querySelector('path.area')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    link.focus();
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true); // the address bar does not change
+    expect(document.activeElement).toBe(range);
+  });
+
+  test('the skip link is still there on a prefecture map', async () => {
+    const { root, store } = await mount();
+    store.set({ selectedPref: '30' });
+    await settle();
+    const link = root.querySelector<HTMLAnchorElement>('.map-stage .skip-link')!;
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(root.querySelector('#year-range'));
   });
 });
 

@@ -203,6 +203,37 @@
 .map-host[hidden] {
   display: none;
 }
+/* Skip link at the start of the map: hidden until it has focus, then a bordered button over the map's top left corner
+   (no layout shift). */
+.skip-link {
+  position: absolute;
+  top: var(--sp-2);
+  left: var(--sp-2);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  max-width: calc(100% - 2 * var(--sp-2));
+  min-height: var(--touch);
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--accent);
+  font-size: var(--fs-15);
+  line-height: 1.3;
+  text-decoration: none;
+}
+.skip-link:not(:focus) {
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 .map-svg {
   display: block;
   width: 100%;

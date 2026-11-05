@@ -20,6 +20,8 @@ export interface YearSlider {
   update(year: number): void;
   /** Stop playing, if playing. */
   stop(): void;
+  /** Move keyboard focus to the range input (the map's skip link lands here). */
+  focus(): void;
   destroy(): void;
 }
 
@@ -142,6 +144,7 @@ export function mountYearSlider(el: HTMLElement, opts: YearSliderOptions): YearS
   return {
     update: render,
     stop,
+    focus: () => input.focus(),
     destroy() {
       stop();
       ac.abort();

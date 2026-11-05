@@ -53,6 +53,8 @@ const PANEL_TITLES: ReadonlyArray<{ key: keyof PanelSlots; id: string; title: st
 
 export const ALLOC_BADGE = '割り振り後';
 export const ALLOC_CLEAR = '割り振りを地図から消す';
+/** The skip link at the start of the map: a keyboard user can leave the map without tabbing through it. */
+export const SKIP_TO_YEAR = '地図をとばして、年の選択へ';
 
 // -----------------------------------------------------------------------------------------------------------------
 // Panel registry: one mount call per slot; each returns its teardown, which `destroy()` calls.
@@ -163,6 +165,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
           <button type="button" class="btn btn-quiet alloc-clear">${ALLOC_CLEAR}</button>
         </div>
         <div class="map-stage">
+          <a class="skip-link" href="#year-range">${SKIP_TO_YEAR}</a>
           <div class="map-host map-host-national"></div>
           <div class="map-overlay" hidden></div>
         </div>
@@ -194,6 +197,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   const allocName = q<HTMLElement>('.alloc-bar-name');
   const allocStale = q<HTMLElement>('.alloc-bar-stale');
   const allocClear = q<HTMLButtonElement>('.alloc-clear');
+  const skipLink = q<HTMLAnchorElement>('.skip-link');
   const stage = q<HTMLDivElement>('.map-stage');
   const nationalHost = q<HTMLDivElement>('.map-host-national');
   const overlay = q<HTMLDivElement>('.map-overlay');
@@ -461,6 +465,14 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   const ac = new AbortController();
   backBtn.addEventListener('click', () => store.set(goUp(store.get())), { signal: ac.signal });
   allocClear.addEventListener('click', () => store.set({ allocation: undefined }), { signal: ac.signal });
+  skipLink.addEventListener(
+    'click',
+    (e) => {
+      e.preventDefault(); // focus the slider ourselves: the hash would change the address and jump the page
+      slider.focus();
+    },
+    { signal: ac.signal },
+  );
   root.ownerDocument.addEventListener(
     'keydown',
     (e) => {
