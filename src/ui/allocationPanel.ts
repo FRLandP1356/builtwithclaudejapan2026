@@ -454,6 +454,7 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
   const regionIds = new Set<RegionId>(['kanto']);
   let pending: number | undefined;
   let alive = true;
+  let announcedFor: string | undefined; // the target the announcement was written for
 
   function pickPref(s: AppState): string {
     if (s.selectedPref !== undefined && data.prefNames.has(s.selectedPref)) return s.selectedPref;
@@ -654,7 +655,14 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
           sourceNames,
         }),
       );
-      if (cause === 'form') setText(announceEl, announceAllocation({ targetName: targetName(form), percent: form.percent, sourceNames }));
+      if (cause === 'form') {
+        setText(announceEl, announceAllocation({ targetName: targetName(form), percent: form.percent, sourceNames }));
+        announcedFor = targetValue;
+      } else if (announcedFor !== targetValue) {
+        // The map retargeted the form (only the target can move without the visitor touching the form): the sentence
+        // is about another target. Emptying a live region is not announced; it only stops a stale sentence being read.
+        setText(announceEl, '');
+      }
       if (mapActive) pushOverlay(c, s, form);
       const hadFocus = focusInDetail();
       detailEl.replaceChildren(detailElement(c.summary, rowOpts));

@@ -741,6 +741,52 @@ describe('mountAllocation', () => {
       expect(el.querySelector('#alloc-summary')!.textContent).toBe('');
     });
 
+    test('when the map retargets the form, the old announcement is emptied (not spoken) so it never describes another form', async () => {
+      const { el, q, store, slide, text } = mount();
+      await slide(20);
+      expect(text('#alloc-announce')).toContain('和歌山県の人口を20%');
+      const obs = watchLive(el);
+      store.set({ selectedPref: '13' }); // the visitor clicks Tokyo on the map; the form follows
+      expect(q<HTMLSelectElement>('#alloc-target').value).toBe('pref:13');
+      const records = obs.drain();
+      expect(records).toHaveLength(1);
+      expect(q('#alloc-announce').contains(records[0]!.target) || records[0]!.target === q('#alloc-announce')).toBe(true);
+      expect(text('#alloc-announce')).toBe('');
+      expect(text('#alloc-summary')).toMatch(/^2100年に東京都の人口を20%/); // the visible sentence did follow
+      store.set({ year: 2060 });
+      store.set({ selectedPref: '27' });
+      expect(obs.drain()).toHaveLength(0); // nothing left to empty, nothing to say
+      obs.stop();
+    });
+
+    test('a retarget that leaves the form as it was keeps the announcement, and one before any form change writes nothing', async () => {
+      const { el, store, text, slide } = mount();
+      const obs = watchLive(el);
+      store.set({ selectedPref: '13' }); // nothing was announced yet
+      expect(obs.drain()).toHaveLength(0);
+      await slide(25);
+      obs.drain();
+      const said = text('#alloc-announce');
+      store.set({ selectedArea: '13101' }); // a town is offered; the target is still Tokyo
+      expect(text('#alloc-announce')).toBe(said);
+      expect(obs.drain()).toHaveLength(0);
+      obs.stop();
+    });
+
+    test('while the allocation is on the map the target does not move, so the announcement stays', async () => {
+      const { el, q, store, slide, text } = mount();
+      await slide(20);
+      q<HTMLButtonElement>('#alloc-map-toggle').click();
+      const said = text('#alloc-announce');
+      const obs = watchLive(el, q('#alloc-announce'));
+      store.set({ selectedPref: '13' });
+      expect(q<HTMLSelectElement>('#alloc-target').value).toBe('pref:30');
+      expect(text('#alloc-announce')).toBe(said);
+      expect(obs.drain()).toHaveLength(0);
+      obs.stop();
+      expect(el.contains(q('#alloc-announce'))).toBe(true);
+    });
+
     test('announceAllocation: what the form asks, with no year and none of the words the app never uses', () => {
       const base = { targetName: '和歌山県', percent: 10, sourceNames: undefined };
       expect(announceAllocation(base)).toBe('割り振りを更新しました。和歌山県の人口を10%増やす場合です。人口を動かす元は、全国のほかの地域です。');
