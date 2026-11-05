@@ -161,6 +161,26 @@ describe('mountTownPanel: updates only what changed', () => {
     expect(q('.chart-marker-label')!.textContent).toBe('2075年');
   });
 
+  test('the chart prints a year once: on an axis year (2100年) the marker label gives way to the axis label', () => {
+    const { q, store, section } = setup({ selectedArea: '30206', year: 2075 });
+    const printed = (label: string) => [...section.querySelectorAll('svg.series-svg text')].filter((t) => t.textContent === label).length;
+    expect(printed('2075年')).toBe(1); // not an axis year: the marker label says it
+    expect(printed('2100年')).toBe(1); // the axis label
+    for (const year of [2100, 2020, 2060, 2040, 2080]) {
+      store.set({ year });
+      expect(printed(`${year}年`), `${year}年 printed`).toBe(1);
+      expect(q('.chart-marker-label')!.textContent).toBe('');
+    }
+    expect(q('.chart-marker')!.getAttribute('x1')).toBe(q('.dot-marker')!.getAttribute('cx')); // the marker itself still follows the year
+    store.set({ year: 2095 });
+    expect(printed('2095年')).toBe(1);
+    expect(printed('2100年')).toBe(1);
+    expect(q('.chart-marker-label')!.textContent).toBe('2095年');
+    store.set({ year: 2100 });
+    store.set({ year: 2085 });
+    expect(q('.chart-marker-label')!.textContent).toBe('2085年');
+  });
+
   test('the data table carries a quiet note that the app recomputes the official method, under the table, without changing a number', () => {
     const { q, section } = setup({ selectedArea: '30206', year: 2050 });
     const note = q('.series-figure .chart-table .chart-table-note')!;

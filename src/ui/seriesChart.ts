@@ -334,7 +334,8 @@ export function mountSeriesChart(host: HTMLElement): SeriesChartView {
     markerEls.dot.setAttribute('cy', String(plot.y(m.value)));
     markerEls.dot.setAttribute('class', `dot dot-marker ${m.line === 'official' ? 'dot-official' : 'dot-estimate'}`);
     markerEls.label.setAttribute('x', String(Math.min(Math.max(mx, 30), W - 30)));
-    markerEls.label.textContent = `${m.year}年`;
+    // The axis already prints this year when it is a tick (2100年 under the marker): say it once.
+    markerEls.label.textContent = X_TICKS.includes(m.year) ? '' : `${m.year}年`;
   }
 
   function renderTable(points: SeriesPoints, place: string): void {
