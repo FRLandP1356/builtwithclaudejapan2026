@@ -300,6 +300,67 @@ describe('cors_blocks_other_origin', () => {
   });
 });
 
+// ----------------------------------------------------------- unexpected failures
+
+describe('an unexpected failure still gets the Worker\'s own response', () => {
+  function abortedUpload(): Request {
+    // A client that goes away mid-upload: reading the body rejects.
+    const body = new ReadableStream({
+      start(controller) {
+        controller.error(new Error('client went away: detail-that-must-not-be-logged'));
+      },
+    });
+    return new Request('https://api.example.test/api/chat', {
+      method: 'POST',
+      headers: { origin: ORIGIN, 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.7' },
+      body,
+      duplex: 'half',
+    } as RequestInit);
+  }
+
+  it('answers 500 {error:internal_error} with nosniff when the body read rejects, and charges nothing', async () => {
+    const env = makeEnv();
+    const fetchFn = mockFetch();
+    const res = await handleRequest(abortedUpload(), env, fetchFn);
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'internal_error' });
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(res.headers.get('content-type')).toContain('application/json');
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(env.limiter.calls).toHaveLength(0);
+    expect(env.kv.gets).toHaveLength(0);
+    expect(env.kv.puts).toHaveLength(0);
+  });
+
+  it('logs one detail-free line: not the error text, not the address', async () => {
+    await handleRequest(abortedUpload(), makeEnv(), mockFetch());
+    const logged = [console.error, console.warn, console.log].flatMap((fn) => vi.mocked(fn).mock.calls);
+    expect(logged).toEqual([['unexpected error']]);
+  });
+
+  it('also covers a bug anywhere else in the routing (here: reading the config throws)', async () => {
+    const env = makeEnv();
+    Object.defineProperty(env, 'ALLOWED_ORIGINS', {
+      get() {
+        throw new Error('config exploded: detail-that-must-not-be-logged');
+      },
+    });
+    const res = await handleRequest(chatRequest(validBody()), env, mockFetch());
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'internal_error' });
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain('detail-that-must-not-be-logged');
+  });
+
+  it('is what the exported Worker handler does too', async () => {
+    const { default: worker } = await import('./index');
+    const res = await worker.fetch(abortedUpload() as never, makeEnv());
+    expect(res.status).toBe(500);
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+  });
+});
+
 // ---------------------------------------------------------------- hardening
 
 describe('x-content-type-options: nosniff on every response the Worker builds', () => {
@@ -973,6 +1034,18 @@ describe('upstream call', () => {
     const res = await handleRequest(chatRequest(validBody()), makeEnv(), fetchFn);
     expect(res.status).toBe(200);
     expect(fetchFn.mock.calls[0]![1]?.redirect).toBe('manual');
+  });
+
+  it('gives the upstream call a 60 s timeout, no longer than 90 s (a hung upstream must not hold a request for minutes)', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    await handleRequest(chatRequest(validBody()), makeEnv(), mockFetch());
+    expect(timeout).toHaveBeenCalledTimes(1);
+    expect(timeout).toHaveBeenCalledWith(60_000);
+    expect(timeout.mock.calls[0]![0]).toBeLessThanOrEqual(90_000);
+    // ...and that signal is the one fetch gets.
+    const fetchFn = mockFetch();
+    await handleRequest(chatRequest(validBody()), makeEnv(), fetchFn);
+    expect(fetchFn.mock.calls[0]![1]?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('does not follow an upstream redirect: a 3xx is a generic 502, the location is not relayed, one fetch only', async () => {

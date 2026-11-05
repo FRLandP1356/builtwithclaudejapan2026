@@ -47,6 +47,8 @@ const THINKING = {
 const ANTHROPIC_BETA = 'thinking-binding-controls-2026-08-01';
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
+// Kept at or below 90 s on purpose: a 3,000-token answer fits well inside it, and a hung upstream must not hold a
+// Worker request for minutes. worker/index.test.ts pins the value.
 const UPSTREAM_TIMEOUT_MS = 60_000;
 
 const CHAT_PATH = '/api/chat';
@@ -176,11 +178,25 @@ async function callAnthropic(
   return jsonResponse(text, upstream.status, corsOrigin);
 }
 
+/**
+ * Answers every request with a response the Worker built itself. Anything that escapes the routing below (for example
+ * a client that aborts mid-upload, which rejects the body read) would otherwise get the runtime's own error page,
+ * without `nosniff` or the uniform JSON error. Nothing about the failure is logged: it could carry request details.
+ */
 export async function handleRequest(
   request: Request,
   env: Env,
   fetchFn: typeof fetch = fetch,
 ): Promise<Response> {
+  try {
+    return await routeRequest(request, env, fetchFn);
+  } catch {
+    console.error('unexpected error');
+    return jsonResponse({ error: 'internal_error' }, 500, null);
+  }
+}
+
+async function routeRequest(request: Request, env: Env, fetchFn: typeof fetch): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname !== CHAT_PATH) {
     return jsonResponse({ error: 'not_found' }, 404, null);
