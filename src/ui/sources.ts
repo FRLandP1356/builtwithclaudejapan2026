@@ -53,7 +53,7 @@ export interface SourceLine {
 export const SOURCES: readonly SourceLine[] = [
   {
     label: '人口',
-    text: '国立社会保障・人口問題研究所「日本の地域別将来推計人口（令和5年推計）」を加工して作成（公共データ利用規約 第1.0版（PDL1.0））',
+    text: '国立社会保障・人口問題研究所「日本の地域別将来推計人口（令和5年推計）」を加工して作成（公共データ利用規約 第1.0版（PDL1.0））。社人研がこのアプリの内容を保証するものではありません',
     url: 'https://www.ipss.go.jp/pp-shicyoson/j/shicyoson23/t-page.asp',
     retrieved: '2026年11月5日',
   },

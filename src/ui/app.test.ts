@@ -124,6 +124,14 @@ describe('footer attribution', () => {
     });
   });
 
+  test('the 人口 line says the institute does not vouch for the app, as docs/sources.md and the README do', async () => {
+    const { root } = await mount();
+    const [population] = [...root.querySelectorAll('.app-foot dl dd')];
+    expect(population.querySelector('.src-text')!.textContent).toBe(SOURCES[0].text);
+    expect(population.querySelector('.src-text')!.textContent).toContain('を加工して作成（公共データ利用規約 第1.0版（PDL1.0））。社人研がこのアプリの内容を保証するものではありません');
+    expect([...population.querySelectorAll('.src-text .keep')].at(-1)!.textContent).toBe('社人研がこのアプリの内容を保証するものではありません'); // its own phrase after the 。
+  });
+
   test('the facility line says 加工して作成 and the boundary line keeps the approval number, last', async () => {
     const { root } = await mount();
     const [, boundary, facility] = [...root.querySelectorAll('.app-foot dl dd')];
@@ -142,6 +150,11 @@ describe('footer attribution', () => {
     box.innerHTML = html;
     expect(box.querySelectorAll('i, b')).toHaveLength(0);
     expect(box.querySelector('a')!.getAttribute('href')).toBe('https://e.test/?a=1&b="2"');
+    expect(box.querySelector('a')!.textContent).toBe('https://e.test/?a=1&b="2"'); // the visible URL is escaped too
+    const hostile = document.createElement('dl');
+    hostile.innerHTML = sourceHtml({ label: 'l', text: 't', url: 'https://e.test/<i>x</i>', retrieved: '2026年1月1日' });
+    expect(hostile.querySelectorAll('i')).toHaveLength(0);
+    expect(hostile.querySelector('a')!.textContent).toBe('https://e.test/<i>x</i>');
     expect(box.querySelector('.src-text')!.textContent).toBe('x & "y"');
     expect(box.querySelector('.src-approval')!.textContent).toBe('<i>');
   });

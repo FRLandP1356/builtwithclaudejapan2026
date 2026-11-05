@@ -26,7 +26,7 @@ describe('SOURCES: the footer attributions', () => {
     expect(SOURCES).toEqual([
       {
         label: '人口',
-        text: '国立社会保障・人口問題研究所「日本の地域別将来推計人口（令和5年推計）」を加工して作成（公共データ利用規約 第1.0版（PDL1.0））',
+        text: '国立社会保障・人口問題研究所「日本の地域別将来推計人口（令和5年推計）」を加工して作成（公共データ利用規約 第1.0版（PDL1.0））。社人研がこのアプリの内容を保証するものではありません',
         url: 'https://www.ipss.go.jp/pp-shicyoson/j/shicyoson23/t-page.asp',
         retrieved: '2026年11月5日',
       },
@@ -53,5 +53,7 @@ describe('SOURCES: the footer attributions', () => {
       expect(s.url).toMatch(/^https:\/\/[a-z.]+\/\S+$/);
     }
     expect(SOURCES[2].text).toContain('（2009〜2012年の統計）');
+    // docs/sources.md ("画面と README の出典の書き方"): the IPSS line says the institute does not vouch for this app
+    expect(SOURCES[0].text.endsWith('。社人研がこのアプリの内容を保証するものではありません')).toBe(true);
   });
 });
