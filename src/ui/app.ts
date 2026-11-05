@@ -16,6 +16,7 @@ import { breadcrumbs, buildSearchIndex, goUp, levelOf, pickArea, pickPref, prefO
 import { mountSearch } from './search';
 import { APP_LEAD, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, SOURCES } from './sources';
 import { createAppStore, DEFAULT_YEAR, type AppState, type PanelContext, type Store } from './state';
+import { mountTownPanel } from './townPanel';
 import { mountYearSlider } from './yearSlider';
 
 export { DEFAULT_YEAR };
@@ -50,12 +51,14 @@ const PANEL_TITLES: ReadonlyArray<{ key: keyof PanelSlots; id: string; title: st
 // Panel registry. Tasks 9, 10 and 13 each replace exactly ONE line below with their own mount call, for example
 // `mountTownPanel(slots.town, ctx);`. Nothing else in this file needs to change for a panel.
 // -----------------------------------------------------------------------------------------------------------------
-function mountPanels(ctx: PanelContext, slots: PanelSlots): void {
+function mountPanels(ctx: PanelContext, slots: PanelSlots): Array<() => void> {
   void ctx;
-  mountPlaceholder(slots.town, '町を選ぶと、ここに詳しい数字が出ます。'); // Task 9: mountTownPanel(slots.town, ctx)
-  mountControls(slots.controls, ctx);
-  mountAllocation(slots.allocation, ctx);
-  mountPlaceholder(slots.ai, '日本語で質問すると、計算の結果をもとに答えます。'); // Task 13: mountAiPanel(slots.ai, ctx)
+  const teardowns: Array<() => void> = [];
+  teardowns.push(mountTownPanel(slots.town, ctx));
+  teardowns.push(mountControls(slots.controls, ctx));
+  teardowns.push(mountAllocation(slots.allocation, ctx));
+  mountPlaceholder(slots.ai, '日本語で質問すると、計算の結果をもとに答えます。'); // Task 13: teardowns.push(mountAIPanel(slots.ai, ctx))
+  return teardowns;
 }
 // -----------------------------------------------------------------------------------------------------------------
 
@@ -387,7 +390,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     allocation: q<HTMLElement>('#panel-allocation'),
     ai: q<HTMLElement>('#panel-ai'),
   };
-  mountPanels(ctx, slots);
+  const panelTeardowns = mountPanels(ctx, slots);
 
   const unsubscribe = store.subscribe((s, prev) => {
     if (s.series !== prev.series) totals = deriveTotals(s.series, data.groups);
@@ -415,6 +418,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     ctx,
     destroy() {
       unsubscribe();
+      for (const t of panelTeardowns) t();
       slider.destroy();
       search.destroy();
       national.destroy();

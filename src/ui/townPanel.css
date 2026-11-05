@@ -1,0 +1,238 @@
+/* Town detail panel (Task 9). Tokens only: every colour, size and space comes from theme.css (see DESIGN.md). */
+
+.town-head {
+  margin-bottom: var(--sp-2);
+}
+.town-name {
+  font-size: var(--fs-26);
+}
+.town-sub {
+  color: var(--ink-2);
+  font-size: var(--fs-14);
+}
+.town-hint {
+  margin-top: var(--sp-3);
+}
+/* Always two by two: four tiles never wrap three and one in the wider column. */
+.town .kpi-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.town .kpi-note .badge-official,
+.town .kpi-note .badge-estimate {
+  vertical-align: baseline;
+}
+
+/* Charts: inline SVG, text in ink (never in a series colour), hairline solid grid. */
+.chart-figure {
+  margin: 0;
+}
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 560px;
+  overflow: visible;
+}
+.chart text {
+  font-family: var(--font-body);
+  font-size: 12px;
+  fill: var(--ink-2);
+}
+.chart .chart-unit {
+  fill: var(--muted);
+}
+.chart .chart-caption {
+  font-weight: 600;
+}
+.chart .chart-end,
+.chart .chart-marker-label {
+  fill: var(--ink);
+  font-weight: 600;
+  /* a paper-coloured halo keeps the value readable where a line or the marker passes behind it */
+  stroke: var(--paper);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  paint-order: stroke;
+}
+.chart .chart-end.end-baseline {
+  fill: var(--muted);
+  font-weight: 400;
+}
+.chart .chart-grid {
+  stroke: var(--grid);
+  stroke-width: 1;
+}
+.chart .chart-border {
+  stroke: var(--line-2);
+  stroke-width: 1;
+}
+.chart .chart-marker {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.chart .line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.chart .line-official {
+  stroke: var(--series-official);
+}
+.chart .line-estimate {
+  stroke: var(--series-estimate);
+  stroke-dasharray: 7 5;
+}
+.chart .line-baseline {
+  stroke: var(--series-reference);
+  stroke-dasharray: 0.1 5;
+}
+.chart .dot {
+  stroke: var(--paper);
+  stroke-width: 4;
+  paint-order: stroke;
+}
+.chart .dot-official {
+  fill: var(--series-official);
+}
+.chart .dot-estimate {
+  fill: var(--series-estimate);
+}
+.chart .dot-baseline {
+  fill: var(--series-reference);
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-13);
+  color: var(--ink-2);
+}
+.chart-legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.chart-key {
+  display: inline-block;
+  width: 24px;
+  height: 0;
+  border-top: 2px solid var(--series-official);
+}
+.chart-key.key-estimate {
+  border-top: 2px dashed var(--series-estimate);
+}
+.chart-key.key-baseline {
+  border-top: 2px dotted var(--series-reference);
+}
+.chart-summary {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-14);
+  color: var(--ink-2);
+  text-wrap: balance;
+}
+.keep {
+  display: inline-block;
+  max-width: 100%;
+}
+.pyramid-note {
+  margin-top: var(--sp-2);
+}
+
+/* Pyramid bars: males and females by token, also told apart by side and by the labels 男 and 女. */
+.chart .pyr-m {
+  fill: var(--pyramid-m);
+}
+.chart .pyr-f {
+  fill: var(--pyramid-f);
+}
+.chart .pyr-hit {
+  fill: transparent;
+}
+
+/* Tables behind a disclosure, for anyone who cannot read the picture. */
+.chart-table,
+.facility-others {
+  margin-top: var(--sp-3);
+}
+.chart-table > summary,
+.facility-others > summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--touch);
+  color: var(--accent);
+  font-size: var(--fs-15);
+  cursor: pointer;
+}
+/* The disclosure mark is drawn with borders (no arrow characters); the native marker is switched off in every engine. */
+.chart-table > summary,
+.facility-others > summary {
+  list-style: none;
+}
+.chart-table > summary::-webkit-details-marker,
+.facility-others > summary::-webkit-details-marker {
+  display: none;
+}
+.chart-table > summary::before,
+.facility-others > summary::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: var(--sp-2);
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+.chart-table[open] > summary::before,
+.facility-others[open] > summary::before {
+  transform: rotate(45deg);
+}
+.chart-table .table-wrap,
+.facility-others .table-wrap {
+  margin-top: var(--sp-2);
+}
+
+/* Facilities */
+.facility-summary {
+  margin: var(--sp-1) 0 var(--sp-3);
+  font-family: var(--font-display);
+  font-size: var(--fs-20);
+  line-height: var(--lh-tight);
+  text-wrap: balance;
+}
+.facility-notices {
+  display: grid;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.facility-notices:empty {
+  display: none;
+}
+.facility-group-title {
+  margin: var(--sp-4) 0 var(--sp-1);
+  font-family: var(--font-body);
+  font-size: var(--fs-15);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.facility-table tbody th {
+  font-weight: 400;
+  text-align: left;
+}
+.facility-table td {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+.facility-name,
+.facility-guide {
+  display: block;
+}
+.facility-note {
+  margin-top: var(--sp-3);
+}
