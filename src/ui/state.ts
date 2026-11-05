@@ -56,7 +56,8 @@ export interface AppState {
 
 /**
  * `state` is the newest state; `prev` is the state this listener was last given. They differ by one patch, or by
- * two when a listener that ran earlier made its own `set` during the notification (then both arrive as one change).
+ * several when a listener that ran earlier made its own `set` during the notification (then they arrive as one change;
+ * if they cancel out, this listener is not called). A listener unsubscribed during a notification is not called again.
  */
 export type Listener = (state: AppState, prev: AppState) => void;
 
@@ -128,6 +129,7 @@ export function createStore(initial: AppState, options: StoreOptions = {}): Stor
         if (last === undefined || last === state) continue; // unsubscribed meanwhile, or already up to date
         const now = state;
         seen.set(fn, now);
+        if (!changed(last, now)) continue; // nested sets that cancel out: nothing changed for this listener
         try {
           fn(now, last);
         } catch (e) {

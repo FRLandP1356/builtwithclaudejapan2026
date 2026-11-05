@@ -109,6 +109,23 @@ describe('createStore', () => {
     expect(store.get()).toMatchObject({ year: 2100, selectedPref: '2100' });
   });
 
+  test('nested sets that cancel out are not delivered to a listener that had not seen them', () => {
+    // A selects 13; an earlier listener puts it back at once. B, last given the state before, would get a "change"
+    // with nothing changed.
+    const store = createStore(initial());
+    store.subscribe((s) => {
+      if (s.selectedPref === '13') store.set({ selectedPref: undefined });
+    });
+    const b = vi.fn();
+    store.subscribe(b);
+    expect(store.set({ selectedPref: '13' })).toBe(true);
+    expect(store.get().selectedPref).toBeUndefined();
+    expect(b).not.toHaveBeenCalled();
+    store.set({ year: 2100 }); // and B still hears the next real change, from the right previous state
+    expect(b).toHaveBeenCalledTimes(1);
+    expect(b.mock.calls[0]![1].year).toBe(2050);
+  });
+
   test('a subscriber that unsubscribes another during a notification stops it at once', () => {
     const store = createStore(initial());
     const late = vi.fn();
