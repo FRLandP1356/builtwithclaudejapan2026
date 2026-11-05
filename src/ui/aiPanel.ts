@@ -267,6 +267,15 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     (origin && origin.isConnected ? origin : textarea).focus({ preventScroll: true });
   }
 
+  /** The control that started the question being asked (the sample button, the submit button or the text field). */
+  let asker: HTMLElement | null = null;
+
+  /** Whether any part of the element is inside the window (an element with no box, as in a test DOM, counts as on screen). */
+  function isOnScreen(el: Element): boolean {
+    const box = el.getBoundingClientRect();
+    return box.bottom >= 0 && box.top <= window.innerHeight;
+  }
+
   /**
    * On a phone the answer area is hundreds of pixels below the sample question or the form, so the first tap would
    * look like nothing happened. Scroll just enough to show `target` ('nearest': nothing moves if it is in view), and
@@ -274,6 +283,10 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
    */
   function bringIntoView(target: Element): void {
     if (typeof target.scrollIntoView !== 'function') return;
+    // Only while the visitor is still where they asked: the control they pressed, the waiting line or the target itself
+    // is on screen. One who scrolled away while waiting (to look at the map, say) is not pulled back.
+    const anchors = [asker, statusBox, target];
+    if (!anchors.some((el) => el !== null && isOnScreen(el))) return;
     const calm = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     target.scrollIntoView({ block: 'nearest', behavior: calm ? 'auto' : 'smooth' });
   }
@@ -575,6 +588,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     }
 
     setBusy(true);
+    asker = trigger;
     const abort = new AbortController();
     controller = abort;
     let result: AskResult | undefined;

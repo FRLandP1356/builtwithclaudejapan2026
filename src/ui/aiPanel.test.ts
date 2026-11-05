@@ -912,6 +912,89 @@ describe('the answer is brought into view', () => {
     await answersCount(b, 1); // no throw, and the answer is there
   });
 
+  describe('only while the visitor is still where they asked', () => {
+    /** A test DOM has no layout: say which elements are inside the window (top 100) and which are far above it. */
+    function visibleOnly(isVisible: (el: Element) => boolean, elsewhere: 'above' | 'below' = 'above'): void {
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+        const top = isVisible(this) ? 100 : elsewhere === 'above' ? -5000 : 5000;
+        return { top, bottom: top + 100, left: 0, right: 390, width: 390, height: 100, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+      });
+    }
+    const isStatus = (el: Element) => el.classList.contains('ai-status');
+    const isCard = (el: Element) => el.classList.contains('ai-answer');
+
+    it('a visitor who scrolled away before the answer came is not pulled back (nothing is scrolled, not even the waiting line)', async () => {
+      visibleOnly(() => false);
+      const m = mount({ fetchFn: script(textResponse('はい。')).fetchFn, cache: allPending() });
+      m.samples()[0]!.click();
+      await answersCount(m, 1);
+      expect(scrolled).not.toHaveBeenCalled();
+      expect(m.answers()).toHaveLength(1); // the answer is there, just not scrolled to
+    });
+
+    it('the same when the visitor is above the answer area and everything is below the window', async () => {
+      visibleOnly(() => false, 'below');
+      const m = mount({ fetchFn: script(textResponse('はい。')).fetchFn, cache: allPending() });
+      m.samples()[0]!.click();
+      await answersCount(m, 1);
+      expect(scrolled).not.toHaveBeenCalled();
+    });
+
+    it('scrolled away while waiting: the waiting line was scrolled to when the question started, the card is not', async () => {
+      let release: (response: Response) => void = () => undefined;
+      const gate = new Promise<Response>((resolve) => (release = resolve));
+      const m = mount({ fetchFn: script(() => gate).fetchFn, cache: allPending() });
+      await settle();
+      const button = m.samples()[1]!;
+      visibleOnly((el) => el === button || isStatus(el)); // the visitor is at the question
+      button.click();
+      await vi.waitFor(() => expect(m.cancelBtn().hidden).toBe(false));
+      expect(kinds()).toEqual(['ai-status']);
+      visibleOnly(() => false); // and goes up to look at the map while the answer is awaited
+      release(textResponse('はい。'));
+      await answersCount(m, 1);
+      expect(kinds()).toEqual(['ai-status']); // the card was not scrolled to
+    });
+
+    it.each([
+      ['the control that was pressed', (button: Element) => (el: Element) => el === button],
+      ['the waiting line', () => isStatus],
+      ['the card itself', () => isCard],
+    ])('is on screen: %s is enough to scroll to the card', async (_name, makeVisible) => {
+      const m = mount({ fetchFn: script(textResponse('はい。')).fetchFn, cache: allPending() });
+      await settle();
+      const button = m.samples()[0]!;
+      visibleOnly(makeVisible(button));
+      button.click();
+      await answersCount(m, 1);
+      expect(calls().at(-1)!.target).toBe(m.answers()[0]);
+    });
+
+    it('a typed question counts the submit button as where the visitor asked', async () => {
+      const m = mount({ fetchFn: script(textResponse('はい。')).fetchFn, cache: allPending() });
+      await settle();
+      visibleOnly((el) => el === m.submit);
+      m.typeAndSend('質問');
+      await answersCount(m, 1);
+      expect(calls().at(-1)!.target).toBe(m.answers()[0]);
+      scrolled.mockClear();
+      visibleOnly(() => false);
+      m.typeAndSend('もう一つ');
+      await vi.waitFor(() => expect(m.answers()[0]!.querySelector('.ai-question')!.textContent).toContain('もう一つ'));
+      expect(scrolled).not.toHaveBeenCalled();
+    });
+
+    it('the too-long-conversation message follows the same rule', async () => {
+      visibleOnly(() => false);
+      const three = [toolUse('t1', 'find_area', { query: 'x' }), toolUse('t2', 'find_area', { query: 'x' }), toolUse('t3', 'find_area', { query: 'x' })];
+      const m = mount({ fetchFn: script(toolUseResponse(...three)).fetchFn, cache: allPending() }, makeContext(longNameData()));
+      m.typeAndSend('x');
+      await answersCount(m, 1);
+      expect(document.activeElement).toBe(m.newBtn());
+      expect(scrolled).not.toHaveBeenCalled();
+    });
+  });
+
   it('focus goes back to the button that was pressed, without scrolling, and before the answer is scrolled to', async () => {
     const focusCalls = vi.spyOn(HTMLElement.prototype, 'focus');
     const m = mount({ fetchFn: script(textResponse('はい。')).fetchFn, cache: allPending() });
