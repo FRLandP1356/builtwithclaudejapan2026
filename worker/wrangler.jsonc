@@ -20,9 +20,8 @@
   "kv_namespaces": [
     {
       "binding": "RATE_KV",
-      // PLACEHOLDER. The real namespace id is created at deploy time (after the owner approves
-      // publishing); this file is never deployed with the placeholder.
-      "id": "REPLACE_WITH_REAL_KV_NAMESPACE_ID"
+      // The namespace "town-2100-rate" in the owner's Cloudflare account (created 2026-11-06).
+      "id": "67f232b83c354aa79f65397665815b6e"
     }
   ],
   // Burst limiter: at most 20 calls per 60 seconds per visitor (the key is an HMAC of the client address, set in
@@ -33,7 +32,7 @@
   "ratelimits": [
     {
       "name": "IP_LIMITER",
-      "namespace_id": "21001",
+      "namespace_id": "259554",
       "simple": {
         "limit": 20,
         "period": 60
@@ -43,8 +42,8 @@
   "vars": {
     // Comma-separated page origins allowed to call the Worker (exact match). This keeps other websites' browsers
     // out; it is NOT authentication (curl can send any Origin). The Anthropic workspace spend limit is the hard stop.
-    // Replace with the public page's origin at deploy time. Local development only for now.
-    "ALLOWED_ORIGINS": "http://localhost:5173"
+    // The public page (Cloudflare Pages project japan2100); no trailing slash.
+    "ALLOWED_ORIGINS": "https://japan2100.pages.dev"
     // Optional overrides; defaults are 400 a day in total and 60 a day per IP. They count upstream calls, and one
     // question can use up to 9. Set DAILY_TOTAL_LIMIT to "0" to switch the AI off (for example after the event).
     // "DAILY_TOTAL_LIMIT": "400",
