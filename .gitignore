@@ -5,6 +5,19 @@ data/raw/
 .claude/
 .wrangler/
 .dev.vars
+.dev.vars.*
+!.dev.vars.example
 *.log
 .DS_Store
 __pycache__/
+coverage/
+.staging/
+
+# Guards: never commit secrets, source workbooks/archives or assistant config
+.env
+.env.*
+!.env.example
+CLAUDE.md
+*.xlsx
+*.zip
+worker/.dev.vars

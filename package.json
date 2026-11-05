@@ -1,0 +1,31 @@
+{
+  "name": "town-2100",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Japan's population to 2100, by municipality, on a map (hackathon prototype)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p worker/tsconfig.json",
+    "test": "vitest run",
+    "test:py": "python3 -m unittest discover -s pipeline/tests -t ."
+  },
+  "dependencies": {
+    "d3": "^7.9.2",
+    "topojson-client": "^3.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261104.1",
+    "@types/d3": "^7.4.3",
+    "@types/geojson": "^7946.0.16",
+    "@types/node": "^26.6.6",
+    "@types/topojson-client": "^3.1.5",
+    "jsdom": "^30.1.3",
+    "mapshaper": "^0.7.101",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.157.0"
+  }
+}

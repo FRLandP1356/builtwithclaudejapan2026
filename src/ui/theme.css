@@ -1,0 +1,530 @@
+/* 2100年の日本 — design tokens and shared components.
+   Decided once in Task 8 (Ruling 23); every panel (Tasks 9, 10, 13) builds from these. See src/ui/DESIGN.md.
+   Self-contained: system font stacks only, no web fonts, no CDN. */
+
+:root {
+  color-scheme: light;
+
+  /* Colour: paper, ink, one accent. Rust and blue belong to the map data only. */
+  --paper: #f6f5f0;
+  --paper-2: #edebe4;
+  --paper-3: #e3e0d7;
+  --ink: #1b2430;
+  --ink-2: #4a5563;
+  --muted: #5b6470;
+  --line: #d9d6cc;
+  --line-2: #b9b5a9;
+  --accent: #2b4c7e;
+  --accent-ink: #f6f5f0;
+  --accent-soft: #e4eaf3;
+
+  /* Map scale endpoints (src/map/colors.ts is the source of truth; these mirror it for tags and legends). */
+  --map-neutral: #d0c9c4;
+  --decline: #a43d2b;
+  --decline-deep: #721d14;
+  --decline-soft: #f2ddd6;
+  --growth: #376daf;
+  --growth-soft: #dde6f2;
+  --map-sea: var(--paper);
+  --map-border: var(--paper);
+  --map-coast: var(--line-2);
+
+  /* Chart series for later panels: official = ink solid, estimate = accent dashed, reference = warm grey dotted. */
+  --series-official: var(--ink);
+  --series-estimate: var(--accent);
+  --series-reference: #8a8378;
+  --pyramid-m: #2b4c7e; /* 7.9:1 on the paper */
+  --pyramid-f: #6085b9; /* 3.5:1 on the paper, 3.2:1 on paper-2; lightness L* 55 against the male bar's 32 */
+  --grid: var(--line);
+
+  /* Type: mincho for headings and large numbers, gothic for everything else. No monospace. */
+  --font-display: 'Hiragino Mincho ProN', 'Yu Mincho', YuMincho, 'Noto Serif JP', serif;
+  --font-body: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', YuGothic, 'Noto Sans JP', sans-serif;
+  --fs-12: 0.75rem;
+  --fs-13: 0.8125rem;
+  --fs-14: 0.875rem;
+  --fs-15: 0.9375rem;
+  --fs-16: 1rem;
+  --fs-18: 1.125rem;
+  --fs-20: 1.25rem;
+  --fs-22: 1.375rem;
+  --fs-26: 1.625rem;
+  --fs-28: 1.75rem;
+  --fs-32: 2rem;
+  --fs-44: 2.75rem;
+  --fs-56: 3.5rem;
+  --lh-body: 1.7;
+  --lh-tight: 1.3;
+
+  /* Space (multiples of 4/8), radii, one shadow, one focus ring, touch size. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+  --radius: 4px;
+  --radius-lg: 8px;
+  --shadow: 0 1px 2px rgba(27, 36, 48, 0.08), 0 4px 12px rgba(27, 36, 48, 0.06);
+  --focus-ring: 2px solid var(--accent);
+  --focus-offset: 2px;
+  --touch: 44px;
+  --page: 1280px;
+}
+
+/* Base */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-16);
+  line-height: var(--lh-body);
+  font-feature-settings: 'palt';
+  line-break: strict;
+  overflow-wrap: anywhere;
+}
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  margin: 0;
+  text-wrap: balance;
+}
+p,
+dl,
+dd,
+figure {
+  margin: 0;
+}
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+a {
+  color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--radius);
+}
+.num,
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Buttons: one primary (accent fill), one default (outline), one quiet (text). Height 44px for touch. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: var(--touch);
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: var(--fs-15);
+  line-height: 1.2;
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn:hover {
+  background: var(--paper-2);
+}
+.btn:active {
+  background: var(--paper-3);
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.btn-primary:hover {
+  background: #244169;
+}
+.btn-quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-2);
+  padding: 0 var(--sp-2);
+}
+.btn-quiet:hover {
+  background: var(--paper-2);
+  color: var(--ink);
+}
+.btn-icon {
+  width: var(--touch);
+  padding: 0;
+}
+.btn[disabled],
+.btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+/* Panels: a rule and a mincho heading, no card chrome. */
+.panel {
+  padding: var(--sp-5) 0;
+  border-top: 1px solid var(--line);
+}
+.panel-title {
+  font-size: var(--fs-20);
+  margin-bottom: var(--sp-2);
+}
+.panel-title .badge-estimate {
+  vertical-align: 0.2em;
+  margin-left: var(--sp-2);
+}
+.panel-lead {
+  color: var(--ink-2);
+  font-size: var(--fs-14);
+  max-width: 44em;
+}
+.panel-empty {
+  color: var(--muted);
+  font-size: var(--fs-15);
+}
+.panel-section {
+  margin-top: var(--sp-5);
+}
+.panel-section-title {
+  font-family: var(--font-body);
+  font-size: var(--fs-15);
+  font-weight: 600;
+  color: var(--ink-2);
+  margin-bottom: var(--sp-2);
+}
+
+/* Key numbers: label above, mincho number, unit small. */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0 var(--sp-5);
+}
+.kpi {
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--line);
+}
+.kpi-label {
+  font-size: var(--fs-13);
+  color: var(--muted);
+}
+.kpi-value {
+  font-family: var(--font-display);
+  font-size: var(--fs-28);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.kpi-unit {
+  font-family: var(--font-body);
+  font-size: var(--fs-14);
+  margin-left: 2px;
+  color: var(--ink-2);
+}
+.kpi-note {
+  font-size: var(--fs-13);
+  color: var(--ink-2);
+}
+
+/* Tables: thead rule, right-aligned tabular numbers, horizontal scroll only inside .table-wrap. */
+.table-wrap {
+  overflow-x: auto;
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-14);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.data-table th,
+.data-table td {
+  padding: var(--sp-2) var(--sp-3);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+.data-table thead th {
+  font-size: var(--fs-13);
+  font-weight: 600;
+  color: var(--ink-2);
+  border-bottom: 2px solid var(--ink);
+  white-space: nowrap;
+}
+.data-table th.num,
+.data-table td.num {
+  text-align: right;
+  white-space: nowrap;
+}
+.data-table tfoot td {
+  font-weight: 600;
+  border-top: 2px solid var(--ink);
+  border-bottom: 0;
+}
+
+/* Tags for facility status. Rust means "below the population guide" everywhere in the app. */
+.tag {
+  display: inline-block;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  font-size: var(--fs-13);
+  line-height: 1.6;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.tag-ok {
+  background: var(--paper-2);
+  border-color: var(--paper-3);
+  color: var(--ink);
+}
+.tag-edge {
+  border-color: var(--ink-2);
+  color: var(--ink);
+}
+.tag-below {
+  background: var(--decline-soft);
+  border-color: var(--decline-soft);
+  color: var(--decline-deep);
+}
+
+/* The estimate marker: dashed, like the 2050-2100 part of the year track. */
+.badge-estimate {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px dashed var(--ink-2);
+  border-radius: 3px;
+  font-family: var(--font-body);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--ink-2);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+/* Marks figures and colours that come from a reallocation drawn on the map. */
+.badge-alloc {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--accent-soft);
+  border-radius: 3px;
+  background: var(--accent-soft);
+  font-family: var(--font-body);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--accent);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.badge-official {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  font-family: var(--font-body);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--ink-2);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* Notes and notices */
+.note {
+  font-size: var(--fs-13);
+  color: var(--muted);
+}
+.notice {
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--paper-2);
+  border-radius: var(--radius);
+  font-size: var(--fs-14);
+  color: var(--ink-2);
+}
+.notice-estimate {
+  background: transparent;
+  border: 1px dashed var(--line-2);
+}
+
+/* Form fields and sliders for the controls panel. */
+.field {
+  display: grid;
+  gap: 6px;
+  padding: var(--sp-3) 0;
+}
+.field-label {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: var(--fs-15);
+}
+.field-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+.field-help {
+  font-size: var(--fs-13);
+  color: var(--muted);
+}
+.input {
+  min-height: var(--touch);
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--paper);
+  font-size: var(--fs-16);
+}
+input[type='range'].range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: var(--touch);
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+input[type='range'].range::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--line-2);
+  border-radius: 2px;
+}
+input[type='range'].range::-moz-range-track {
+  height: 4px;
+  background: var(--line-2);
+  border-radius: 2px;
+}
+input[type='range'].range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 28px;
+  margin-top: -12px;
+  border-radius: 3px;
+  background: var(--accent);
+  border: 2px solid var(--paper);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+input[type='range'].range::-moz-range-thumb {
+  width: 14px;
+  height: 28px;
+  border-radius: 3px;
+  background: var(--accent);
+  border: 2px solid var(--paper);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+input[type='range'].range:focus-visible {
+  outline: none;
+}
+input[type='range'].range:focus-visible::-webkit-slider-thumb {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+input[type='range'].range:focus-visible::-moz-range-thumb {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+/* Segmented choice (e.g. hold / fade): buttons, the selected one filled. No overflow clipping: the focus ring
+   (2px outline, 2px offset) must stay visible on the first and last button; the corners are rounded per button. */
+.choice {
+  display: inline-flex;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+}
+.choice button {
+  min-height: 40px;
+  padding: 0 var(--sp-3);
+  border: 0;
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.choice button:first-child {
+  border-radius: calc(var(--radius) - 1px) 0 0 calc(var(--radius) - 1px);
+}
+.choice button:last-child {
+  border-radius: 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0;
+}
+.choice button:only-child {
+  border-radius: calc(var(--radius) - 1px);
+}
+.choice button + button {
+  border-left: 1px solid var(--line-2);
+}
+/* Vertical stacks (controlsPanel.css .choice-stack): round the top and bottom instead. */
+.choice-stack button:first-child {
+  border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+}
+.choice-stack button:last-child {
+  border-radius: 0 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px);
+}
+.choice button:focus-visible {
+  position: relative;
+  z-index: 1; /* the outline is drawn over the neighbouring button's border, not under it */
+}
+.choice button[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Skeletons */
+.skeleton {
+  background: var(--paper-2);
+  border-radius: var(--radius);
+  animation: skeleton-pulse 1.6s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}

@@ -1,0 +1,760 @@
+/* 2100年の日本 — application shell: header, map column, year slider, panel column, footer.
+   Mobile first (390px, one column). From 1024px the map column sticks on the left and panels scroll on the right. */
+
+.app {
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 0 var(--sp-4) var(--sp-8);
+}
+
+/* Header */
+.app-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-5);
+  padding: var(--sp-5) 0 var(--sp-4);
+  border-bottom: 1px solid var(--line-2);
+}
+.app-title {
+  font-size: var(--fs-28);
+  letter-spacing: 0.02em;
+}
+.app-lead {
+  color: var(--ink-2);
+  font-size: var(--fs-14);
+  max-width: 44em;
+}
+
+/* Two columns from 1024px */
+.app-body {
+  display: grid;
+  gap: var(--sp-5);
+}
+@media (min-width: 1024px) {
+  .app-body {
+    grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr);
+    gap: var(--sp-7);
+    align-items: start;
+  }
+  .map-column {
+    position: sticky;
+    top: var(--sp-4);
+  }
+  .app-title {
+    font-size: var(--fs-32);
+  }
+}
+
+/* Place bar: breadcrumb, back, search */
+.map-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  padding: var(--sp-3) 0;
+}
+.crumbs ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.crumbs li {
+  display: flex;
+  align-items: center;
+}
+.crumb-sep {
+  color: var(--line-2);
+  margin: 0 var(--sp-1);
+}
+.crumb {
+  min-height: 40px;
+  padding: 0 var(--sp-2);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--fs-15);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
+.crumb:hover {
+  background: var(--paper-2);
+}
+.crumb-current {
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-15);
+  font-weight: 600;
+  color: var(--ink);
+}
+.back {
+  min-height: 40px;
+}
+.back[hidden] {
+  display: none;
+}
+.search {
+  position: relative;
+  flex: 1 1 220px;
+  max-width: 360px;
+}
+.search-input {
+  width: 100%;
+  min-height: var(--touch);
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--paper);
+  font-size: var(--fs-16);
+  -webkit-appearance: none;
+  appearance: none;
+}
+.search-input::placeholder {
+  color: var(--muted);
+}
+.search-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  list-style: none;
+  margin: 0;
+  padding: var(--sp-1) 0;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--paper);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.search-list[hidden] {
+  display: none;
+}
+.search-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-3);
+  min-height: var(--touch);
+  padding: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+}
+.search-item[aria-selected='true'],
+.search-item:hover {
+  background: var(--accent-soft);
+}
+.search-item-where {
+  font-size: var(--fs-13);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.search-empty {
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--muted);
+  font-size: var(--fs-14);
+}
+
+/* Headline for the current place */
+.map-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-4);
+  padding: 0 0 var(--sp-2);
+  min-height: 2.2em;
+}
+.map-headline-name {
+  font-family: var(--font-display);
+  font-size: var(--fs-22);
+  font-weight: 600;
+  line-height: 1.3;
+}
+.map-headline-num {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  font-size: var(--fs-15);
+}
+.map-headline-num .head-keep {
+  white-space: nowrap;
+}
+.map-headline-num b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.map-headline .badge-estimate {
+  vertical-align: 0.1em;
+}
+
+/* Map */
+.map-stage {
+  position: relative;
+  background: var(--map-sea);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.map-host[hidden] {
+  display: none;
+}
+/* Skip link at the start of the map: hidden until it has focus, then a bordered button over the map's top left corner
+   (no layout shift). */
+.skip-link {
+  position: absolute;
+  top: var(--sp-2);
+  left: var(--sp-2);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  max-width: calc(100% - 2 * var(--sp-2));
+  min-height: var(--touch);
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--accent);
+  font-size: var(--fs-15);
+  line-height: 1.3;
+  text-decoration: none;
+}
+.skip-link:not(:focus) {
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.map-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(74vh, 820px);
+  touch-action: manipulation;
+}
+.area {
+  stroke: none;
+  cursor: pointer;
+  transition: fill 400ms ease;
+}
+.area:focus {
+  outline: none;
+}
+.mesh {
+  fill: none;
+  stroke: var(--map-border);
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.coast {
+  fill: none;
+  stroke: var(--map-coast);
+  stroke-width: 0.5;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.ring {
+  fill: none;
+  pointer-events: none;
+  stroke-linejoin: round;
+}
+.ring-halo {
+  stroke: var(--paper);
+  stroke-width: 5;
+}
+.ring-hover {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.ring-selected {
+  stroke: var(--ink);
+  stroke-width: 2.25;
+}
+.ring-focus {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+/* Allocation overlay: towns that rose to a facility guide (solid blue) and fell below it (dashed rust). These towns
+   usually sit in the most strongly coloured areas (the target of the allocation), whose fill has the same hue as the
+   ring, so their paper halo is wider: a clear paper band on both sides of the coloured line. */
+.ring-gain-halo,
+.ring-loss-halo {
+  stroke-width: 7.5;
+}
+.ring-gain {
+  stroke: var(--growth);
+  stroke-width: 2.25;
+}
+.ring-loss {
+  stroke: var(--decline-deep);
+  stroke-width: 2.25;
+  stroke-dasharray: 4 3;
+}
+.markers {
+  pointer-events: none;
+}
+.marker-dot {
+  fill: var(--ink);
+  stroke: var(--paper);
+  stroke-width: 1.5;
+}
+.marker rect {
+  fill: var(--paper);
+  stroke: var(--line-2);
+  stroke-width: 1;
+}
+.marker text {
+  font-family: var(--font-body);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  fill: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.marker-gain text {
+  fill: var(--growth);
+}
+.marker-loss text {
+  fill: var(--decline-deep);
+}
+
+/* Allocation bar under the headline: what is drawn, whether it is stale, and how to clear it. */
+.alloc-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+  padding: 0 0 var(--sp-2);
+  font-size: var(--fs-14);
+}
+.alloc-bar[hidden] {
+  display: none;
+}
+.alloc-bar-name {
+  font-weight: 600;
+}
+.alloc-bar-stale[hidden] {
+  display: none;
+}
+.alloc-bar .btn {
+  min-height: 40px; /* a quieter row than the 44px default, still a comfortable target */
+}
+.inset-bg {
+  fill: var(--map-sea);
+}
+.inset-frame {
+  fill: none;
+  stroke: var(--line-2);
+  stroke-width: 1;
+}
+.inset-label {
+  font-family: var(--font-body);
+  font-size: 12px;
+  fill: var(--muted);
+}
+.hit {
+  fill: transparent;
+  stroke: var(--line-2);
+  stroke-width: 0.75;
+  pointer-events: all;
+  cursor: pointer;
+}
+.map-tip {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  max-width: 260px;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-size: var(--fs-13);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.map-tip[hidden] {
+  display: none;
+}
+.map-tip b {
+  display: block;
+  font-size: var(--fs-14);
+  font-weight: 600;
+}
+.map-tip .badge-estimate {
+  border-color: var(--line-2);
+  color: var(--paper-2);
+  margin-top: 2px;
+}
+.map-tip .badge-alloc {
+  margin-top: 2px;
+}
+.map-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  background: rgba(246, 245, 240, 0.72);
+  color: var(--ink-2);
+  font-size: var(--fs-14);
+}
+.map-overlay[hidden] {
+  display: none;
+}
+.map-overlay .btn {
+  margin-top: var(--sp-3);
+}
+
+/* Legend */
+.legend {
+  padding: var(--sp-3) 0 0;
+}
+.legend-title {
+  font-size: var(--fs-13);
+  color: var(--muted);
+}
+.legend-bar {
+  position: relative;
+  height: 10px;
+  margin-top: 6px;
+  border-radius: 2px;
+}
+/* Tall enough for the labels that drop a row (the 1.5倍以上 end label: a 26px tick line, its gap and a 21px text line),
+   so nothing hangs out of the box into the year block below, and the row-2 label sits clear of 「同じ」 above it. */
+.legend-ticks {
+  position: relative;
+  height: 52px;
+  font-size: var(--fs-12);
+  color: var(--ink-2);
+}
+.legend-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  text-align: center;
+}
+.legend-tick::before {
+  content: '';
+  display: block;
+  width: 1px;
+  height: 6px;
+  margin: 0 auto 2px;
+  background: var(--line-2);
+}
+.legend-tick[data-edge='start'] {
+  transform: none;
+  text-align: left;
+}
+.legend-tick[data-edge='start']::before {
+  margin-left: 0;
+}
+.legend-tick[data-edge='end'] {
+  transform: translateX(-100%);
+  text-align: right;
+}
+.legend-tick[data-edge='end']::before {
+  margin-right: 0;
+}
+.legend-tick[data-row='2']::before {
+  height: 26px;
+}
+
+/* Legend and year block: stacked on mobile, side by side from 1024px. */
+.map-foot {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+/* Year slider: the memorable control. Large mincho year, solid track to 2050, dashed after. */
+.year {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'value note'
+    'controls controls';
+  align-items: baseline;
+  column-gap: var(--sp-4);
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+}
+.year-value {
+  grid-area: value;
+  font-family: var(--font-display);
+  font-size: var(--fs-44);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+.year-value .unit {
+  font-size: var(--fs-20);
+  margin-left: 2px;
+}
+.year-note {
+  grid-area: note;
+  font-size: var(--fs-14);
+  color: var(--ink-2);
+}
+.year-note[data-estimate='true'] {
+  color: var(--ink);
+}
+.year-note .badge-estimate {
+  margin-right: var(--sp-1);
+}
+.year-controls {
+  grid-area: controls;
+  display: grid;
+  grid-template-columns: var(--touch) minmax(0, 1fr);
+  gap: var(--sp-3);
+  align-items: center;
+  margin-top: var(--sp-2);
+}
+.year-range-wrap {
+  position: relative;
+  height: 68px; /* 44px input + the tick row below it; nothing else may sit inside this height */
+  --thumb-w: 14px;
+  --split: 37.5%;
+}
+.year-track {
+  position: absolute;
+  left: calc(var(--thumb-w) / 2);
+  right: calc(var(--thumb-w) / 2);
+  top: 20px;
+  height: 4px;
+  background:
+    linear-gradient(to right, var(--ink-2) 0 var(--split), transparent var(--split)),
+    repeating-linear-gradient(to right, var(--ink-2) 0 5px, transparent 5px 10px);
+  background-clip: content-box;
+}
+.year-ticks {
+  position: absolute;
+  left: calc(var(--thumb-w) / 2);
+  right: calc(var(--thumb-w) / 2);
+  top: 42px;
+  height: 24px;
+  font-size: var(--fs-12);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.year-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.year-tick::before {
+  content: '';
+  display: block;
+  width: 1px;
+  height: 5px;
+  margin: 0 auto 1px;
+  background: var(--line-2);
+}
+.year-tick[data-edge='start'] {
+  transform: none;
+}
+.year-tick[data-edge='start']::before {
+  margin-left: 0;
+}
+.year-tick[data-edge='end'] {
+  transform: translateX(-100%);
+}
+.year-tick[data-edge='end']::before {
+  margin-right: 0;
+}
+.year-range {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+.year-range::-webkit-slider-runnable-track {
+  height: 44px;
+  background: transparent;
+}
+.year-range::-moz-range-track {
+  height: 44px;
+  background: transparent;
+}
+.year-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--thumb-w);
+  height: 36px;
+  margin-top: 4px;
+  border-radius: 3px;
+  background: var(--ink);
+  border: 2px solid var(--paper);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+.year-range::-moz-range-thumb {
+  width: var(--thumb-w);
+  height: 36px;
+  border-radius: 3px;
+  background: var(--ink);
+  border: 2px solid var(--paper);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+.year-range:focus-visible {
+  outline: none;
+}
+.year-range:focus-visible::-webkit-slider-thumb {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+.year-range:focus-visible::-moz-range-thumb {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+.year-play[aria-pressed='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
+/* Panel column */
+.panel-column {
+  min-width: 0;
+}
+
+/* Desktop: the whole map column (bar, headline, map, legend, year) fits in one viewport height. */
+@media (min-width: 1024px) {
+  .app-head {
+    padding: var(--sp-4) 0 var(--sp-3);
+  }
+  .map-bar {
+    padding: var(--sp-2) 0;
+  }
+  .map-svg {
+    max-height: max(360px, calc(100vh - 372px));
+  }
+  .map-foot {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    gap: var(--sp-5);
+    align-items: start;
+  }
+  .year {
+    grid-template-areas:
+      'value controls'
+      '. note';
+    align-items: center;
+    margin-top: var(--sp-2);
+    padding-top: var(--sp-3);
+  }
+  .year-controls {
+    margin-top: 0;
+  }
+  .year-note {
+    margin-top: 0; /* its own grid row under the tick row; never overlaps the ticks */
+  }
+  .legend {
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--line);
+    margin-top: var(--sp-2);
+  }
+  .panel-column .panel:first-child {
+    padding-top: var(--sp-3);
+    border-top: 0;
+  }
+}
+
+/* Footer */
+.app-foot {
+  margin-top: var(--sp-7);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line-2);
+  font-size: var(--fs-13);
+  color: var(--muted);
+}
+.app-foot dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--sp-1) var(--sp-3);
+}
+.app-foot dt {
+  color: var(--ink-2);
+}
+.app-foot dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* Each source: what it is; then its page (the URL is the link text, so it may break anywhere) and when it was read;
+   then the approval line the provider asks to keep. One line each on a wide screen, stacked on a phone. */
+.app-foot .src-text,
+.app-foot .src-where,
+.app-foot .src-approval {
+  display: block;
+}
+/* A phrase longer than the line (社人研がこのアプリの内容を保証するものではありません) wraps at word boundaries in browsers that
+   know Japanese phrases (Chromium), not in the middle of 「ありません」. Others fall back to breaking anywhere in it. */
+.app-foot .src-text {
+  word-break: auto-phrase;
+}
+.app-foot .src-where,
+.app-foot .src-approval {
+  margin-top: var(--sp-1);
+}
+.app-foot a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.app-foot p {
+  margin-top: var(--sp-3);
+}
+
+/* Loading and error states */
+.load-skeleton {
+  display: grid;
+  gap: var(--sp-4);
+  padding-top: var(--sp-5);
+}
+.load-skeleton .skeleton-map {
+  aspect-ratio: 1 / 1;
+  max-height: 60vh;
+}
+.load-skeleton .skeleton-line {
+  height: 16px;
+}
+.load-status {
+  color: var(--ink-2);
+  font-size: var(--fs-14);
+}
+.load-error {
+  padding: var(--sp-6) 0;
+  max-width: 44em;
+}
+.load-error h2 {
+  font-size: var(--fs-26);
+  margin-bottom: var(--sp-3);
+}
+.load-error p {
+  color: var(--ink-2);
+}
+.load-error .btn {
+  margin-top: var(--sp-4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .area {
+    transition: none;
+  }
+}
