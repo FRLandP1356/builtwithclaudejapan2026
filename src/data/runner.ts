@@ -21,6 +21,17 @@ export function isScenarioError(x: Scenario | ScenarioError): x is ScenarioError
 }
 
 /**
+ * A value from an untrusted caller (model JSON), as short text for an error message. Never throws and never calls
+ * the value's own toString: String({ toString: 1 }) and String(Object.create(null)) throw a TypeError. An object or
+ * a function is named by its type; anything else is cut to 24 characters.
+ */
+function shown(v: unknown): string {
+  if (v === null) return 'null';
+  if (typeof v === 'object' || typeof v === 'function') return typeof v;
+  return String(v).slice(0, 24);
+}
+
+/**
  * Fill a partial scenario from the defaults and check every value: finite numbers inside SCENARIO_LIMITS and a
  * known migMode. Returns the complete scenario, or `{ error }` naming the first offending field. Out-of-range values
  * are rejected, not clamped, so a caller with a bug finds out.
@@ -31,13 +42,13 @@ export function sanitizeScenario(s: Partial<Scenario> | null | undefined): Scena
   for (const key of ['cwrMult', 'migScale', 'infraStrength'] as const) {
     const v = src[key];
     if (v === undefined) continue;
-    if (typeof v !== 'number' || !Number.isFinite(v)) return { error: `${key} must be a finite number, got ${String(v)}` };
+    if (typeof v !== 'number' || !Number.isFinite(v)) return { error: `${key} must be a finite number, got ${shown(v)}` };
     const [lo, hi] = SCENARIO_LIMITS[key];
     if (v < lo || v > hi) return { error: `${key} must be within [${lo}, ${hi}], got ${v}` };
     out[key] = v;
   }
   if (src.migMode !== undefined) {
-    if (!MIG_MODES.includes(src.migMode)) return { error: `migMode must be one of ${MIG_MODES.join('|')}, got ${String(src.migMode)}` };
+    if (!MIG_MODES.includes(src.migMode)) return { error: `migMode must be one of ${MIG_MODES.join('|')}, got ${shown(src.migMode)}` };
     out.migMode = src.migMode;
   }
   return out;

@@ -45,6 +45,59 @@ describe('sanitizeScenario', () => {
   });
 });
 
+describe('sanitizeScenario with values from an untrusted caller', () => {
+  const asScenario = (patch: Record<string, unknown>) => patch as never;
+  const hostile: Array<[string, unknown]> = [
+    ['an object whose toString is not a function', { toString: 1 }],
+    ['an object with no prototype', Object.create(null)],
+    ['an object whose toString throws', { toString: () => { throw new Error('boom'); } }],
+    ['an array', [1, 2, 3]],
+    ['a huge array', new Array(1_000_000).fill(1)],
+    ['a function', () => 1],
+  ];
+
+  test.each(hostile)('%s is an error result, not a throw, for every field', (_name, value) => {
+    for (const key of ['cwrMult', 'migScale', 'infraStrength', 'migMode']) {
+      const r = sanitizeScenario(asScenario({ [key]: value }));
+      expect(isScenarioError(r)).toBe(true);
+      if (isScenarioError(r)) {
+        expect(r.error).toContain(key);
+        expect(r.error.length).toBeLessThan(120);
+      }
+    }
+  });
+
+  test('an object or a function is named by its type, not turned into text', () => {
+    expect(sanitizeScenario(asScenario({ cwrMult: { toString: 1 } }))).toEqual({ error: 'cwrMult must be a finite number, got object' });
+    expect(sanitizeScenario(asScenario({ migScale: () => 1 }))).toEqual({ error: 'migScale must be a finite number, got function' });
+    expect(sanitizeScenario(asScenario({ migMode: Object.create(null) }))).toEqual({ error: 'migMode must be one of hold|fade, got object' });
+  });
+
+  test('null, a symbol and a bigint are told as they are', () => {
+    expect(sanitizeScenario(asScenario({ cwrMult: null }))).toEqual({ error: 'cwrMult must be a finite number, got null' });
+    expect(sanitizeScenario(asScenario({ migScale: Symbol('s') }))).toEqual({ error: 'migScale must be a finite number, got Symbol(s)' });
+    expect(sanitizeScenario(asScenario({ infraStrength: 10n }))).toEqual({ error: 'infraStrength must be a finite number, got 10' });
+  });
+
+  test('a long text is cut to 24 characters, in both messages', () => {
+    const long = 'x'.repeat(5000);
+    expect(sanitizeScenario(asScenario({ cwrMult: long }))).toEqual({ error: `cwrMult must be a finite number, got ${'x'.repeat(24)}` });
+    expect(sanitizeScenario(asScenario({ migMode: long }))).toEqual({ error: `migMode must be one of hold|fade, got ${'x'.repeat(24)}` });
+  });
+
+  test('ordinary values keep their old messages', () => {
+    expect(sanitizeScenario({ cwrMult: NaN })).toEqual({ error: 'cwrMult must be a finite number, got NaN' });
+    expect(sanitizeScenario(asScenario({ infraStrength: '0' }))).toEqual({ error: 'infraStrength must be a finite number, got 0' });
+    expect(sanitizeScenario({ migMode: 'stop' as unknown as 'hold' })).toEqual({ error: 'migMode must be one of hold|fade, got stop' });
+    expect(sanitizeScenario({ cwrMult: 9 })).toEqual({ error: 'cwrMult must be within [0.6, 1.4], got 9' });
+  });
+
+  test('the runner refuses a hostile scenario with a RangeError, not a TypeError', () => {
+    const runner = createRunner({ areas: [], facilities: [] });
+    expect(() => runner.run(asScenario({ cwrMult: { toString: 1 } }))).toThrow(RangeError);
+  });
+});
+
 describe('scenarioKey', () => {
   test('is independent of key order and object identity', () => {
     const a = { cwrMult: 1.2, migMode: 'fade', migScale: 0.8, infraStrength: 0 } as const;
