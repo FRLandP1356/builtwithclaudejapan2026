@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { Groups } from '../engine/types';
-import { allocationLines, allocationView, changeOf, countMarkers, overlayCovers, placeNumbers } from './allocationView';
+import { allocationLines, allocationView, changeOf, countMarkers, crossingCounts, figureChanged, overlayCovers, placeNumbers } from './allocationView';
 import type { Totals } from './derive';
 import type { AllocationOverlay } from './state';
 
@@ -75,12 +75,57 @@ describe('placeNumbers', () => {
   });
 });
 
+describe('figureChanged', () => {
+  test('a place whose number moved: yes; the whole country (zero-sum), a place at 0 % and a place without the allocation: no', () => {
+    expect(figureChanged(placeNumbers(totals, 2100, 'area', '01001', v)!)).toBe(true); // +10 %
+    expect(figureChanged(placeNumbers(totals, 2100, 'pref', '02', v)!)).toBe(true); // -5 %
+    expect(figureChanged(placeNumbers(totals, 2100, 'area', '01002', v)!)).toBe(false); // 0 %
+    // a zero-sum allocation: 01001 gains 10 people (100 -> 110), 02001 gives 10 up (600 -> 590); the country's 1,000 stays
+    const zeroSum = allocationView({ ...overlay, changePercent: { '01001': 10, '01002': 0, '02001': -(10 / 600) * 100 } }, totals, groups);
+    const japan = placeNumbers(totals, 2100, 'japan', '', zeroSum)!;
+    expect(japan.allocated).toBe(true); // the numbers do include the allocation...
+    expect(figureChanged(japan)).toBe(false); // ...and it is the same total
+    expect(figureChanged(placeNumbers(totals, 2100, 'pref', '02', zeroSum)!)).toBe(true);
+    expect(figureChanged(placeNumbers(totals, 2100, 'area', '01001')!)).toBe(false); // no allocation drawn
+    expect(figureChanged(placeNumbers(totals, 2020, 'area', '01001', v)!)).toBe(false); // an allocation for another year
+  });
+
+  test('arithmetic noise is not a change; one person in a million is', () => {
+    expect(figureChanged({ pop: 1_000_000_000 * (1 + 1e-12), ratio: 1, allocated: true, popBefore: 1_000_000_000 })).toBe(false);
+    expect(figureChanged({ pop: 1_000_001, ratio: 1, allocated: true, popBefore: 1_000_000 })).toBe(true);
+    expect(figureChanged({ pop: 0.4, ratio: 1, allocated: true, popBefore: 0 })).toBe(true);
+    expect(figureChanged({ pop: 5, ratio: 1, allocated: false, popBefore: 3 })).toBe(false);
+  });
+});
+
 describe('allocationLines and countMarkers', () => {
   test('the change and the focused facility, per kind of shape', () => {
-    expect(allocationLines(v, 'area', '01001', 2100)).toEqual(['割り振りによる変化 +10.0%', '施設Fが目安を上回る（増えた）']);
-    expect(allocationLines(v, 'area', '02001', 2100)).toEqual(['割り振りによる変化 −5.0%', '施設Fが目安を下回る（減った）']);
-    expect(allocationLines(v, 'pref', '01', 2100)).toEqual(['割り振りによる変化 +2.5%', '施設F：目安を上回る町 +1、下回る町 −1']);
-    expect(allocationLines(v, 'pref', '02', 2050)).toEqual(['割り振りによる変化 −5.0%（2100年の計算）', '施設F：目安を上回る町 +0、下回る町 −1']);
+    expect(allocationLines(v, 'area', '01001', 2100)).toEqual(['割り振りによる変化 +10.0%', '施設Fが人口の目安を下回らなくなる']);
+    expect(allocationLines(v, 'area', '02001', 2100)).toEqual(['割り振りによる変化 −5.0%', '施設Fが人口の目安を下回る']);
+    expect(allocationLines(v, 'pref', '01', 2100)).toEqual(['割り振りによる変化 +2.5%', '施設F：人口の目安を下回らなくなる町 +1、下回る町 −1']);
+    expect(allocationLines(v, 'pref', '02', 2050)).toEqual(['割り振りによる変化 −5.0%（2100年の計算）', '施設F：人口の目安を下回る町 −1']);
+  });
+
+  test('a prefecture line never prints a zero side: only gained, only lost, both, or no line at all', () => {
+    expect(crossingCounts({ gained: 3, lost: 0 })).toBe('人口の目安を下回らなくなる町 +3');
+    expect(crossingCounts({ gained: 0, lost: 2 })).toBe('人口の目安を下回る町 −2');
+    expect(crossingCounts({ gained: 1, lost: 4 })).toBe('人口の目安を下回らなくなる町 +1、下回る町 −4');
+    expect(crossingCounts({ gained: 0, lost: 0 })).toBeUndefined();
+    for (const code of ['01', '02']) {
+      const text = allocationLines(v, 'pref', code, 2100).join('\n');
+      expect(text).not.toMatch(/[+−]0(?![.\d])/);
+    }
+    const onlyGain = allocationView({ ...overlay, flips: [{ facilityId: 'f', name: '施設F', gained: ['01001'], lost: [] }] }, totals, groups);
+    expect(allocationLines(onlyGain, 'pref', '01', 2100)).toEqual(['割り振りによる変化 +2.5%', '施設F：人口の目安を下回らなくなる町 +1']);
+    const none = allocationView({ ...overlay, flips: [{ facilityId: 'f', name: '施設F', gained: ['01001'], lost: [] }] }, totals, groups);
+    expect(allocationLines(none, 'pref', '02', 2100)).toEqual(['割り振りによる変化 −5.0%']); // a prefecture without crossings gets no facility line
+  });
+
+  test('a prefecture entry with no towns on either side gives no facility line (never 「施設F：undefined」)', () => {
+    const view = allocationView(overlay, totals, groups);
+    view.prefCounts.set('03', { gained: 0, lost: 0 }); // not something real data makes, but the guard must hold
+    expect(allocationLines(view, 'pref', '03', 2100)).toEqual(['割り振りによる変化 ±0%']);
+    expect(allocationLines(view, 'pref', '03', 2100).join('')).not.toContain('undefined');
   });
 
   test('one marker per prefecture with crossings: mixed or loss', () => {

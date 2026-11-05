@@ -92,9 +92,35 @@ export function placeNumbers(totals: Totals, year: number, kind: PlaceKind, code
   return { pop, ratio: row[0] > 0 ? pop / row[0] : NaN, allocated: true, popBefore: before };
 }
 
+/** Relative size below which a difference is arithmetic noise, not a change (the sum over 1,884 areas is exact to ~1e-13). */
+const CHANGE_TOLERANCE = 1e-9;
+
+/**
+ * The allocation really changes this place's figure: its numbers include the allocation and differ from the projected
+ * ones. The whole country (zero-sum, it cannot change) and a place with a 0 % change are not changed, so the figure
+ * there is still the official one.
+ */
+export function figureChanged(n: PlaceNumbers): boolean {
+  return n.allocated && Math.abs(n.pop - n.popBefore) > CHANGE_TOLERANCE * Math.max(1, Math.abs(n.popBefore));
+}
+
 /** Whether the overlay covers a place (every area of a prefecture or Japan is in a full overlay). */
 export function overlayCovers(overlay: AllocationOverlay, areaCodes: readonly string[]): boolean {
   return areaCodes.some((c) => c in overlay.changePercent);
+}
+
+/**
+ * 「人口の目安を下回らなくなる町 +1、下回る町 −1」: only the sides that have towns. A side with none is left out, so no "−0"
+ * is printed (「人口の目安を下回らなくなる町 +1」 / 「人口の目安を下回る町 −2」); `undefined` when neither side has any.
+ * The words are the town panel's status words: a town is 「人口の目安を下回る」 when facilityStatus says 'below' (pop < p50), and
+ * one that gained is no longer below (pop >= p50: 'edge' or 'ok'). 「目安以上」 is not used: in this app 「目安」 would then mean the
+ * p50 value here but the 50-80% band in the town panel.
+ */
+export function crossingCounts(c: { gained: number; lost: number }): string | undefined {
+  if (c.gained > 0 && c.lost > 0) return `人口の目安を下回らなくなる町 +${c.gained}、下回る町 −${c.lost}`;
+  if (c.gained > 0) return `人口の目安を下回らなくなる町 +${c.gained}`;
+  if (c.lost > 0) return `人口の目安を下回る町 −${c.lost}`;
+  return undefined;
 }
 
 /** Lines added to a shape's tooltip and label: the change, and the focused facility's state there. */
@@ -104,9 +130,12 @@ export function allocationLines(v: AllocationView, kind: PlaceKind, code: string
   if (v.focus) {
     if (kind === 'pref') {
       const c = v.prefCounts.get(code);
-      if (c) lines.push(`${v.focus.name}：目安を上回る町 +${c.gained}、下回る町 −${c.lost}`);
-    } else if (v.gained.has(code)) lines.push(`${v.focus.name}が目安を上回る（増えた）`);
-    else if (v.lost.has(code)) lines.push(`${v.focus.name}が目安を下回る（減った）`);
+      if (c) {
+        const counts = crossingCounts(c);
+        if (counts) lines.push(`${v.focus.name}：${counts}`);
+      }
+    } else if (v.gained.has(code)) lines.push(`${v.focus.name}が人口の目安を下回らなくなる`);
+    else if (v.lost.has(code)) lines.push(`${v.focus.name}が人口の目安を下回る`);
   }
   return lines;
 }

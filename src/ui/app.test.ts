@@ -4,7 +4,8 @@ import { loadSampleAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
 import { makeTopology } from '../../test/helpers/makeTopology';
 import { allocationColor, changeColor, RATIO_MAX } from '../map/colors';
-import { ALLOC_BADGE, ALLOC_CLEAR, mountApp, type AppHandle } from './app';
+import { ALLOC_BADGE, ALLOC_CLEAR, mountApp, SKIP_TO_YEAR, sourceHtml, type AppHandle } from './app';
+import { SOURCES } from './sources';
 import { total } from '../engine/aggregate';
 import { formatPct, formatPop } from './format';
 import type { AllocationOverlay } from './state';
@@ -100,6 +101,123 @@ describe('mountApp shell', () => {
     store.set({ year: 2055 });
     expect(badge()).toBe('試算');
     expect(root.querySelector('.map-headline-num [class^="badge-"]')!.className).toBe('badge-estimate');
+  });
+});
+
+describe('footer attribution', () => {
+  test('each source is a label and a text that says it was processed, then its page as a link showing the URL, then the day it was read', async () => {
+    const { root } = await mount();
+    const entries = [...root.querySelectorAll('.app-foot dl dd')];
+    expect([...root.querySelectorAll('.app-foot dl dt')].map((d) => d.textContent)).toEqual(['人口', '境界', '施設の目安']);
+    expect(entries).toHaveLength(SOURCES.length);
+    entries.forEach((dd, i) => {
+      const src = SOURCES[i];
+      expect(dd.querySelector('.src-text')!.textContent).toBe(src.text);
+      const links = dd.querySelectorAll('a');
+      expect(links).toHaveLength(1);
+      expect(links[0].getAttribute('href')).toBe(src.url);
+      expect(links[0].textContent).toBe(src.url); // the URL itself is the visible text
+      expect(links[0].getAttribute('rel')).toBe('noopener');
+      expect(links[0].getAttribute('target')).toBe('_blank');
+      expect(dd.querySelector('.src-where')!.textContent).toBe(`${src.url} （2026年11月5日取得）`);
+      expect(dd.querySelector('.src-where .keep:last-child')!.textContent).toBe('（2026年11月5日取得）'); // the date never breaks inside
+    });
+  });
+
+  test('the 人口 line says the institute does not vouch for the app, as docs/sources.md and the README do', async () => {
+    const { root } = await mount();
+    const [population] = [...root.querySelectorAll('.app-foot dl dd')];
+    expect(population.querySelector('.src-text')!.textContent).toBe(SOURCES[0].text);
+    expect(population.querySelector('.src-text')!.textContent).toContain('を加工して作成（公共データ利用規約 第1.0版（PDL1.0））。社人研がこのアプリの内容を保証するものではありません');
+    expect([...population.querySelectorAll('.src-text .keep')].at(-1)!.textContent).toBe('社人研がこのアプリの内容を保証するものではありません'); // its own phrase after the 。
+  });
+
+  test('the facility line says 加工して作成 and the boundary line keeps the approval number, last', async () => {
+    const { root } = await mount();
+    const [, boundary, facility] = [...root.querySelectorAll('.app-foot dl dd')];
+    expect(facility.textContent).toContain('国土交通省国土政策局「サービス施設の立地する確率が50%・80%となる自治体の人口規模（三大都市圏を除く）」（2009〜2012年の統計）を加工して作成');
+    expect(facility.querySelector('.src-approval')).toBeNull();
+    expect(boundary.querySelector('.src-approval')!.textContent).toBe('測量法に基づく国土地理院長承認（複製）R2JHf 450');
+    expect([...boundary.querySelectorAll('.src-approval .keep')].map((k) => k.textContent)).toEqual(['測量法に基づく国土地理院長承認', '（複製）R2JHf 450']); // 「R2JHf 450」 stays together
+    expect(boundary.lastElementChild).toBe(boundary.querySelector('.src-approval'));
+    expect(root.querySelectorAll('.app-foot .src-approval')).toHaveLength(1);
+    expect(root.querySelector('.app-foot')!.textContent).not.toContain('予測');
+  });
+
+  test('sourceHtml escapes what it prints, so a stray character cannot add markup', () => {
+    const html = sourceHtml({ label: 'a<b', text: 'x & "y"', url: 'https://e.test/?a=1&b="2"', retrieved: '2026年1月1日', approval: '<i>' });
+    const box = document.createElement('dl');
+    box.innerHTML = html;
+    expect(box.querySelectorAll('i, b')).toHaveLength(0);
+    expect(box.querySelector('a')!.getAttribute('href')).toBe('https://e.test/?a=1&b="2"');
+    expect(box.querySelector('a')!.textContent).toBe('https://e.test/?a=1&b="2"'); // the visible URL is escaped too
+    const hostile = document.createElement('dl');
+    hostile.innerHTML = sourceHtml({ label: 'l', text: 't', url: 'https://e.test/<i>x</i>', retrieved: '2026年1月1日' });
+    expect(hostile.querySelectorAll('i')).toHaveLength(0);
+    expect(hostile.querySelector('a')!.textContent).toBe('https://e.test/<i>x</i>');
+    expect(box.querySelector('.src-text')!.textContent).toBe('x & "y"');
+    expect(box.querySelector('.src-approval')!.textContent).toBe('<i>');
+  });
+});
+
+describe('keyboard order through the map', () => {
+  const tabStops = (host: Element | null) =>
+    [...(host?.querySelectorAll('[tabindex]') ?? [])].filter((e) => Number(e.getAttribute('tabindex')) >= 0);
+
+  test('the visible map is a single Tab stop, on the national map and on a prefecture', async () => {
+    const { root, visibleHost, store } = await mount();
+    expect(visibleHost()?.querySelectorAll('path.area')).toHaveLength(3);
+    expect(tabStops(visibleHost())).toHaveLength(1);
+    expect(tabStops(visibleHost())[0].getAttribute('data-code')).toBe(visibleHost()!.querySelector('path.area')!.getAttribute('data-code'));
+    store.set({ selectedPref: '30' });
+    await settle();
+    expect(visibleHost()?.querySelectorAll('path.area')).toHaveLength(3);
+    expect(tabStops(visibleHost())).toHaveLength(1);
+    // From the search box on, the only stops before the year slider are the skip link and that one area.
+    const between = [...root.querySelectorAll('.map-stage a[href], .map-stage [tabindex]')].filter(
+      (e) => !e.closest('[hidden]') && Number(e.getAttribute('tabindex') ?? 0) >= 0,
+    );
+    expect(between.map((e) => e.getAttribute('data-code') ?? e.className)).toEqual(['skip-link', visibleHost()!.querySelector('path.area')!.getAttribute('data-code')]);
+  });
+
+  test('the selected town is the map\'s Tab stop; selecting by keyboard (Enter) still selects', async () => {
+    const { visibleHost, store } = await mount();
+    store.set({ selectedPref: '30' });
+    await settle();
+    store.set({ selectedArea: '30206' });
+    expect(tabStops(visibleHost()).map((e) => e.getAttribute('data-code'))).toEqual(['30206']);
+    const other = visibleHost()!.querySelector<SVGPathElement>('path.area:not([data-code="30206"])')!;
+    other.focus();
+    other.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(store.get().selectedArea).toBe(other.getAttribute('data-code'));
+    expect(tabStops(visibleHost()).map((e) => e.getAttribute('data-code'))).toEqual([other.getAttribute('data-code')]);
+  });
+
+  test('a skip link at the start of the map moves focus to the year slider', async () => {
+    const { root } = await mount();
+    const stage = root.querySelector('.map-stage')!;
+    const link = stage.querySelector<HTMLAnchorElement>('.skip-link')!;
+    expect(link.textContent).toBe(SKIP_TO_YEAR);
+    expect(SKIP_TO_YEAR).toBe('地図をとばして、年の選択へ');
+    expect(stage.firstElementChild).toBe(link); // before every map area in Tab order
+    const range = root.querySelector<HTMLInputElement>('#year-range')!;
+    expect(link.getAttribute('href')).toBe(`#${range.id}`);
+    expect(link.compareDocumentPosition(range) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(link.compareDocumentPosition(stage.querySelector('path.area')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    link.focus();
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true); // the address bar does not change
+    expect(document.activeElement).toBe(range);
+  });
+
+  test('the skip link is still there on a prefecture map', async () => {
+    const { root, store } = await mount();
+    store.set({ selectedPref: '30' });
+    await settle();
+    const link = root.querySelector<HTMLAnchorElement>('.map-stage .skip-link')!;
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(root.querySelector('#year-range'));
   });
 });
 
@@ -406,6 +524,93 @@ describe('allocation overlay on the map', () => {
     expect(tip.querySelector('.badge-alloc')!.textContent).toBe(ALLOC_BADGE);
   });
 
+  test('up to 2050 an allocation is no longer the official figure: 割り振り後 with its basis replaces 公式推計 where the figure changes', async () => {
+    const { root, store } = await mount();
+    const num = () => root.querySelector('.map-headline-num')!;
+    store.set({ year: 2050, selectedPref: '30' });
+    await settle();
+    expect(num().querySelector('.badge-official')!.textContent).toBe('公式推計');
+    expect(num().querySelector('.badge-alloc')).toBeNull();
+    expect(num().querySelector('.head-basis')).toBeNull();
+
+    store.set({ allocation: overlay({ year: 2050 }) }); // 和歌山県: three towns +10%
+    expect(num().querySelector('.badge-official')).toBeNull();
+    expect(num().querySelector('.badge-estimate')).toBeNull();
+    expect(num().querySelector('.badge-alloc')!.textContent).toBe(ALLOC_BADGE);
+    expect(num().querySelector('.head-basis')!.textContent).toBe('公式推計をもとにこのアプリが計算');
+    expect(num().textContent).not.toContain('公式推計 割り振り後');
+
+    store.set({ year: 2055 }); // the overlay is for 2050: at 2055 the numbers are not allocated, and 2055 is an estimate
+    expect(num().querySelector('.badge-estimate')!.textContent).toBe('試算');
+    expect(num().querySelector('.badge-alloc')).toBeNull();
+
+    store.set({ year: 2050 });
+    expect(num().querySelector('.badge-official')).toBeNull();
+    store.set({ allocation: undefined });
+    expect(num().querySelector('.badge-official')!.textContent).toBe('公式推計');
+    expect(num().querySelector('.head-basis')).toBeNull();
+  });
+
+  test('where the allocation cannot change the figure (the whole country, or a place at 0 %) the original mark stays', async () => {
+    const { root, store } = await mount();
+    const num = () => root.querySelector('.map-headline-num')!;
+    store.set({ year: 2050 });
+    // A zero-sum allocation (as the allocation panel makes it): 和歌山県の田辺市 +10 %, the other towns give the same people up.
+    const at2050 = (code: string) => total(store.get().series.get(code)![2050]);
+    const taken = (at2050('30206') * 10) / 100;
+    const others = ['13101', '13402', '01101'];
+    const give = -(taken / others.reduce((t, c) => t + at2050(c), 0)) * 100;
+    const zeroSum = (patch: Partial<AllocationOverlay> = {}) =>
+      overlay({ year: 2050, changePercent: { '30206': 10, '30201': 0, '30427': 0, ...Object.fromEntries(others.map((c) => [c, give])) }, ...patch });
+    store.set({ allocation: zeroSum() }); // Japan: the total of a zero-sum allocation
+    expect(num().querySelector('.badge-official')!.textContent).toBe('公式推計');
+    expect(num().querySelector('.head-basis')).toBeNull();
+    expect(num().textContent).not.toContain('このアプリが計算');
+    expect(num().textContent).not.toContain('割り振り前'); // the same total: no second number either
+
+    // 東京都 changes by a real amount: the official mark gives way
+    store.set({ selectedPref: '13' });
+    await settle();
+    expect(num().querySelector('.badge-official')).toBeNull();
+    expect(num().querySelector('.head-basis')!.textContent).toBe('公式推計をもとにこのアプリが計算');
+
+    // 北海道 has a change of 0: its figure is the unallocated one
+    store.set({ allocation: zeroSum({ changePercent: { '30206': 10, '01101': 0 } }), selectedPref: '01' });
+    await settle();
+    expect(num().querySelector('.badge-official')!.textContent).toBe('公式推計');
+    expect(num().querySelector('.head-basis')).toBeNull();
+  });
+
+  test('after 2050 the headline keeps 試算 and adds 割り振り後, with no basis note', async () => {
+    const { root, store } = await mount();
+    store.set({ year: 2100, allocation: overlay() });
+    const num = root.querySelector('.map-headline-num')!;
+    expect(num.querySelector('.badge-estimate')!.textContent).toBe('試算');
+    expect(num.querySelector('.badge-alloc')!.textContent).toBe(ALLOC_BADGE);
+    expect(num.querySelector('.head-basis')).toBeNull();
+    expect(num.querySelector('.badge-official')).toBeNull();
+  });
+
+  test('an allocation shown for another year up to 2050 leaves the official mark alone', async () => {
+    const { root, store } = await mount();
+    store.set({ year: 2100, allocation: overlay() });
+    store.set({ year: 2040 });
+    const num = root.querySelector('.map-headline-num')!;
+    expect(num.querySelector('.badge-official')!.textContent).toBe('公式推計');
+    expect(num.querySelector('.badge-alloc')).toBeNull();
+    expect(num.querySelector('.head-basis')).toBeNull();
+  });
+
+  test('the 2020 census year with an allocation says it is based on the census', async () => {
+    const { root, store } = await mount();
+    store.set({ year: 2020, selectedPref: '30', allocation: overlay({ year: 2020 }) });
+    await settle();
+    const num = root.querySelector('.map-headline-num')!;
+    expect(num.querySelector('.badge-official')).toBeNull();
+    expect(num.querySelector('.head-basis')!.textContent).toBe('国勢調査をもとにこのアプリが計算');
+    expect(num.textContent).not.toContain('実績（国勢調査）');
+  });
+
   test('an allocation for another year leaves the numbers as they are and drops the 割り振り後 mark', async () => {
     const { root, store } = await mount();
     store.set({ year: 2100, selectedPref: '30' });
@@ -465,6 +670,125 @@ describe('allocation overlay on the map', () => {
     expect(store.get().allocation).toBeDefined();
   });
 
+  describe('Escape', () => {
+    const esc = (el: Element, init: KeyboardEventInit = {}) => {
+      const ev = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true, ...init });
+      el.dispatchEvent(ev);
+      return ev;
+    };
+
+    test('clears the overlay from a focused range slider and from a focused checkbox', async () => {
+      const { root, store } = await mount();
+      const range = root.querySelector<HTMLInputElement>('#year-range')!;
+      expect(range.type).toBe('range');
+      range.focus();
+      store.set({ year: 2100, allocation: overlay() });
+      esc(range);
+      expect(store.get().allocation).toBeUndefined();
+
+      const box = root.querySelector<HTMLInputElement>('#panel-allocation input[type="checkbox"]')!;
+      expect(box).not.toBeNull();
+      box.focus();
+      store.set({ allocation: overlay() });
+      esc(box);
+      expect(store.get().allocation).toBeUndefined();
+
+      const ctlRange = root.querySelector<HTMLInputElement>('#panel-controls input[type="range"]')!;
+      store.set({ allocation: overlay() });
+      esc(ctlRange);
+      expect(store.get().allocation).toBeUndefined();
+    });
+
+    test('also from a radio button, a plain button and the page itself', async () => {
+      const { root, store } = await mount();
+      store.set({ year: 2100 });
+      for (const type of ['radio', 'button', 'submit', 'reset', 'image', 'file', 'color']) {
+        const input = document.createElement('input');
+        input.type = type;
+        root.append(input);
+        store.set({ allocation: overlay() });
+        esc(input);
+        expect(store.get().allocation, `input type=${type}`).toBeUndefined();
+      }
+      store.set({ allocation: overlay() });
+      esc(root.querySelector('.back, .btn')!);
+      expect(store.get().allocation).toBeUndefined();
+      store.set({ allocation: overlay() });
+      esc(document.body);
+      expect(store.get().allocation).toBeUndefined();
+    });
+
+    test('is left to a text field, a search box, a textarea, a select and an editable region', async () => {
+      const { root, store } = await mount();
+      store.set({ year: 2100, allocation: overlay() });
+      const owners: HTMLElement[] = [root.querySelector<HTMLElement>('.search-input')!, root.querySelector<HTMLElement>('#panel-ai textarea')!];
+      for (const type of ['text', 'search', 'number', 'email', 'url', 'tel', 'password']) {
+        const input = document.createElement('input');
+        input.type = type;
+        owners.push(input);
+      }
+      owners.push(document.createElement('select'));
+      const editable = document.createElement('div');
+      Object.defineProperty(editable, 'isContentEditable', { value: true }); // jsdom does not compute it from the attribute
+      owners.push(editable);
+      for (const el of owners) {
+        root.append(el);
+        esc(el);
+        expect(store.get().allocation, el.outerHTML.slice(0, 40)).toBeDefined();
+      }
+    });
+
+    test('is left to an open dialog, and to anything that already handled the key', async () => {
+      const { root, store } = await mount();
+      store.set({ year: 2100, allocation: overlay() });
+      const range = root.querySelector<HTMLInputElement>('#year-range')!;
+      const handled = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+      range.addEventListener('keydown', (e) => e.preventDefault(), { once: true });
+      range.dispatchEvent(handled);
+      expect(store.get().allocation).toBeDefined();
+
+      const dialog = document.createElement('dialog');
+      dialog.setAttribute('open', '');
+      document.body.append(dialog);
+      esc(range);
+      expect(store.get().allocation).toBeDefined();
+      dialog.remove();
+      esc(range);
+      expect(store.get().allocation).toBeUndefined();
+    });
+
+    test('a modal dialog made of a div (role=dialog, aria-modal=true) keeps Escape for itself; a non-modal one does not', async () => {
+      const { root, store } = await mount();
+      store.set({ year: 2100, allocation: overlay() });
+      const range = root.querySelector<HTMLInputElement>('#year-range')!;
+      const modal = document.createElement('div');
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      document.body.append(modal);
+      esc(range);
+      expect(store.get().allocation).toBeDefined();
+      modal.setAttribute('aria-modal', 'false'); // a floating panel: the page behind still takes Escape
+      esc(range);
+      expect(store.get().allocation).toBeUndefined();
+      store.set({ allocation: overlay() });
+      modal.removeAttribute('aria-modal');
+      esc(range);
+      expect(store.get().allocation).toBeUndefined();
+      modal.remove();
+    });
+
+    test('other keys do nothing, and Escape with no overlay is harmless', async () => {
+      const { root, store } = await mount();
+      const range = root.querySelector<HTMLInputElement>('#year-range')!;
+      store.set({ year: 2100, allocation: overlay() });
+      range.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      range.dispatchEvent(new KeyboardEvent('keydown', { key: 'Esc', bubbles: true }));
+      expect(store.get().allocation).toBeDefined();
+      store.set({ allocation: undefined });
+      expect(() => esc(range)).not.toThrow();
+    });
+  });
+
   test('a focused facility draws count markers on the national view and rings in the prefecture view', async () => {
     const { root, store } = await mount();
     store.set({ year: 2100 });
@@ -474,8 +798,17 @@ describe('allocation overlay on the map', () => {
     expect(markers.map((m) => m.textContent)).toEqual(['+1', '−1']);
     expect(markers[0].classList.contains('marker-gain')).toBe(true);
     expect(markers[1].classList.contains('marker-loss')).toBe(true);
-    expect(svg.querySelector('path.area[data-code="30"]')!.getAttribute('aria-label')).toContain('飲食料品小売業：目安を上回る町 +1、下回る町 −0');
-    expect(svg.querySelector('path.area[data-code="13"]')!.getAttribute('aria-label')).toContain('下回る町 −1');
+    const wakayama = svg.querySelector('path.area[data-code="30"]')!;
+    expect(wakayama.getAttribute('aria-label')).toMatch(/飲食料品小売業：人口の目安を下回らなくなる町 \+1(、|$)/);
+    expect(wakayama.getAttribute('aria-label')).not.toContain('下回る町'); // no towns fell: nothing is said about them
+    const tokyo = svg.querySelector('path.area[data-code="13"]')!;
+    expect(tokyo.getAttribute('aria-label')).toContain('飲食料品小売業：人口の目安を下回る町 −1');
+    expect(tokyo.getAttribute('aria-label')).not.toContain('下回らなくなる町');
+    for (const a of [wakayama, tokyo]) expect(a.getAttribute('aria-label')).not.toMatch(/[+−]0(?![.\d])/);
+    wakayama.dispatchEvent(new Event('pointerover', { bubbles: true }));
+    const tipText = svg.parentElement!.querySelector('.map-tip')!.textContent!;
+    expect(tipText).toContain('人口の目安を下回らなくなる町 +1');
+    expect(tipText).not.toMatch(/[+−]0(?![.\d])/);
     expect(markers.map((m) => m.getAttribute('data-for'))).toEqual(['30', '13']);
     expect(svg.querySelector('.markers')!.getAttribute('aria-hidden')).toBe('true'); // the numbers are in the labels
 
@@ -486,13 +819,13 @@ describe('allocation overlay on the map', () => {
     expect(gain).toBe(prefSvg.querySelector('path.area[data-code="30206"]')!.getAttribute('d'));
     expect(prefSvg.querySelector('.ring-loss')!.getAttribute('d')).toBe('');
     expect(prefSvg.querySelectorAll('.marker')).toHaveLength(0);
-    expect(prefSvg.querySelector('path.area[data-code="30206"]')!.getAttribute('aria-label')).toContain('飲食料品小売業が目安を上回る（増えた）');
+    expect(prefSvg.querySelector('path.area[data-code="30206"]')!.getAttribute('aria-label')).toContain('飲食料品小売業が人口の目安を下回らなくなる');
 
     store.set({ selectedPref: '13' });
     await settle();
     const tokyoSvg = root.querySelector('.map-host:not([hidden]) svg')!;
     expect(tokyoSvg.querySelector('.ring-loss')!.getAttribute('d')).toBe(tokyoSvg.querySelector('path.area[data-code="13402"]')!.getAttribute('d'));
-    expect(tokyoSvg.querySelector('path.area[data-code="13402"]')!.getAttribute('aria-label')).toContain('下回る（減った）');
+    expect(tokyoSvg.querySelector('path.area[data-code="13402"]')!.getAttribute('aria-label')).toContain('飲食料品小売業が人口の目安を下回る');
 
     store.set({ allocation: undefined });
     expect(tokyoSvg.querySelector('.ring-loss')!.getAttribute('d')).toBe('');

@@ -65,14 +65,15 @@ describe('和歌山県 +10% in 2100 on the real maps', () => {
     const svg = root.querySelector('.map-host-national svg')!;
     const marker = svg.querySelector('.marker[data-for="30"]')!;
     expect(marker.textContent).toBe('+1');
-    expect(label(svg, '30')).toContain('飲食料品小売業：目安を上回る町 +1、下回る町 −0');
+    expect(label(svg, '30')).toMatch(/飲食料品小売業：人口の目安を下回らなくなる町 \+1(、|$)/);
+    expect(label(svg, '30')).not.toContain('−0');
 
     handle.store.set({ selectedPref: '30' });
     await settle();
     const pref = root.querySelector('.map-host:not([hidden]):not(.map-host-national) svg')!;
     expect(pref.querySelector('.ring-gain')!.getAttribute('d')).toBe(pref.querySelector('path.area[data-code="30344"]')!.getAttribute('d'));
     expect(label(pref, '30344')).toContain('高野町');
-    expect(label(pref, '30344')).toContain('飲食料品小売業が目安を上回る（増えた）');
+    expect(label(pref, '30344')).toContain('飲食料品小売業が人口の目安を下回らなくなる');
     expect(label(pref, '30344')).toContain('割り振りによる変化 +10.0%');
     // headline and town panel agree: both numbers in the headline, the after-number in the panel's note
     const series = handle.store.get().series;
@@ -101,7 +102,7 @@ describe('和歌山県 +10% in 2100 on the real maps', () => {
     const pref = root.querySelector('.map-host:not([hidden]):not(.map-host-national) svg')!;
     expect(pref.querySelector('path.area[data-code="20521"]')).not.toBeNull();
     expect(pref.querySelector('.ring-loss')!.getAttribute('d')).toBe(pref.querySelector('path.area[data-code="20521"]')!.getAttribute('d'));
-    expect(label(pref, '20521')).toContain('喫茶店が目安を下回る（減った）');
+    expect(label(pref, '20521')).toContain('喫茶店が人口の目安を下回る');
     handle.store.set({ selectedPref: '30' });
     await settle();
   }, 30_000);
@@ -137,4 +138,62 @@ describe('和歌山県 +10% in 2100 on the real maps', () => {
     handle.store.set({ allocation: undefined, selectedPref: '30' });
     await settle();
   }, 30_000);
+});
+
+describe('one name per facility (Ruling 16: looked up by id from facilities.json) on the real data', () => {
+  test('the facility panel, the allocation table, the overlay, the tooltip and the map labels all use the data file\'s name for each id', async () => {
+    const { data, store } = handle.ctx;
+    const nameById = new Map(data.facilities.map((f) => [f.id, f.name]));
+    // the eight essential facilities, as printed in the MLIT figure
+    expect(data.facilities.filter((f) => f.essential).map((f) => [f.id, f.name])).toEqual([
+      ['grocery', '飲食料品小売業'],
+      ['post_office', '郵便局'],
+      ['bank', '銀行（中央銀行を除く）'],
+      ['clinic', '一般診療所'],
+      ['nursing_home', '介護老人福祉施設'],
+      ['general_hospital', '一般病院'],
+      ['day_care', '通所・短期入所介護事業'],
+      ['home_help', '訪問介護事業'],
+    ]);
+
+    store.set({ year: 2100, selectedPref: '30' });
+    await settle();
+    store.set({ selectedArea: '30206' });
+    root.querySelector<HTMLButtonElement>('#alloc-map-toggle')!.click();
+    await settle();
+    const alloc = store.get().allocation!;
+    expect(alloc).toBeDefined();
+
+    const panelRows = [...root.querySelectorAll<HTMLElement>('#panel-town tr[data-facility-id]')];
+    expect(panelRows).toHaveLength(48);
+    for (const tr of panelRows) expect(tr.querySelector('.facility-name')!.textContent, tr.dataset.facilityId).toBe(nameById.get(tr.dataset.facilityId!));
+
+    const buttons = [...root.querySelectorAll<HTMLButtonElement>('#panel-allocation .alloc-focus')];
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const b of buttons) {
+      expect(b.textContent, b.dataset.facility).toBe(nameById.get(b.dataset.facility!));
+      expect(b.getAttribute('aria-label')).toBe(`${nameById.get(b.dataset.facility!)}。目安をまたいだ町を地図に示す`);
+    }
+    for (const flip of alloc.flips) expect(flip.name, flip.facilityId).toBe(nameById.get(flip.facilityId));
+
+    // the tooltip and the label of 和歌山県 on the national map say the same name once a facility is focused
+    for (const b of buttons) {
+      b.click();
+      const id = b.dataset.facility!;
+      const name = nameById.get(id)!;
+      const flip = store.get().allocation!.flips.find((f) => f.facilityId === id)!;
+      const prefs = new Set([...flip.gained, ...flip.lost].map((c) => c.slice(0, 2)));
+      store.set({ selectedPref: undefined });
+      await settle();
+      const svg = root.querySelector('.map-host-national svg')!;
+      for (const pp of prefs) {
+        const text = label(svg, pp);
+        expect(text, `${id} in ${pp}`).toContain(`${name}：`);
+        svg.querySelector(`path.area[data-code="${pp}"]`)!.dispatchEvent(new Event('pointerover', { bubbles: true }));
+        expect(root.querySelector('.map-host-national .map-tip')!.textContent).toContain(`${name}：`);
+      }
+    }
+    store.set({ allocation: undefined, selectedPref: '30' });
+    await settle();
+  }, 60_000);
 });

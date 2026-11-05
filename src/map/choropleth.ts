@@ -4,8 +4,10 @@
 //   the year slider never rebuilds the DOM.
 // - Hover, keyboard focus and the selected area are drawn as overlay paths (a paper halo plus an ink/accent stroke)
 //   on top of everything, so a neighbour's fill never hides the outline.
-// - Every area is a focusable button: Tab moves between areas, Enter or Space drills down, a tooltip with the
-//   numbers follows the pointer or the focused shape.
+// - Every area is a button, but the map is ONE Tab stop (a roving tabindex: the selected area, else the first): the
+//   arrow keys move to the nearest area in that direction, PageUp and PageDown to the previous and next area, Home and
+//   End to the first and last, Enter or Space drill down, and a tooltip with the numbers follows the pointer or the
+//   focused shape.
 // - Far-away islands can go into an inset box with its own projection: either a fixed list (Okinawa on the national
 //   map) or `'auto'`, which finds the main cluster of shapes by bounding-box gaps and puts the rest in a corner.
 import { geoMercator, geoPath, type GeoPath, type GeoProjection } from 'd3';
@@ -13,6 +15,7 @@ import type { Feature, FeatureCollection, Geometry, MultiPoint, Position } from 
 import type { GeometryCollection, GeometryObject, Topology } from 'topojson-specification';
 import { feature, mesh } from 'topojson-client';
 import { changeColor } from './colors';
+import { isNavigationKey, tabStopFor, targetForKey, type Anchor } from './keyboard';
 
 export interface AreaProps {
   code: string;
@@ -71,13 +74,14 @@ export interface Choropleth {
   codes: string[];
   /** Recolour; only changed fills are written. */
   update(fill: (code: string) => string): void;
-  /** Outline one area persistently (or none). */
+  /** Outline one area persistently (or none). The selected area becomes the map's Tab stop (none: the first area). */
   setSelected(code?: string): void;
   /** Outline the areas that rose to a facility guide (solid blue) and those that fell below it (dashed rust). */
   setRings(gained: Iterable<string>, lost: Iterable<string>): void;
   /** Place count markers on areas (an empty list removes them). */
   setMarkers(markers: readonly MapMarker[]): void;
-  focusArea(code: string): void;
+  /** The one area that can be reached with Tab (tabindex 0). */
+  tabStop(): string | undefined;
   /** Drop the hover state and hide the tooltip (call when the map is hidden or replaced). */
   clearHover(): void;
   /** Re-read aria labels and the open tooltip (after the year or the data changed). */
@@ -352,7 +356,7 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
         class: 'area',
         fill: neutral,
         'data-code': code,
-        tabindex: 0,
+        tabindex: -1, // the roving tabindex gives 0 to exactly one area once all are drawn
         role: 'button',
         'aria-label': opts.ariaLabel(code, name),
       });
@@ -398,6 +402,19 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
       svg.append(t);
     }
   }
+
+  // Keyboard: one Tab stop for the whole map. `anchors` is in Tab (DOM) order, which Home and End follow.
+  const codes = [...pathByCode.keys()];
+  const anchors: Anchor[] = codes.map((code) => ({ code, x: anchorByCode.get(code)![0], y: anchorByCode.get(code)![1], inset: insetCodes.has(code) }));
+  let tabStop: string | undefined;
+  let selectedCode: string | undefined;
+  function setTabStop(code: string | undefined): void {
+    if (code === tabStop || (code !== undefined && !pathByCode.has(code))) return;
+    if (tabStop !== undefined) pathByCode.get(tabStop)?.setAttribute('tabindex', '-1');
+    tabStop = code;
+    if (code !== undefined) pathByCode.get(code)?.setAttribute('tabindex', '0');
+  }
+  setTabStop(tabStopFor(undefined, codes));
 
   // Overlay rings: halo + stroke for selected, hover and focus.
   const ring = (cls: string) => {
@@ -450,7 +467,12 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
   tip.className = 'map-tip';
   tip.setAttribute('role', 'tooltip');
   tip.hidden = true;
-  container.append(svg, tip);
+  const hint = document.createElement('span');
+  hint.className = 'sr-only';
+  hint.id = `${id}-keys`;
+  hint.textContent = '矢印キーで隣の地域へ、PageUpとPageDownで前と次の地域へ、HomeとEndで最初と最後の地域へ移ります。EnterかSpaceで選びます。';
+  svg.setAttribute('aria-describedby', hint.id);
+  container.append(svg, hint, tip);
 
   let hoverCode: string | undefined;
   let focusCode: string | undefined;
@@ -555,15 +577,24 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
     if (code) opts.onPick(code);
   });
   on('keydown', (e) => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
     const code = codeFromEvent(e);
     if (!code) return;
-    e.preventDefault();
-    opts.onPick(code);
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      opts.onPick(code);
+      return;
+    }
+    // Arrows, PageUp/PageDown and Home/End rove the focus; a modified key (Alt+Left is "back") belongs to the browser.
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (!isNavigationKey(e.key)) return;
+    e.preventDefault(); // also at an edge: the page must not scroll under the map
+    const next = targetForKey(e.key, code, anchors);
+    if (next) pathByCode.get(next)?.focus({ preventScroll: true });
   });
   on('focusin', (e) => {
     const code = codeFromEvent(e);
     if (!code) return;
+    setTabStop(code);
     focusCode = code;
     setFocusRing(dByCode.get(code) ?? '');
     if (renderTip(code)) placeTipAt(code, e.target as Element);
@@ -576,7 +607,7 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
 
   return {
     svg,
-    codes: [...pathByCode.keys()],
+    codes,
     update(fill) {
       for (const [code, p] of pathByCode) {
         const c = fill(code);
@@ -588,6 +619,9 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
     },
     setSelected(code) {
       setSelectedRing((code && dByCode.get(code)) || '');
+      if (code === selectedCode) return; // a repeated call must not undo where the keyboard has roved to
+      selectedCode = code;
+      setTabStop(tabStopFor(code, codes));
     },
     setRings(gained, lost) {
       setGainRing(joinD(gained));
@@ -611,9 +645,7 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
       placeMarkers();
       gMarkers.replaceChildren(...markerNodes.map((m) => m.g));
     },
-    focusArea(code) {
-      pathByCode.get(code)?.focus({ preventScroll: true });
-    },
+    tabStop: () => tabStop,
     clearHover,
     refresh() {
       for (const [code, p] of pathByCode) p.setAttribute('aria-label', opts.ariaLabel(code, nameByCode.get(code) ?? code));

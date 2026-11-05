@@ -63,7 +63,7 @@ describe('strength_zero_equals_baseline', () => {
     const zero: Scenario = { ...DEFAULT_SCENARIO, infraStrength: 0 };
     expect(projectAll(areas, zero, 2100, facilities)).toEqual(baseline);
     expect(projectAll(areas, zero)).toEqual(baseline);
-  });
+  }, 30_000); // two more all-area runs plus two deep comparisons: about 1 s alone, but it hit the 5 s default once under load
 
   it('needs the facility list as soon as the strength is above 0', () => {
     const tanabe = byCode(areas, '30206');

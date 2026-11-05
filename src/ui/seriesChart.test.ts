@@ -3,7 +3,7 @@ import { byCode, loadAllAreas } from '../../test/helpers/loadAreas';
 import { total } from '../engine/aggregate';
 import { projectArea } from '../engine/project';
 import { DEFAULT_SCENARIO, type Area, type Series } from '../engine/types';
-import { formatAxisCount, niceScale, phrases, seriesPoints, seriesSummary, type SeriesPointsInput } from './seriesChart';
+import { formatAxisCount, niceScale, seriesPoints, seriesSummary, type SeriesPointsInput } from './seriesChart';
 
 const areas = loadAllAreas();
 const tanabe = byCode(areas, '30206');
@@ -112,19 +112,5 @@ describe('niceScale and formatAxisCount', () => {
     expect(formatAxisCount(1200000)).toBe('120万');
     expect(formatAxisCount(50000000)).toBe('5,000万');
     expect(formatAxisCount(120000000)).toBe('1.2億');
-  });
-});
-
-describe('phrases', () => {
-  test('cut after 。 and 、 and before （, and join back to the same text', () => {
-    const text = '国土交通省の表（2009〜2012年の統計、三大都市圏を除く）にもとづく人口の目安です。施設の閉鎖を予測するものではありません。';
-    const parts = phrases(text);
-    expect(parts).toEqual(['国土交通省の表', '（2009〜2012年の統計、', '三大都市圏を除く）にもとづく人口の目安です。', '施設の閉鎖を予測するものではありません。']);
-    expect(parts.join('')).toBe(text);
-  });
-
-  test('a text without cut points stays whole and an empty text gives no phrase', () => {
-    expect(phrases('境目')).toEqual(['境目']);
-    expect(phrases('')).toEqual([]);
   });
 });

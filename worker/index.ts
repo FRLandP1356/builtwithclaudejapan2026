@@ -1,5 +1,6 @@
 import { TOOL_DEFS } from '../src/ai/toolDefs';
 import {
+  clientKey,
   consumeQuota,
   DEFAULT_IP_LIMIT,
   DEFAULT_TOTAL_LIMIT,
@@ -15,17 +16,39 @@ export interface Env {
   IP_HASH_SECRET: string;
   /** KV namespace holding the daily counters. */
   RATE_KV: KVNamespace;
+  /**
+   * Workers Rate Limiting binding (`ratelimits` in wrangler.jsonc, 20 calls per 60 s per key), keyed by the HMAC'd
+   * client identity. Stops a quick burst from one visitor. Required: when it is missing the Worker answers 503
+   * `server_misconfigured` instead of skipping the check.
+   */
+  IP_LIMITER: RateLimit;
   /** Comma-separated list of page origins that may call this Worker (exact match). */
   ALLOWED_ORIGINS: string;
   DAILY_TOTAL_LIMIT?: string;
   DAILY_IP_LIMIT?: string;
 }
 
-// Decided here and never taken from the client.
+// Decided here and never taken from the client. Behaviour per the Claude API documentation (verified 2026-11-06):
+//  - With `thinking` omitted, claude-sonnet-5-5 runs adaptive thinking, and thinking tokens count toward max_tokens,
+//    so the budget below leaves room for thinking plus an answer (1500 could cut the answer off or leave it empty).
+//  - `output_config.effort` is GA (no beta header) and lives inside output_config, not at the top level.
+//  - The client replays assistant turns with their signed thinking blocks and trims old exchanges. A thinking block is
+//    valid only while the system prompt, tools and earlier messages are unchanged; on accounts created on or after
+//    2026-08-31 a replay after trimming is a 400. `block_binding` with `drop_block` makes the API drop the first
+//    mismatched block (and those after it) for that request only, and the request succeeds. It needs the beta header
+//    below (without it block_binding is a 400) and works only with `type: 'adaptive'`.
 const MODEL = 'claude-sonnet-5-5';
-const MAX_TOKENS = 1500;
+const MAX_TOKENS = 3000;
+const OUTPUT_CONFIG = { effort: 'low' } as const;
+const THINKING = {
+  type: 'adaptive',
+  block_binding: { prefix_mismatch_behavior: 'drop_block' },
+} as const;
+const ANTHROPIC_BETA = 'thinking-binding-controls-2026-08-01';
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
+// Kept at or below 90 s on purpose: a 3,000-token answer fits well inside it, and a hung upstream must not hold a
+// Worker request for minutes. worker/index.test.ts pins the value.
 const UPSTREAM_TIMEOUT_MS = 60_000;
 
 const CHAT_PATH = '/api/chat';
@@ -44,6 +67,7 @@ function jsonResponse(body: unknown, status: number, corsOrigin: string | null, 
   const headers = new Headers(extraHeaders);
   headers.set('content-type', 'application/json; charset=utf-8');
   headers.set('cache-control', 'no-store');
+  headers.set('x-content-type-options', 'nosniff');
   headers.set('vary', 'Origin');
   if (corsOrigin !== null) headers.set('access-control-allow-origin', corsOrigin);
   return new Response(typeof body === 'string' ? body : JSON.stringify(body), { status, headers });
@@ -57,6 +81,7 @@ function preflightResponse(corsOrigin: string): Response {
       'access-control-allow-methods': 'POST, OPTIONS',
       'access-control-allow-headers': 'content-type',
       'access-control-max-age': '86400',
+      'x-content-type-options': 'nosniff',
       vary: 'Origin',
     },
   });
@@ -111,10 +136,14 @@ async function callAnthropic(
       headers: {
         'x-api-key': env.ANTHROPIC_API_KEY,
         'anthropic-version': ANTHROPIC_VERSION,
+        'anthropic-beta': ANTHROPIC_BETA,
         'content-type': 'application/json',
       },
       body: JSON.stringify(payload),
-      redirect: 'error',
+      // Cloudflare's fetch accepts only 'follow' or 'manual' (the standard 'error' throws a TypeError in workerd, so
+      // every call would fail). 'manual' hands a 3xx back unfollowed, and the status check below turns it into the
+      // generic 502: the key header is never sent to a redirect target.
+      redirect: 'manual',
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
   } catch {
@@ -149,11 +178,25 @@ async function callAnthropic(
   return jsonResponse(text, upstream.status, corsOrigin);
 }
 
+/**
+ * Answers every request with a response the Worker built itself. Anything that escapes the routing below (for example
+ * a client that aborts mid-upload, which rejects the body read) would otherwise get the runtime's own error page,
+ * without `nosniff` or the uniform JSON error. Nothing about the failure is logged: it could carry request details.
+ */
 export async function handleRequest(
   request: Request,
   env: Env,
   fetchFn: typeof fetch = fetch,
 ): Promise<Response> {
+  try {
+    return await routeRequest(request, env, fetchFn);
+  } catch {
+    console.error('unexpected error');
+    return jsonResponse({ error: 'internal_error' }, 500, null);
+  }
+}
+
+async function routeRequest(request: Request, env: Env, fetchFn: typeof fetch): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname !== CHAT_PATH) {
     return jsonResponse({ error: 'not_found' }, 404, null);
@@ -162,8 +205,10 @@ export async function handleRequest(
     return jsonResponse({ error: 'method_not_allowed' }, 405, null, { allow: 'POST, OPTIONS' });
   }
 
-  // Only the public page's origin may use this Worker. A request without an Origin header is refused too:
-  // browsers always send one on a cross-origin POST.
+  // Only the public page's origin gets CORS headers, so the BROWSERS of other websites cannot read our answers or
+  // spend our quota from their pages. This is not authentication: curl and any script outside a browser can send
+  // whatever Origin they like. (A request without an Origin header is refused too, because browsers always send one
+  // on a cross-origin POST.) The hard limits are the counters and, above all, the Anthropic workspace spend limit.
   const origin = request.headers.get('origin');
   if (origin === null || !allowedOriginSet(env).has(origin)) {
     return jsonResponse({ error: 'origin_not_allowed' }, 403, null);
@@ -194,9 +239,17 @@ export async function handleRequest(
   }
   const { messages } = validation.value;
 
-  // Fail closed when a secret is missing, before any quota is charged. Names only; values are never logged.
-  if (!env.ANTHROPIC_API_KEY || !env.IP_HASH_SECRET) {
-    console.error(`server secret not configured: ${!env.ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY' : 'IP_HASH_SECRET'}`);
+  // Fail closed when a secret or the burst limiter binding is missing, before any quota is charged. Names only;
+  // values are never logged.
+  const missing = !env.ANTHROPIC_API_KEY
+    ? 'ANTHROPIC_API_KEY'
+    : !env.IP_HASH_SECRET
+      ? 'IP_HASH_SECRET'
+      : !env.IP_LIMITER
+        ? 'IP_LIMITER'
+        : null;
+  if (missing !== null) {
+    console.error(`server configuration missing: ${missing}`);
     return jsonResponse({ error: 'server_misconfigured' }, 503, origin);
   }
 
@@ -206,11 +259,30 @@ export async function handleRequest(
     perIp: parseLimit(env.DAILY_IP_LIMIT, DEFAULT_IP_LIMIT),
     total: parseLimit(env.DAILY_TOTAL_LIMIT, DEFAULT_TOTAL_LIMIT),
   };
+  // Burst limit first (20 calls per 60 s per visitor, see wrangler.jsonc). The binding is per Cloudflare location and
+  // eventually consistent, a courtesy limit like the daily counters. A refusal here costs no KV read or write.
+  // The visitor's HMAC'd identity is computed once and shared by the burst limiter and the daily counters.
+  let visitor: string;
+  let withinBurst: boolean;
+  try {
+    visitor = await clientKey(env.IP_HASH_SECRET, clientIp);
+    const outcome = await env.IP_LIMITER.limit({ key: visitor });
+    withinBurst = outcome.success;
+  } catch {
+    // Fail closed, like a KV read failure: without the limiter the burst cap cannot be enforced.
+    console.error('burst limiter unavailable');
+    return jsonResponse({ error: 'service_unavailable' }, 503, origin);
+  }
+  if (!withinBurst) {
+    return jsonResponse({ cached: true, error: 'rate_limited' }, 429, origin);
+  }
+
   let allowed: boolean;
   try {
-    allowed = await consumeQuota(env.RATE_KV, clientIp, limits, env.IP_HASH_SECRET);
+    allowed = await consumeQuota(env.RATE_KV, visitor, limits);
   } catch {
-    // Fail closed: without the counters the spending cap cannot be enforced.
+    // Fail closed on a failed READ: without the counters the spending cap cannot be enforced. (A failed write is
+    // handled inside consumeQuota and does not end up here.)
     console.error('rate limit store unavailable');
     return jsonResponse({ error: 'service_unavailable' }, 503, origin);
   }
@@ -220,10 +292,14 @@ export async function handleRequest(
 
   // Built only from validated messages and server-side constants. The tool definitions are always the canonical
   // ones from the shared module; whatever `tools` the client sent was never read.
+  // The one cache_control breakpoint is on the system block: it caches tools + system, the constant prefix of about
+  // 4.6K tokens, so each call re-reads that prefix at the cache-read price. Nothing here comes from the client.
   const payload = {
     model: MODEL,
     max_tokens: MAX_TOKENS,
-    system: SYSTEM_PROMPT,
+    output_config: OUTPUT_CONFIG,
+    thinking: THINKING,
+    system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
     messages,
     tools: TOOL_DEFS,
   };
