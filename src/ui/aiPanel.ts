@@ -20,7 +20,7 @@ import type { EngineContext } from '../ai/tools';
 import { isScenarioError, sanitizeScenario, scenarioKey } from '../data/runner';
 import {
   allocationOffers,
-  clipCodePoints,
+  clipAtCaret,
   compactJson,
   countCodePoints,
   describeScenario,
@@ -641,10 +641,11 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
   /** Keeps the first MAX_QUESTION_LENGTH code points and says so, quietly. Not while a conversion (IME) is in progress. */
   let pasteCut = false;
   function applyLimit(): void {
-    const { text, cut } = clipCodePoints(textarea.value, MAX_QUESTION_LENGTH);
+    // What was typed or pasted ends at the caret: that is what goes, and the caret stays where the typing was.
+    const { text, caret, cut } = clipAtCaret(textarea.value, textarea.selectionEnd, MAX_QUESTION_LENGTH);
     if (cut) {
       textarea.value = text;
-      textarea.setSelectionRange(text.length, text.length);
+      textarea.setSelectionRange(caret, caret);
     }
     updateCounter();
     showInputMessage(cut || pasteCut ? PANEL_TEXT.limitCut : '', false);

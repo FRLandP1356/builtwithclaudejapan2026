@@ -12,6 +12,7 @@ import {
   RESULT_DISPLAY_LIMIT,
   MAX_SCENARIO_OFFERS,
   MAX_ALLOCATION_OFFERS,
+  clipAtCaret,
   clipCodePoints,
   countCodePoints,
   scenarioOffers,
@@ -321,6 +322,45 @@ describe('code points', () => {
     expect(clipCodePoints('あい', 2)).toEqual({ text: 'あい', cut: false });
     expect(clipCodePoints('😀😀😀', 2)).toEqual({ text: '😀😀', cut: true });
     expect(clipCodePoints('a𠮷b', 2)).toEqual({ text: 'a𠮷', cut: true });
+  });
+});
+
+describe('clipAtCaret', () => {
+  it('leaves text that fits alone, caret included', () => {
+    expect(clipAtCaret('あいう', 1, 3)).toEqual({ text: 'あいう', caret: 1, cut: false });
+    expect(clipAtCaret('', 0, 3)).toEqual({ text: '', caret: 0, cut: false });
+  });
+
+  it('typing at the end drops the typed characters, like cutting the end', () => {
+    expect(clipAtCaret('あいうえ', 4, 3)).toEqual({ text: 'あいう', caret: 3, cut: true });
+  });
+
+  it('typing in the middle drops the typed excess, not the end, and keeps the caret there', () => {
+    // 'あい' + typed 'X' + 'うえ', caret after the X
+    expect(clipAtCaret('あいXうえ', 3, 4)).toEqual({ text: 'あいうえ', caret: 2, cut: true });
+    // a paste of 3 into the middle with room for 1: the first of the pasted stays
+    expect(clipAtCaret('あいXYZうえ', 5, 5)).toEqual({ text: 'あいXうえ', caret: 3, cut: true });
+  });
+
+  it('typing at the very start drops what was typed', () => {
+    expect(clipAtCaret('Xあいう', 1, 3)).toEqual({ text: 'あいう', caret: 0, cut: true });
+  });
+
+  it('takes the rest from the end when fewer than the excess sit before the caret', () => {
+    expect(clipAtCaret('Xあいうえお', 1, 3)).toEqual({ text: 'あいう', caret: 0, cut: true });
+    expect(clipAtCaret('あいうえお', 0, 3)).toEqual({ text: 'あいう', caret: 0, cut: true });
+  });
+
+  it('counts code points and never cuts a pair in half; the caret is a UTF-16 offset', () => {
+    // 😀😀 + typed 𠮷 + 😀 with room for 3: the typed one (2 units) goes, the caret is after the first two (4 units)
+    expect(clipAtCaret('😀😀𠮷😀', 6, 3)).toEqual({ text: '😀😀😀', caret: 4, cut: true });
+    const clipped = clipAtCaret('😀😀𠮷😀', 6, 3).text;
+    expect(/[\ud800-\udbff](?![\udc00-\udfff])/.test(clipped)).toBe(false);
+  });
+
+  it('a caret outside the text is treated as the nearest end', () => {
+    expect(clipAtCaret('あいうえ', 99, 3)).toEqual({ text: 'あいう', caret: 3, cut: true });
+    expect(clipAtCaret('あいうえ', -1, 3)).toEqual({ text: 'あいう', caret: 0, cut: true });
   });
 });
 

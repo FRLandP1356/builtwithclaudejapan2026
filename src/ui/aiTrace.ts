@@ -88,6 +88,29 @@ export function clipCodePoints(text: string, max: number): { text: string; cut: 
   return points.length > max ? { text: points.slice(0, max).join(''), cut: true } : { text, cut: false };
 }
 
+export interface CaretClip {
+  text: string;
+  /** Where the caret goes (a UTF-16 offset into `text`). */
+  caret: number;
+  cut: boolean;
+}
+
+/**
+ * `text` held to `max` code points when the visitor has just typed or pasted up to `caret`: the excess is taken from
+ * the text just before the caret (what was typed), not from the end of the question, and the caret stays where the
+ * typing was. If fewer than the excess sit before the caret, the rest is taken from the end. A pair is never cut in half.
+ */
+export function clipAtCaret(text: string, caret: number, max: number): CaretClip {
+  const points = Array.from(text);
+  if (points.length <= max) return { text, caret, cut: false };
+  const excess = points.length - max;
+  const before = countCodePoints(text.slice(0, Math.min(Math.max(caret, 0), text.length)));
+  const from = Math.max(0, before - excess);
+  points.splice(from, before - from);
+  points.length = Math.min(points.length, max); // anything the caret was too close to the start to absorb
+  return { text: points.join(''), caret: points.slice(0, from).join('').length, cut: true };
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Places named in the tool inputs
 // ---------------------------------------------------------------------------------------------------------------

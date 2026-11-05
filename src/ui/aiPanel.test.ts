@@ -514,6 +514,65 @@ describe('keyboard and input rules', () => {
     expect(s.body(0).messages[0]!.content).toBe('あ'.repeat(199));
   });
 
+  it('typing in the middle of a full question drops what was typed, not the last character, and the caret stays', () => {
+    const m = mount();
+    const full = 'あ'.repeat(100) + 'い'.repeat(100); // 200: the question is full
+    input(m, full);
+    expect(m.textarea.value).toBe(full);
+    // the visitor types 「X」 between the あ and the い: the browser puts the caret right after it
+    m.textarea.value = 'あ'.repeat(100) + 'X' + 'い'.repeat(100);
+    m.textarea.setSelectionRange(101, 101);
+    m.textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    expect(m.textarea.value).toBe(full); // the い at the end is still there
+    expect(m.textarea.selectionStart).toBe(100);
+    expect(m.textarea.selectionEnd).toBe(100);
+    expect(m.q('.ai-input-msg').textContent).toBe(PANEL_TEXT.limitCut);
+    expect(m.q('.ai-counter').textContent).toBe('200 / 200');
+  });
+
+  it('a paste into the middle keeps as much of it as fits, from its start, with the caret after what stayed', () => {
+    const m = mount();
+    const before = 'あ'.repeat(95) + 'い'.repeat(95); // 190
+    input(m, before);
+    m.textarea.value = 'あ'.repeat(95) + '1234567890ABCDEFGHIJ' + 'い'.repeat(95); // 210
+    m.textarea.setSelectionRange(115, 115);
+    m.textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    expect(m.textarea.value).toBe('あ'.repeat(95) + '1234567890' + 'い'.repeat(95));
+    expect(m.textarea.selectionStart).toBe(105);
+    expect(m.textarea.selectionEnd).toBe(105);
+    expect(m.q('.ai-input-msg').textContent).toBe(PANEL_TEXT.limitCut);
+  });
+
+  it('in the middle of a full question, a pair of UTF-16 units is never split and the caret counts units', () => {
+    const m = mount();
+    input(m, '😀'.repeat(200));
+    m.textarea.value = '😀'.repeat(100) + '𠮷' + '😀'.repeat(100);
+    m.textarea.setSelectionRange(202, 202); // 100 emoji = 200 units, then 𠮷 = 2 more
+    m.textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    expect(m.textarea.value).toBe('😀'.repeat(200));
+    expect(m.textarea.selectionStart).toBe(200);
+    expect(/[\ud800-\udbff](?![\udc00-\udfff])/.test(m.textarea.value)).toBe(false);
+  });
+
+  it('typing at the end of a full question still cuts the end, caret at the end', () => {
+    const m = mount();
+    input(m, 'あ'.repeat(201));
+    expect(m.textarea.value).toBe('あ'.repeat(200));
+    expect(m.textarea.selectionStart).toBe(200);
+  });
+
+  it('when a conversion (IME) ends in the middle of a full question, the same rule applies', () => {
+    const m = mount();
+    const full = 'あ'.repeat(100) + 'い'.repeat(100);
+    input(m, full);
+    input(m, 'あ'.repeat(100) + 'ほげほげ' + 'い'.repeat(100), { isComposing: true }); // 204, held until the conversion ends
+    m.textarea.setSelectionRange(104, 104);
+    expect(m.textarea.value.length).toBe(204);
+    m.textarea.dispatchEvent(new Event('compositionend', { bubbles: true }));
+    expect(m.textarea.value).toBe(full);
+    expect(m.textarea.selectionStart).toBe(100);
+  });
+
   it('the paste event shows the notice at once, even when the browser has already cut the text', () => {
     const m = mount();
     input(m, 'あ'.repeat(190));
