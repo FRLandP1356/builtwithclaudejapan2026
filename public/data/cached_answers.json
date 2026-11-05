@@ -4,42 +4,581 @@
     {
       "id": "q1",
       "question": "日本の人口が減り出してから、東京はどうなっていますか？",
-      "answer": "",
-      "trace": [],
+      "answer": "日本全体の人口は減っていますが、東京都は2040年ごろまで増える見込みです。\n\n**社人研の公式推計（2050年まで）**\n- 日本全体：2020年の約1億2,615万人から、2050年は約1億469万人（2020年比で17%減）です。\n- 東京都：2020年は約1,405万人、2030年は約1,435万人（2.1%増）、2040年は約1,451万人（3.3%増）、2050年は約1,440万人（2.5%増）です。\n- 東京都の65歳以上の割合：2020年は22.7%、2050年は29.6%です。日本全体の2050年は37.1%なので、東京都のほうが低く推移します。\n\n**このアプリの試算（2050年より後）**\n- 2075年は約1,322万人（2020年比で5.9%減）、2100年は約1,190万人（15.3%減）です。\n- 65歳以上の割合は、どちらの年も30.7%です。\n\n東京都の人口は、2040年ごろまでは増えて、その後ゆるやかに減ります。ただし、2050年より後の数字は予測ではなく、このアプリの試算です。",
+      "trace": [
+        {
+          "tool": "find_area",
+          "input": {
+            "query": "東京都"
+          },
+          "result": {
+            "matches": [
+              {
+                "code": "13",
+                "name": "東京都",
+                "kind": "prefecture"
+              }
+            ]
+          }
+        },
+        {
+          "tool": "get_series",
+          "input": {
+            "areaCode": "00",
+            "years": [
+              2020,
+              2030,
+              2040,
+              2050
+            ]
+          },
+          "result": {
+            "area": {
+              "code": "00",
+              "name": "日本"
+            },
+            "scenario": {
+              "cwrMult": 1,
+              "migMode": "hold",
+              "migScale": 1,
+              "infraStrength": 0
+            },
+            "rows": [
+              {
+                "year": 2020,
+                "population": 126146099,
+                "ages65": 36026632,
+                "ages65Share": 28.6,
+                "changeFrom2020Percent": 0,
+                "basis": "official"
+              },
+              {
+                "year": 2030,
+                "population": 120115775,
+                "ages65": 36961948,
+                "ages65Share": 30.8,
+                "changeFrom2020Percent": -4.8,
+                "basis": "official"
+              },
+              {
+                "year": 2040,
+                "population": 112837401,
+                "ages65": 39284989,
+                "ages65Share": 34.8,
+                "changeFrom2020Percent": -10.6,
+                "basis": "official"
+              },
+              {
+                "year": 2050,
+                "population": 104686401,
+                "ages65": 38878229,
+                "ages65Share": 37.1,
+                "changeFrom2020Percent": -17,
+                "basis": "official"
+              }
+            ]
+          }
+        },
+        {
+          "tool": "get_series",
+          "input": {
+            "areaCode": "13",
+            "years": [
+              2020,
+              2030,
+              2040,
+              2050,
+              2075,
+              2100
+            ]
+          },
+          "result": {
+            "area": {
+              "code": "13",
+              "name": "東京都"
+            },
+            "scenario": {
+              "cwrMult": 1,
+              "migMode": "hold",
+              "migScale": 1,
+              "infraStrength": 0
+            },
+            "rows": [
+              {
+                "year": 2020,
+                "population": 14047594,
+                "ages65": 3194751,
+                "ages65Share": 22.7,
+                "changeFrom2020Percent": 0,
+                "basis": "official"
+              },
+              {
+                "year": 2030,
+                "population": 14348575,
+                "ages65": 3385291,
+                "ages65Share": 23.6,
+                "changeFrom2020Percent": 2.1,
+                "basis": "official"
+              },
+              {
+                "year": 2040,
+                "population": 14507390,
+                "ages65": 3957330,
+                "ages65Share": 27.3,
+                "changeFrom2020Percent": 3.3,
+                "basis": "official"
+              },
+              {
+                "year": 2050,
+                "population": 14399111,
+                "ages65": 4258783,
+                "ages65Share": 29.6,
+                "changeFrom2020Percent": 2.5,
+                "basis": "official"
+              },
+              {
+                "year": 2075,
+                "population": 13223057,
+                "ages65": 4058394,
+                "ages65Share": 30.7,
+                "changeFrom2020Percent": -5.9,
+                "basis": "app_estimate"
+              },
+              {
+                "year": 2100,
+                "population": 11897838,
+                "ages65": 3656179,
+                "ages65Share": 30.7,
+                "changeFrom2020Percent": -15.3,
+                "basis": "app_estimate"
+              }
+            ]
+          }
+        }
+      ],
       "status": "pending",
-      "note": "Generated from real Claude answers after the API credit is granted; see docs"
+      "generatedAt": "2026-11-05T23:11:32.760Z",
+      "note": "Generated by scripts/ai_live_check.ts from the deployed Worker (claude-sonnet-5-5), status ok, 3 Worker calls (1 ask, the better one kept). Pending: the owner reads it before it becomes verified. Every number in the answer was found in the tool results. Contains words the system prompt avoids: 予測."
     },
     {
       "id": "q2",
       "question": "田辺市の2100年の子どもの数は、何人くらいですか？",
-      "answer": "",
-      "trace": [],
+      "answer": "和歌山県の田辺市について、子どもの人数は、このアプリでは分かりません。\n\nこのアプリの試算で分かる2100年の数字は、次の3つです。\n- 総人口は11,880人です。\n- 65歳以上は6,125人です。\n- 65歳以上の割合は51.6%です。\n\n2050年より後の数字は公式の推計ではなく、このアプリの試算です。\n\n京都府の京田辺市のことであれば、そちらも調べられます。",
+      "trace": [
+        {
+          "tool": "find_area",
+          "input": {
+            "query": "田辺市"
+          },
+          "result": {
+            "matches": [
+              {
+                "code": "30206",
+                "name": "田辺市",
+                "prefName": "和歌山県",
+                "kind": "city"
+              },
+              {
+                "code": "26211",
+                "name": "京田辺市",
+                "prefName": "京都府",
+                "kind": "city"
+              }
+            ]
+          }
+        },
+        {
+          "tool": "get_series",
+          "input": {
+            "areaCode": "30206",
+            "years": [
+              2100
+            ]
+          },
+          "result": {
+            "area": {
+              "code": "30206",
+              "name": "田辺市",
+              "prefName": "和歌山県"
+            },
+            "scenario": {
+              "cwrMult": 1,
+              "migMode": "hold",
+              "migScale": 1,
+              "infraStrength": 0
+            },
+            "rows": [
+              {
+                "year": 2100,
+                "population": 11880,
+                "ages65": 6125,
+                "ages65Share": 51.6,
+                "changeFrom2020Percent": -83,
+                "basis": "app_estimate"
+              }
+            ]
+          }
+        }
+      ],
       "status": "pending",
-      "note": "Generated from real Claude answers after the API credit is granted; see docs"
+      "generatedAt": "2026-11-05T23:11:57.741Z",
+      "note": "Generated by scripts/ai_live_check.ts from the deployed Worker (claude-sonnet-5-5), status ok, 4 Worker calls (1 ask, the better one kept). Pending: the owner reads it before it becomes verified. Every number in the answer was found in the tool results."
     },
     {
       "id": "q3",
       "question": "和歌山県の人口を10%増やすと、ほかの地域はどうなりますか？",
-      "answer": "",
-      "trace": [],
+      "answer": "2050年（社人研の公式推計がある最後の年）で試算しました。年を指定されなかったので、この年にしました。和歌山県の人口を10%増やし、同じ人数を全国から人口比で引くという仮定です。\n\n- 和歌山県は631,642人から694,806人になります（63,164人増）。\n- 県内の市町村も増えます。例として、和歌山市は280,227人から308,250人、岩出市は45,397人から49,937人、田辺市は42,311人から46,542人です。\n- ほかの地域は、63,164人が全国に人口比で割り振られて減ります。このアプリの結果では、減った地域ごとの人数は一覧にありません。そのため、個別の数字は「分かりません」とお答えします。\n\n人口の目安をまたぐ施設は13件あります。施設の目安は国土交通省の統計（2009〜2012年）にもとづく目安で、将来の決定ではありません。\n\n- 必須の施設は、一般病院が1件です。日高川町と湯浅町が、人口の目安を上回るようになります。\n- 必須ではない施設でも、上回る自治体と下回る自治体が出ます。\n  - 学習塾や遊戯場は、日高川町と湯浅町が上回ります。\n  - フィットネスクラブと有料老人ホームは、田辺市が上回ります。\n  - スターバックスコーヒー、外車ディーラー、救命救急センター施設は、伊丹市が下回ります。\n  - 興行場・興行団は、清瀬市と大牟田市が下回ります。\n\n別の年や、引く元を特定の県に限った場合も試せます。",
+      "trace": [
+        {
+          "tool": "find_area",
+          "input": {
+            "query": "和歌山県"
+          },
+          "result": {
+            "matches": [
+              {
+                "code": "30",
+                "name": "和歌山県",
+                "kind": "prefecture"
+              }
+            ]
+          }
+        },
+        {
+          "tool": "run_allocation",
+          "input": {
+            "target": {
+              "kind": "pref",
+              "code": "30"
+            },
+            "year": 2050,
+            "deltaPercent": 10
+          },
+          "result": {
+            "year": 2050,
+            "scenario": {
+              "cwrMult": 1,
+              "migMode": "hold",
+              "migScale": 1,
+              "infraStrength": 0
+            },
+            "target": {
+              "kind": "pref",
+              "code": "30",
+              "name": "和歌山県"
+            },
+            "deltaPercent": 10,
+            "deltaPeople": 63164,
+            "source": {
+              "mode": "proportional"
+            },
+            "targetBefore": 631642,
+            "targetAfter": 694806,
+            "top": [
+              {
+                "code": "30201",
+                "name": "和歌山市",
+                "prefName": "和歌山県",
+                "before": 280227,
+                "after": 308250
+              },
+              {
+                "code": "30209",
+                "name": "岩出市",
+                "prefName": "和歌山県",
+                "before": 45397,
+                "after": 49937
+              },
+              {
+                "code": "30206",
+                "name": "田辺市",
+                "prefName": "和歌山県",
+                "before": 42311,
+                "after": 46542
+              },
+              {
+                "code": "30203",
+                "name": "橋本市",
+                "prefName": "和歌山県",
+                "before": 37635,
+                "after": 41398
+              },
+              {
+                "code": "30208",
+                "name": "紀の川市",
+                "prefName": "和歌山県",
+                "before": 36639,
+                "after": 40303
+              },
+              {
+                "code": "30202",
+                "name": "海南市",
+                "prefName": "和歌山県",
+                "before": 28028,
+                "after": 30831
+              },
+              {
+                "code": "30366",
+                "name": "有田川町",
+                "prefName": "和歌山県",
+                "before": 17649,
+                "after": 19414
+              },
+              {
+                "code": "30207",
+                "name": "新宮市",
+                "prefName": "和歌山県",
+                "before": 15422,
+                "after": 16964
+              },
+              {
+                "code": "30205",
+                "name": "御坊市",
+                "prefName": "和歌山県",
+                "before": 14969,
+                "after": 16466
+              },
+              {
+                "code": "30204",
+                "name": "有田市",
+                "prefName": "和歌山県",
+                "before": 14597,
+                "after": 16057
+              }
+            ],
+            "flippedFacilityCount": 13,
+            "essentialFlippedCount": 1,
+            "omittedFlipCount": 2,
+            "essentialFlips": [
+              {
+                "facilityId": "general_hospital",
+                "name": "一般病院",
+                "essential": true,
+                "before": 1374,
+                "after": 1376,
+                "lostCount": 0,
+                "gainedCount": 2,
+                "lostExamples": [],
+                "gainedExamples": [
+                  "日高川町",
+                  "湯浅町"
+                ]
+              }
+            ],
+            "facilityFlips": [
+              {
+                "facilityId": "stationery_books",
+                "name": "書籍・文房具小売業",
+                "essential": false,
+                "before": 1728,
+                "after": 1729,
+                "lostCount": 1,
+                "gainedCount": 2,
+                "lostExamples": [
+                  "阿武町"
+                ],
+                "gainedExamples": [
+                  "九度山町",
+                  "高野町"
+                ]
+              },
+              {
+                "facilityId": "arcade",
+                "name": "遊戯場",
+                "essential": false,
+                "before": 1374,
+                "after": 1376,
+                "lostCount": 0,
+                "gainedCount": 2,
+                "lostExamples": [],
+                "gainedExamples": [
+                  "日高川町",
+                  "湯浅町"
+                ]
+              },
+              {
+                "facilityId": "performance_venue",
+                "name": "興行場、興行団",
+                "essential": false,
+                "before": 448,
+                "after": 446,
+                "lostCount": 2,
+                "gainedCount": 0,
+                "lostExamples": [
+                  "清瀬市",
+                  "大牟田市"
+                ],
+                "gainedExamples": []
+              },
+              {
+                "facilityId": "cram_school",
+                "name": "学習塾",
+                "essential": false,
+                "before": 1374,
+                "after": 1376,
+                "lostCount": 0,
+                "gainedCount": 2,
+                "lostExamples": [],
+                "gainedExamples": [
+                  "日高川町",
+                  "湯浅町"
+                ]
+              },
+              {
+                "facilityId": "import_car_dealer",
+                "name": "外車ディーラー3大ブランド",
+                "essential": false,
+                "before": 160,
+                "after": 159,
+                "lostCount": 1,
+                "gainedCount": 0,
+                "lostExamples": [
+                  "伊丹市"
+                ],
+                "gainedExamples": []
+              },
+              {
+                "facilityId": "starbucks",
+                "name": "スターバックスコーヒー",
+                "essential": false,
+                "before": 160,
+                "after": 159,
+                "lostCount": 1,
+                "gainedCount": 0,
+                "lostExamples": [
+                  "伊丹市"
+                ],
+                "gainedExamples": []
+              },
+              {
+                "facilityId": "fitness_club",
+                "name": "フィットネスクラブ",
+                "essential": false,
+                "before": 615,
+                "after": 616,
+                "lostCount": 0,
+                "gainedCount": 1,
+                "lostExamples": [],
+                "gainedExamples": [
+                  "田辺市"
+                ]
+              },
+              {
+                "facilityId": "regional_support_hospital",
+                "name": "地域医療支援病院",
+                "essential": false,
+                "before": 337,
+                "after": 336,
+                "lostCount": 1,
+                "gainedCount": 0,
+                "lostExamples": [
+                  "神戸市兵庫区"
+                ],
+                "gainedExamples": []
+              },
+              {
+                "facilityId": "critical_care_center",
+                "name": "救命救急センター施設",
+                "essential": false,
+                "before": 160,
+                "after": 159,
+                "lostCount": 1,
+                "gainedCount": 0,
+                "lostExamples": [
+                  "伊丹市"
+                ],
+                "gainedExamples": []
+              },
+              {
+                "facilityId": "paid_nursing_home",
+                "name": "有料老人ホーム",
+                "essential": false,
+                "before": 615,
+                "after": 616,
+                "lostCount": 0,
+                "gainedCount": 1,
+                "lostExamples": [],
+                "gainedExamples": [
+                  "田辺市"
+                ]
+              }
+            ]
+          }
+        }
+      ],
       "status": "pending",
-      "note": "Generated from real Claude answers after the API credit is granted; see docs"
+      "generatedAt": "2026-11-05T23:12:19.636Z",
+      "note": "Generated by scripts/ai_live_check.ts from the deployed Worker (claude-sonnet-5-5), status ok, 3 Worker calls (1 ask, the better one kept). Pending: the owner reads it before it becomes verified. Every number in the answer was found in the tool results."
     },
     {
       "id": "q4",
       "question": "人口が3,000人を下回る町は、2100年に何町ありますか？",
-      "answer": "",
-      "trace": [],
+      "answer": "このアプリの試算（標準の前提）では、2100年に人口が3,000人を下回る市区町村は730です。対象は全国1,884の市区町村です。町だけでなく、市区町村全体の数です。\n\n人口が特に少ない例は次のとおりです。\n- 黒滝村（奈良県）：14人\n- 笠置町（京都府）：16人\n- 御杖村（奈良県）：21人\n- 南牧村（群馬県）：22人\n- 曽爾村（奈良県）：29人\n\n社人研の公式推計は2050年までです。2100年の数字は予測ではなく、このアプリの試算です。人口移動や出生の前提を変えると、件数も変わります。",
+      "trace": [
+        {
+          "tool": "count_areas",
+          "input": {
+            "year": 2100,
+            "below": 3000
+          },
+          "result": {
+            "year": 2100,
+            "scenario": {
+              "cwrMult": 1,
+              "migMode": "hold",
+              "migScale": 1,
+              "infraStrength": 0
+            },
+            "below": 3000,
+            "count": 730,
+            "total": 1884,
+            "examples": [
+              {
+                "code": "29444",
+                "name": "黒滝村",
+                "prefName": "奈良県",
+                "population": 14
+              },
+              {
+                "code": "26364",
+                "name": "笠置町",
+                "prefName": "京都府",
+                "population": 16
+              },
+              {
+                "code": "29386",
+                "name": "御杖村",
+                "prefName": "奈良県",
+                "population": 21
+              },
+              {
+                "code": "10383",
+                "name": "南牧村",
+                "prefName": "群馬県",
+                "population": 22
+              },
+              {
+                "code": "29385",
+                "name": "曽爾村",
+                "prefName": "奈良県",
+                "population": 29
+              }
+            ]
+          }
+        }
+      ],
       "status": "pending",
-      "note": "Generated from real Claude answers after the API credit is granted; see docs"
+      "generatedAt": "2026-11-05T23:12:32.685Z",
+      "note": "Generated by scripts/ai_live_check.ts from the deployed Worker (claude-sonnet-5-5), status ok, 2 Worker calls (1 ask, the better one kept). Pending: the owner reads it before it becomes verified. Every number in the answer was found in the tool results. Contains words the system prompt avoids: 予測."
     },
     {
       "id": "q5",
       "question": "公式の推計と、このアプリの試算は、どう違いますか？",
-      "answer": "",
+      "answer": "違いは、誰が、どの年まで、どんな方法で出した数字かという点です。\n\n- **公式の推計**\n  - 国立社会保障・人口問題研究所（社人研）が出している推計です。\n  - 市区町村別の推計は2050年までです。\n\n- **このアプリの試算**\n  - 2050年より後（2060〜2100年）の数字は、このアプリの試算です。予測ではありません。\n  - 2050年までの公式の推計をもとに、このアプリが独自に計算しています。\n  - 子ども女性比や人口移動の強さなどの前提を変えると、結果も変わります。\n  - 施設の人口の目安を下回ると転出が増える、という仮定も加えられます。\n  - 2050年までは前提を変えても数字は同じです。前提の違いが出るのは2050年より後です。\n\n- **並べて見るとき**\n  - 2025〜2050年について、公式の推計とこのアプリの計算を同じ年で並べて、どのくらい差があるかを確かめられます。\n\n地域名を教えてもらえれば、その地域について両方の数字を並べてお見せします。",
       "trace": [],
       "status": "pending",
-      "note": "Generated from real Claude answers after the API credit is granted; see docs"
+      "generatedAt": "2026-11-05T23:12:41.079Z",
+      "note": "Generated by scripts/ai_live_check.ts from the deployed Worker (claude-sonnet-5-5), status ok, 1 Worker calls (1 ask, the better one kept). Pending: the owner reads it before it becomes verified. Every number in the answer was found in the tool results. Contains words the system prompt avoids: 予測."
     }
   ]
 }
