@@ -11,9 +11,11 @@
 //      Most upstream requests one ask can make: maxRounds + min(3, maxRounds) = 9 at the defaults.
 //   4. If the AI cannot be reached (limit, outage, network) the saved answer for the same question is used when there
 //      is one; otherwise status 'unavailable'. When nothing answers as the Worker at all (404 or 405, a 200 that is not
-//      the model's JSON, or no connection at the default same-origin address, where nothing is deployed) the result is
+//      the model's JSON, or, on a page opened from a file, no connection at the default address) the result is
 //      'unavailable' with reason 'not_configured': the AI is not part of this build, and trying again will not help.
-//      A user abort is never converted: ask() rejects with the AbortError.
+//      That is said only while this page has not had a real model message from that address: once it has, every later
+//      failure is 'try again later'. On an http(s) page a failed connection is the network breaking, never a sign
+//      that nothing is deployed. A user abort is never converted: ask() rejects with the AbortError.
 //   5. Before EVERY request the size is measured against the Worker's limits (with a margin). The oldest whole
 //      question-and-answer exchanges of `history` are dropped until it fits (result.trimmed); if even the current
 //      question and tool loop do not fit, nothing is sent (status 'unavailable', needsNewConversation).
@@ -314,29 +316,47 @@ interface ModelTurn {
   stopReason: string;
 }
 
-function failureForStatus(status: number): RequestFailure {
+/**
+ * The addresses that have given this page a real model message. Such an address is there: whatever goes wrong with it
+ * afterwards (a dropped connection, a gateway error page, a 404 from a broken deploy) is "try again later", never
+ * "this version has no AI". Kept for the life of the page, as module state: it is a fact about this page's session.
+ */
+const answered = new Set<string>();
+
+/** Forgets what the page has seen (tests: each starts as a fresh page). */
+export function forgetAnsweredEndpoints(): void {
+  answered.clear();
+}
+
+/** Nothing there takes our request: 'not_configured', unless this page has already had an answer from this address. */
+function notThere(env: Env): RequestFailure {
+  return new RequestFailure(answered.has(env.endpoint) ? 'unreachable' : 'not_configured');
+}
+
+function failureForStatus(status: number, env: Env): RequestFailure {
   if (status === 413) return new RequestFailure('too_long');
   // 404 and 405: the address answers, but nothing there takes a POST (a static host, a Worker that was never deployed).
-  if (status === 404 || status === 405) return new RequestFailure('not_configured');
+  if (status === 404 || status === 405) return notThere(env);
   // 429 (daily limit; the body says cached: true) and 5xx (502 upstream, 503 not configured / store down) are the
   // AI being unavailable right now. Everything else (403 origin, 400 body) is a problem with the request.
   if (status === 429 || status >= 500) return new RequestFailure('unreachable');
   return new RequestFailure('rejected');
 }
 
-/** The browser says it has no network at all: a failed request then says nothing about whether a Worker is deployed. */
-function isOffline(): boolean {
-  return typeof navigator !== 'undefined' && navigator.onLine === false;
+/** A page opened from a file: its same-origin default address is file:///api/chat, where nothing can ever answer. */
+function isFilePage(): boolean {
+  return typeof location !== 'undefined' && location.protocol === 'file:';
 }
 
 /**
- * An abort the caller asked for passes through untouched; anything else that broke the transport is 'unreachable',
- * except at the default same-origin address (nothing is deployed there in a build without a Worker) while the browser
- * is online: then it is 'not_configured'. A failure to reach an address someone configured is always 'unreachable'.
+ * An abort the caller asked for passes through untouched; anything else that broke the transport is 'unreachable':
+ * on an http(s) page a failed connection (offline, a lossy link, a reset) says nothing about whether a Worker is
+ * deployed, because a host with no Worker answers with a 404, a 405 or its index page. The one place where a failed
+ * connection does mean nothing is there is the default address of a page opened from a file.
  */
 function transportFailure(error: unknown, env: Env): unknown {
   if (env.signal?.aborted) return error;
-  return new RequestFailure(env.endpoint === DEFAULT_ENDPOINT && !isOffline() ? 'not_configured' : 'unreachable');
+  return env.endpoint === DEFAULT_ENDPOINT && isFilePage() ? notThere(env) : new RequestFailure('unreachable');
 }
 
 /** JSON.parse and Response.json() throw a SyntaxError for text that is not JSON (checked by name: it may come from another realm). */
@@ -361,7 +381,7 @@ async function callModel(messages: Message[], env: Env): Promise<ModelTurn> {
   } catch (error) {
     throw transportFailure(error, env);
   }
-  if (!response.ok) throw failureForStatus(response.status);
+  if (!response.ok) throw failureForStatus(response.status, env);
 
   let data: unknown;
   try {
@@ -370,10 +390,11 @@ async function callModel(messages: Message[], env: Env): Promise<ModelTurn> {
     env.signal?.throwIfAborted(); // a stop the visitor asked for is never turned into "not available"
     // A page that is not JSON (a static host answering with its index.html) means no Worker is there. A body that was
     // cut off on the way is a transport failure like any other.
-    throw isSyntaxError(error) ? new RequestFailure('not_configured') : transportFailure(error, env);
+    throw isSyntaxError(error) ? notThere(env) : transportFailure(error, env);
   }
   // A 200 that is JSON but not a model message is not our Worker either.
-  if (!isRecord(data) || !Array.isArray(data.content)) throw new RequestFailure('not_configured');
+  if (!isRecord(data) || !Array.isArray(data.content)) throw notThere(env);
+  answered.add(env.endpoint);
   return {
     content: rebuildBlocks(data.content),
     stopReason: typeof data.stop_reason === 'string' ? data.stop_reason : '',

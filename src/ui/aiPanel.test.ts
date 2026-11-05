@@ -2,11 +2,11 @@
 import { readFileSync } from 'node:fs';
 import v8 from 'node:v8';
 import vm from 'node:vm';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadAllAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
 import { repoPath } from '../../test/helpers/paths';
-import { ask } from '../ai/client';
+import { ask, forgetAnsweredEndpoints } from '../ai/client';
 import type { AskResult, Message } from '../ai/client';
 import { SAMPLE_QUESTIONS } from '../ai/cached';
 import type { CachedAnswer, CachedAnswers } from '../ai/cached';
@@ -182,6 +182,10 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 async function answersCount(m: Mounted, n: number): Promise<void> {
   await vi.waitFor(() => expect(m.answers()).toHaveLength(n), { timeout: 15_000 });
 }
+
+beforeEach(() => {
+  forgetAnsweredEndpoints(); // every test starts as a fresh page: the client remembers which addresses have answered
+});
 
 afterEach(() => {
   for (const m of mounted.splice(0)) m.destroy();
@@ -791,7 +795,6 @@ describe('when there is no AI behind the page (nothing is deployed)', () => {
     ['404', () => jsonResponse({ error: 'not_found' }, 404)],
     ['405', () => new Response('Method Not Allowed', { status: 405 })],
     ['a 200 with the index page', html],
-    ['a failed connection to the default address', () => new TypeError('Failed to fetch')],
   ];
 
   it.each(noWorker)('%s: a sample click shows the plain sentence, not the retry text, and no retry button', async (_name, step) => {
@@ -819,6 +822,29 @@ describe('when there is no AI behind the page (nothing is deployed)', () => {
     expect(m.answers()[0]!.querySelector('.ai-fail')!.textContent).toBe(NOT_AVAILABLE_TEXT);
   });
 
+  it('a dropped connection at the default address (a flaky link, the page was served over http) says to try again later, not that there is no AI', async () => {
+    const m = mount({ fetchFn: script(new TypeError('Failed to fetch')).fetchFn, cache: allPending() });
+    m.samples()[1]!.click();
+    await answersCount(m, 1);
+    expect(m.answers()[0]!.querySelector('.ai-fail')!.textContent).toBe(TRY_LATER_TEXT);
+    expect(unavailableNotices(m)).toHaveLength(0);
+    expect(m.answers()[0]!.textContent).not.toContain('このバージョンでは');
+  });
+
+  it('once the AI has answered, a later 404 or a dropped connection never turns into "not available"', async () => {
+    const s = script(textResponse('一つ目の答え。'), jsonResponse({ error: 'not_found' }, 404), new TypeError('Failed to fetch'), html());
+    const m = mount({ fetchFn: s.fetchFn, cache: allPending() });
+    m.typeAndSend('一つ目');
+    await answersCount(m, 1);
+    for (const [i, question] of ['二つ目', '三つ目', '四つ目'].entries()) {
+      m.typeAndSend(question);
+      await answersCount(m, i + 2);
+      expect(m.answers()[0]!.querySelector('.ai-fail')!.textContent).toBe(TRY_LATER_TEXT);
+    }
+    expect(unavailableNotices(m)).toHaveLength(0);
+    expect(m.section.textContent).not.toContain('このバージョンでは');
+  });
+
   it('the five sample buttons stay (they are the tour), and are usable again after the sentence', async () => {
     const m = mount({ fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn, cache: allPending() });
     m.samples()[0]!.click();
@@ -843,8 +869,8 @@ describe('when there is no AI behind the page (nothing is deployed)', () => {
     expect(countOf(m.q('.ai-answers').textContent!, NOT_AVAILABLE_TEXT)).toBe(1);
   });
 
-  it('the sentence leaves nothing else changed: answers before it stay, and a later answer goes above it', async () => {
-    const s = script(textResponse('一つ目の答え。'), jsonResponse({ error: 'not_found' }, 404), textResponse('三つ目の答え。'));
+  it('the sentence stays where it is, and answers that arrive later go above it (a Worker that appears after the first try is believed)', async () => {
+    const s = script(jsonResponse({ error: 'not_found' }, 404), textResponse('二つ目の答え。'), textResponse('三つ目の答え。'));
     const m = mount({ fetchFn: s.fetchFn, cache: allPending() });
     m.typeAndSend('一つ目');
     await answersCount(m, 1);
@@ -852,7 +878,7 @@ describe('when there is no AI behind the page (nothing is deployed)', () => {
     await answersCount(m, 2);
     m.typeAndSend('三つ目');
     await answersCount(m, 3);
-    expect(m.answers().map((a) => a.querySelector('.ai-answer-text')?.textContent ?? 'notice')).toEqual(['三つ目の答え。', 'notice', '一つ目の答え。']);
+    expect(m.answers().map((a) => a.querySelector('.ai-answer-text')?.textContent ?? 'notice')).toEqual(['三つ目の答え。', '二つ目の答え。', 'notice']);
     expect(unavailableNotices(m)).toHaveLength(1);
   });
 

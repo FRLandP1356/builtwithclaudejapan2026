@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_BODY_BYTES, MAX_MESSAGES, MAX_TOTAL_TEXT_CHARS, validateChatBody } from '../../worker/validate';
 import { makeEngineContext } from '../../test/helpers/engineContext';
-import { ask, CLIENT_LIMITS, formatToolResult, MAX_TOOL_RESULT_CHARS, measureRequest, MSG_NOT_AVAILABLE } from './client';
+import { ask, CLIENT_LIMITS, forgetAnsweredEndpoints, formatToolResult, MAX_TOOL_RESULT_CHARS, measureRequest, MSG_NOT_AVAILABLE } from './client';
 import type { AskOptions, AskResult, Block, Message } from './client';
 import { SAMPLE_QUESTIONS } from './cached';
 import type { CachedAnswer, CachedAnswers } from './cached';
@@ -15,6 +15,14 @@ vi.mock('./tools', async (importOriginal) => {
 });
 
 const ctx = makeEngineContext();
+
+// Every test starts as a fresh page: the client remembers which addresses have answered (see "once the page has had an answer").
+beforeEach(() => {
+  forgetAnsweredEndpoints();
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const TOKYO_QUESTION = '日本の人口が減り出してから、東京はどうなっていますか？';
 /** The AI is down and there is a verified saved answer to look at. */
@@ -770,22 +778,60 @@ describe('an endpoint that is not there', () => {
     ['200 with JSON that is not a model message', () => jsonResponse({ hello: 'world' })],
     ['200 with JSON whose content is not a list', () => jsonResponse({ content: 'text' })],
   ])('%s: not available, with the reason, after one request, and nothing is retried', async (_name, response) => {
-    const s = script(response(), textResponse('should not be reached'));
-    const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: s.fetchFn, endpoint: EXPLICIT });
-    expect(result).toMatchObject({ status: 'unavailable', reason: 'not_configured', message: NOT_AVAILABLE_TEXT, answer: '', fromCache: false, unverified: [] });
-    expect(result.messages).toEqual([]);
-    expect(s.mock).toHaveBeenCalledTimes(1);
+    for (const endpoint of [undefined, EXPLICIT]) {
+      const s = script(response(), textResponse('should not be reached'));
+      const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: s.fetchFn, ...(endpoint ? { endpoint } : {}) });
+      expect(result).toMatchObject({ status: 'unavailable', reason: 'not_configured', message: NOT_AVAILABLE_TEXT, answer: '', fromCache: false, unverified: [] });
+      expect(result.messages).toEqual([]);
+      expect(s.mock).toHaveBeenCalledTimes(1);
+    }
   });
 
-  it('a_failed_connection_to_the_default_address_is_not_available: nothing is deployed there', async () => {
+  it('a_failed_connection_on_an_http_page_is_try_again_later_even_at_the_default_address: a host with no Worker answers, it does not drop the connection', async () => {
+    for (const protocol of ['http:', 'https:']) {
+      for (const onLine of [true, false]) {
+        vi.stubGlobal('location', { protocol });
+        vi.stubGlobal('navigator', { onLine }); // a lossy mobile link, a captive portal and a real outage all look like this or that
+        for (const endpoint of [undefined, '/api/chat', EXPLICIT]) {
+          const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn, ...(endpoint ? { endpoint } : {}) });
+          expect(result.status, `${protocol} ${onLine} ${endpoint}`).toBe('unavailable');
+          expect(result.reason).toBeUndefined();
+          expect(result.message).toBe(TRY_LATER);
+        }
+        const cut = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(brokenBody()).fetchFn });
+        expect(cut).toMatchObject({ status: 'unavailable', message: TRY_LATER });
+        expect(cut.reason).toBeUndefined();
+      }
+    }
+  });
+
+  it('a_failed_connection_without_any_page_location_is_try_again_later_too (a Worker, an old runtime): no ReferenceError', async () => {
+    vi.stubGlobal('location', undefined);
     const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn });
-    expect(result).toMatchObject({ status: 'unavailable', reason: 'not_configured', message: NOT_AVAILABLE_TEXT });
-    // the address written out is the same address
-    const written = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn, endpoint: '/api/chat' });
-    expect(written.reason).toBe('not_configured');
-    // a body that breaks off at the default address is a failed connection too
+    expect(result).toMatchObject({ status: 'unavailable', message: TRY_LATER });
+    expect(result.reason).toBeUndefined();
+  });
+
+  it('a_page_opened_from_a_file_has_nothing_at_its_default_address: a failed connection there is not available', async () => {
+    vi.stubGlobal('location', { protocol: 'file:' });
+    for (const endpoint of [undefined, '/api/chat']) {
+      const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn, ...(endpoint ? { endpoint } : {}) });
+      expect(result).toMatchObject({ status: 'unavailable', reason: 'not_configured', message: NOT_AVAILABLE_TEXT });
+    }
     const cut = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(brokenBody()).fetchFn });
     expect(cut).toMatchObject({ status: 'unavailable', reason: 'not_configured' });
+    // an address someone configured is a real network address, even from a file
+    const configured = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn, endpoint: EXPLICIT });
+    expect(configured.reason).toBeUndefined();
+    expect(configured.message).toBe(TRY_LATER);
+  });
+
+  it('a_page_opened_from_a_file_that_has_had_an_answer_gets_try_again_later_for_a_dropped_connection', async () => {
+    vi.stubGlobal('location', { protocol: 'file:' });
+    await ask('こんにちは', ctx, { fetchFn: script(textResponse('はい。')).fetchFn });
+    const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn });
+    expect(result.reason).toBeUndefined();
+    expect(result.message).toBe(TRY_LATER);
   });
 
   it('a_failed_connection_to_a_configured_address_is_try_again_later: the Worker may well be there', async () => {
@@ -802,25 +848,6 @@ describe('an endpoint that is not there', () => {
   it('a_page_that_is_not_JSON_is_not_available_even_at_a_configured_address', async () => {
     const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(html()).fetchFn, endpoint: EXPLICIT });
     expect(result.reason).toBe('not_configured');
-  });
-
-  it('offline_is_not_the_same_as_not_deployed: a failed connection while the browser has no network is try again later', async () => {
-    vi.stubGlobal('navigator', { onLine: false });
-    try {
-      const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn });
-      expect(result.status).toBe('unavailable');
-      expect(result.reason).toBeUndefined();
-      expect(result.message).toBe(TRY_LATER);
-    } finally {
-      vi.unstubAllGlobals();
-    }
-    vi.stubGlobal('navigator', { onLine: true });
-    try {
-      const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn });
-      expect(result.reason).toBe('not_configured');
-    } finally {
-      vi.unstubAllGlobals();
-    }
   });
 
   it.each([
@@ -871,11 +898,92 @@ describe('an endpoint that is not there', () => {
     expect(other.messages).toEqual(HISTORY);
   });
 
-  it('a_404_in_a_later_round_keeps_the_trace_so_far', async () => {
-    const s = script(toolUseResponse(toolUse('toolu_1', 'find_area', { query: '東京' })), jsonResponse({ error: 'not_found' }, 404));
-    const result = await ask('東京', ctx, { fetchFn: s.fetchFn });
-    expect(result).toMatchObject({ status: 'unavailable', reason: 'not_configured' });
-    expect(result.trace.map((t) => t.tool)).toEqual(['find_area']);
+  describe('once the page has had an answer', () => {
+    const answerOnce = async (endpoint?: string): Promise<void> => {
+      const first = await ask('こんにちは', ctx, { fetchFn: script(textResponse('はい。')).fetchFn, ...(endpoint ? { endpoint } : {}) });
+      expect(first.status).toBe('ok');
+    };
+
+    it('question 1 answered, then the connection drops on question 2: try again later, on a link that says it is online', async () => {
+      vi.stubGlobal('location', { protocol: 'https:' });
+      vi.stubGlobal('navigator', { onLine: true });
+      await answerOnce();
+      const second = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn });
+      expect(second).toMatchObject({ status: 'unavailable', message: TRY_LATER });
+      expect(second.reason).toBeUndefined();
+    });
+
+    it.each([
+      ['404', () => jsonResponse({ error: 'not_found' }, 404)],
+      ['405', () => new Response('Method Not Allowed', { status: 405 })],
+      ['200 with the index page', html],
+      ['200 with an empty body', () => new Response('', { status: 200 })],
+      ['200 with JSON that is not a model message', () => jsonResponse({ hello: 'world' })],
+      ['200 with JSON whose content is not a list', () => jsonResponse({ content: 'text' })],
+    ])('%s after an answer is try again later, never not available', async (_name, response) => {
+      await answerOnce();
+      const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(response()).fetchFn });
+      expect(result).toMatchObject({ status: 'unavailable', message: TRY_LATER });
+      expect(result.reason).toBeUndefined();
+    });
+
+    it.each([
+      ['a dropped connection', () => new TypeError('Failed to fetch')],
+      ['a 404', () => jsonResponse({ error: 'not_found' }, 404)],
+      ['the index page', html],
+      ['a body that breaks off', brokenBody],
+    ])('round 1 is a tool call, round 2 is %s: the trace so far stays, and it is try again later', async (_name, failure) => {
+      const s = script(toolUseResponse(toolUse('toolu_1', 'find_area', { query: '東京' })), failure());
+      const result = await ask('東京', ctx, { fetchFn: s.fetchFn });
+      expect(result).toMatchObject({ status: 'unavailable', message: TRY_LATER, answer: '' });
+      expect(result.reason).toBeUndefined();
+      expect(result.trace.map((t) => t.tool)).toEqual(['find_area']);
+      expect(result.messages).toEqual([]);
+    });
+
+    it('the same on a page opened from a file, where nothing is deployed at the default address until it has answered', async () => {
+      vi.stubGlobal('location', { protocol: 'file:' });
+      const s = script(toolUseResponse(toolUse('toolu_1', 'find_area', { query: '東京' })), new TypeError('Failed to fetch'));
+      const result = await ask('東京', ctx, { fetchFn: s.fetchFn });
+      expect(result.reason).toBeUndefined();
+      expect(result.message).toBe(TRY_LATER);
+    });
+
+    it('a model message of any kind counts, an empty one included; a reply that is not a model message does not', async () => {
+      await ask('q', ctx, { fetchFn: script(modelResponse([], 'end_turn')).fetchFn }); // an empty reply is still the Worker speaking
+      expect((await ask('q', ctx, { fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn })).reason).toBeUndefined();
+
+      forgetAnsweredEndpoints();
+      await ask('q', ctx, { fetchFn: script(jsonResponse({ hello: 'world' })).fetchFn }); // not one
+      await ask('q', ctx, { fetchFn: script(html()).fetchFn }); // not one
+      expect((await ask('q', ctx, { fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn })).reason).toBe('not_configured');
+    });
+
+    it('is remembered per address: an answer from one says nothing about another', async () => {
+      await answerOnce(EXPLICIT);
+      const elsewhere = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn });
+      expect(elsewhere.reason).toBe('not_configured');
+      const same = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn, endpoint: EXPLICIT });
+      expect(same.reason).toBeUndefined();
+    });
+
+    it('forgetAnsweredEndpoints starts the page over', async () => {
+      await answerOnce();
+      forgetAnsweredEndpoints();
+      const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn });
+      expect(result.reason).toBe('not_configured');
+    });
+
+    it('a 404 on the very first request of a page is still not available, and the trace is empty', async () => {
+      const result = await ask('東京', ctx, { fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn });
+      expect(result).toMatchObject({ status: 'unavailable', reason: 'not_configured', trace: [] });
+    });
+
+    it('a verified saved answer for the same question stands in after the connection drops', async () => {
+      await answerOnce();
+      const result = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(new TypeError('Failed to fetch')).fetchFn, cache: cacheOf(verifiedEntry()), history: HISTORY });
+      expect(result).toMatchObject({ status: 'ok', fromCache: true });
+    });
   });
 
   it('a_stop_that_arrives_before_a_page_that_is_not_JSON_is_read_is_still_an_abort', async () => {
