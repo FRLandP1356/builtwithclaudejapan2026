@@ -148,6 +148,33 @@ describe('arrow keys, Home and End', () => {
     expect(stops(host)).toEqual(['g00']);
   });
 
+  test('PageDown and PageUp go to the next and previous area in Tab order, and stop at the ends', () => {
+    const { host } = mount();
+    areas(host)[0].focus();
+    const order = areas(host).map((a) => a.getAttribute('data-code'));
+    const walked: Array<string | null | undefined> = [focused()];
+    for (let i = 0; i < 12; i++) {
+      const ev = key(document.activeElement!, 'PageDown');
+      expect(ev.defaultPrevented).toBe(true);
+      walked.push(focused());
+    }
+    expect(walked.slice(0, 9)).toEqual(order); // every area once, in DOM order
+    expect(walked.slice(8)).toEqual(Array(5).fill(order[8])); // the last area keeps focus
+    expect(stops(host)).toEqual([order[8]]);
+    for (let i = 0; i < 8; i++) key(document.activeElement!, 'PageUp');
+    expect(focused()).toBe(order[0]);
+    expect(key(document.activeElement!, 'PageUp').defaultPrevented).toBe(true);
+    expect(focused()).toBe(order[0]);
+    expect(stops(host)).toEqual([order[0]]);
+  });
+
+  test('a modified PageDown is left alone', () => {
+    const { host } = mount();
+    areas(host)[0].focus();
+    expect(key(document.activeElement!, 'PageDown', { altKey: true }).defaultPrevented).toBe(false);
+    expect(focused()).toBe('g00');
+  });
+
   test('a modified arrow (Alt+Left is the browser back) is left alone', () => {
     const { host } = mount();
     areas(host)[4].focus();
@@ -161,7 +188,7 @@ describe('arrow keys, Home and End', () => {
   test('other keys are not taken (Tab leaves the map, letters do nothing)', () => {
     const { host } = mount();
     areas(host)[4].focus();
-    for (const k of ['Tab', 'a', 'PageDown', 'Escape']) {
+    for (const k of ['Tab', 'a', 'F1', 'Escape', 'constructor', 'toString', '__proto__']) {
       expect(key(document.activeElement!, k).defaultPrevented).toBe(false);
     }
     expect(focused()).toBe('g11');

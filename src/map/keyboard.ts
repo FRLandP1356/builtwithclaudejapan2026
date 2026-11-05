@@ -1,6 +1,7 @@
-// Keyboard order of the map areas: one Tab stop for the whole map (a roving tabindex) and arrow keys that move to the
-// neighbouring area on screen. Pure functions over area anchors (the centroid of an area's largest polygon, in the
-// map's viewBox coordinates), so the choice of the next area is testable without a DOM.
+// Keyboard order of the map areas: one Tab stop for the whole map (a roving tabindex), arrow keys that move to the
+// neighbouring area on screen, Home/End to the first and last area and PageUp/PageDown to the previous and next area
+// in Tab order (which reaches every area, also those no arrow reaches). Pure functions over area anchors (the centroid
+// of an area's largest polygon, in the map's viewBox coordinates), so the choice of the next area is testable without a DOM.
 
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
@@ -11,12 +12,20 @@ export interface Anchor {
 }
 
 /** The arrow keys the map answers to. */
-export const ARROW_DIRECTIONS: Readonly<Record<string, Direction>> = {
-  ArrowUp: 'up',
-  ArrowDown: 'down',
-  ArrowLeft: 'left',
-  ArrowRight: 'right',
-};
+export const ARROW_DIRECTIONS: ReadonlyMap<string, Direction> = new Map<string, Direction>([
+  ['ArrowUp', 'up'],
+  ['ArrowDown', 'down'],
+  ['ArrowLeft', 'left'],
+  ['ArrowRight', 'right'],
+]);
+
+/** Home, End, PageUp and PageDown walk the Tab order. */
+const SEQUENCE_KEYS: ReadonlySet<string> = new Set(['Home', 'End', 'PageUp', 'PageDown']);
+
+/** Whether the map answers to `key` (it then keeps the key from scrolling the page, even at an edge). */
+export function isNavigationKey(key: string): boolean {
+  return ARROW_DIRECTIONS.has(key) || SEQUENCE_KEYS.has(key);
+}
 
 /** An offset sideways counts this many times as much as the same offset along the arrow (a straight neighbour wins over a diagonal one). */
 export const SIDEWAYS_WEIGHT = 2;
@@ -50,15 +59,18 @@ export function nearestInDirection(from: Anchor, direction: Direction, candidate
 
 /**
  * The area a key moves to: an arrow key by `nearestInDirection`, Home and End to the first and last area of the Tab
- * order. `undefined` for any other key, and at an edge. `anchors` is in Tab order.
+ * order, PageUp and PageDown to the previous and next one (no wrap). `undefined` for any other key, and at an edge.
+ * `anchors` is in Tab order.
  */
 export function targetForKey(key: string, currentCode: string, anchors: readonly Anchor[]): string | undefined {
   if (key === 'Home') return anchors[0]?.code;
   if (key === 'End') return anchors[anchors.length - 1]?.code;
-  const direction = ARROW_DIRECTIONS[key];
-  if (!direction) return undefined;
-  const from = anchors.find((a) => a.code === currentCode);
-  return from ? nearestInDirection(from, direction, anchors) : undefined;
+  const index = anchors.findIndex((a) => a.code === currentCode);
+  if (index < 0) return undefined;
+  if (key === 'PageUp') return anchors[index - 1]?.code;
+  if (key === 'PageDown') return anchors[index + 1]?.code;
+  const direction = ARROW_DIRECTIONS.get(key);
+  return direction ? nearestInDirection(anchors[index], direction, anchors) : undefined;
 }
 
 /**

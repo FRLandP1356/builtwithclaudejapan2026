@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { nearestInDirection, SIDEWAYS_WEIGHT, tabStopFor, targetForKey, type Anchor } from './keyboard';
+import { ARROW_DIRECTIONS, isNavigationKey, nearestInDirection, SIDEWAYS_WEIGHT, tabStopFor, targetForKey, type Anchor } from './keyboard';
 
 const at = (code: string, x: number, y: number): Anchor => ({ code, x, y });
 
@@ -37,6 +37,16 @@ describe('nearestInDirection', () => {
     const below = at('q', 10, 4);
     expect(nearestInDirection(centre, 'right', [centre, above, below])).toBe('p');
     expect(nearestInDirection(centre, 'right', [centre, below, above])).toBe('q');
+  });
+
+  test('scores that differ only by floating-point noise count as a tie: the earlier candidate wins even if the later one is a hair closer', () => {
+    const from = at('o', 0, 0);
+    const first = at('first', 10, -3);
+    const hairCloser = at('second', 10, 3 - 1e-13); // score smaller by about 2e-12, far below the tolerance
+    expect(nearestInDirection(from, 'right', [from, first, hairCloser])).toBe('first');
+    expect(nearestInDirection(from, 'right', [from, hairCloser, first])).toBe('second');
+    // a real difference (well above the tolerance) still wins
+    expect(nearestInDirection(from, 'right', [from, first, at('closer', 10, 2.9)])).toBe('closer');
   });
 
   test('a candidate exactly level with the area is not "to the right" or "to the left"', () => {
@@ -87,6 +97,28 @@ describe('nearestInDirection', () => {
 });
 
 describe('targetForKey', () => {
+  test('PageDown and PageUp walk the Tab order one area at a time, without wrapping', () => {
+    expect(targetForKey('PageDown', 'a', grid)).toBe('b');
+    expect(targetForKey('PageDown', 'c', grid)).toBe('d'); // across the end of a screen row
+    expect(targetForKey('PageUp', 'e', grid)).toBe('d');
+    expect(targetForKey('PageUp', 'a', grid)).toBeUndefined();
+    expect(targetForKey('PageDown', 'i', grid)).toBeUndefined();
+    expect(targetForKey('PageDown', 'nope', grid)).toBeUndefined();
+    expect(targetForKey('PageUp', 'e', [])).toBeUndefined();
+    const scrambled = [at('z', 50, 50), at('y', 0, 0), at('x', 99, 1)];
+    expect(targetForKey('PageDown', 'z', scrambled)).toBe('y'); // Tab order, not screen order
+    expect(targetForKey('PageUp', 'x', scrambled)).toBe('y');
+  });
+
+  test('inherited object property names are not keys (a plain object would say "constructor" in it)', () => {
+    for (const k of ['constructor', 'toString', 'hasOwnProperty', '__proto__', 'valueOf']) {
+      expect(targetForKey(k, 'e', grid), k).toBeUndefined();
+      expect(isNavigationKey(k), k).toBe(false);
+      expect(ARROW_DIRECTIONS.has(k)).toBe(false);
+    }
+  });
+
+
   test('arrows use the direction rule; Home and End use the Tab order, not the screen', () => {
     expect(targetForKey('ArrowRight', 'e', grid)).toBe('f');
     expect(targetForKey('ArrowLeft', 'e', grid)).toBe('d');
@@ -116,5 +148,12 @@ describe('tabStopFor', () => {
     expect(tabStopFor(undefined, codes)).toBe('01');
     expect(tabStopFor('99', codes)).toBe('01');
     expect(tabStopFor('02', [])).toBeUndefined();
+  });
+});
+
+describe('isNavigationKey', () => {
+  test('arrows, Home, End, PageUp and PageDown only', () => {
+    for (const k of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown']) expect(isNavigationKey(k), k).toBe(true);
+    for (const k of ['Tab', 'Enter', ' ', 'Escape', 'a', 'Up', 'arrowup', '']) expect(isNavigationKey(k), k).toBe(false);
   });
 });

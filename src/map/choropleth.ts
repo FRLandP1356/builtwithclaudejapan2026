@@ -5,8 +5,9 @@
 // - Hover, keyboard focus and the selected area are drawn as overlay paths (a paper halo plus an ink/accent stroke)
 //   on top of everything, so a neighbour's fill never hides the outline.
 // - Every area is a button, but the map is ONE Tab stop (a roving tabindex: the selected area, else the first): the
-//   arrow keys move to the nearest area in that direction, Home and End to the first and last, Enter or Space drill
-//   down, and a tooltip with the numbers follows the pointer or the focused shape.
+//   arrow keys move to the nearest area in that direction, PageUp and PageDown to the previous and next area, Home and
+//   End to the first and last, Enter or Space drill down, and a tooltip with the numbers follows the pointer or the
+//   focused shape.
 // - Far-away islands can go into an inset box with its own projection: either a fixed list (Okinawa on the national
 //   map) or `'auto'`, which finds the main cluster of shapes by bounding-box gaps and puts the rest in a corner.
 import { geoMercator, geoPath, type GeoPath, type GeoProjection } from 'd3';
@@ -14,7 +15,7 @@ import type { Feature, FeatureCollection, Geometry, MultiPoint, Position } from 
 import type { GeometryCollection, GeometryObject, Topology } from 'topojson-specification';
 import { feature, mesh } from 'topojson-client';
 import { changeColor } from './colors';
-import { ARROW_DIRECTIONS, tabStopFor, targetForKey, type Anchor } from './keyboard';
+import { isNavigationKey, tabStopFor, targetForKey, type Anchor } from './keyboard';
 
 export interface AreaProps {
   code: string;
@@ -470,7 +471,7 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
   const hint = document.createElement('span');
   hint.className = 'sr-only';
   hint.id = `${id}-keys`;
-  hint.textContent = '矢印キーで隣の地域へ、HomeとEndで最初と最後の地域へ移ります。EnterかSpaceで選びます。';
+  hint.textContent = '矢印キーで隣の地域へ、PageUpとPageDownで前と次の地域へ、HomeとEndで最初と最後の地域へ移ります。EnterかSpaceで選びます。';
   svg.setAttribute('aria-describedby', hint.id);
   container.append(svg, hint, tip);
 
@@ -584,9 +585,9 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
       opts.onPick(code);
       return;
     }
-    // Arrow keys and Home/End rove the focus; a modified key (Alt+Left is "back") belongs to the browser.
+    // Arrows, PageUp/PageDown and Home/End rove the focus; a modified key (Alt+Left is "back") belongs to the browser.
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-    if (!(e.key in ARROW_DIRECTIONS) && e.key !== 'Home' && e.key !== 'End') return;
+    if (!isNavigationKey(e.key)) return;
     e.preventDefault(); // also at an edge: the page must not scroll under the map
     const next = targetForKey(e.key, code, anchors);
     if (next) pathByCode.get(next)?.focus({ preventScroll: true });
