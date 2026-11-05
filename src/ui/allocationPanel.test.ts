@@ -919,6 +919,136 @@ describe('地図に反映する (the map overlay)', () => {
     expect(more.open).toBe(true);
   });
 
+  describe('keyboard focus survives a year or scenario step', () => {
+    /** The facility name buttons on screen, by facility id (visible and collapsed tables). */
+    const buttonFor = (el: HTMLElement, id: string) => [...el.querySelectorAll<HTMLButtonElement>('.alloc-focus')].find((b) => b.dataset.facility === id);
+    const HEADING = '施設の人口の目安をまたぐ町の数';
+
+    test('the focused facility keeps focus when the year steps and the facility is still listed', () => {
+      const { el, store } = mount(); // 2100
+      const before = buttonFor(el, 'grocery')!;
+      before.focus();
+      expect(document.activeElement).toBe(before);
+      store.set({ year: 2095 }); // grocery is listed in 2095 as well
+      const after = buttonFor(el, 'grocery')!;
+      expect(after).toBeDefined();
+      expect(after).not.toBe(before); // the list was rebuilt
+      expect(before.isConnected).toBe(false);
+      expect(document.activeElement).toBe(after);
+      expect(after.isConnected).toBe(true);
+      expect(after.textContent).toBe('飲食料品小売業');
+    });
+
+    test('and when the scenario steps', () => {
+      const assumptions = { cwrMult: 1.2, migMode: 'hold' as const, migScale: 1, infraStrength: 0 };
+      const listed = (el: HTMLElement) => [...el.querySelectorAll<HTMLButtonElement>('.alloc-focus')].map((b) => b.dataset.facility!);
+      // First learn which facilities are listed under the new assumptions, so the test follows one that stays and one that goes.
+      const probe = mount();
+      const atFirst = listed(probe.el);
+      probe.store.set({ scenario: assumptions });
+      const afterwards = listed(probe.el);
+      document.body.replaceChildren();
+      const stays = atFirst.find((id) => afterwards.includes(id))!;
+      const goes = atFirst.find((id) => !afterwards.includes(id))!;
+      expect(stays, 'a facility listed before and after').toBeDefined();
+      expect(goes, 'a facility listed only before').toBeDefined();
+
+      const { el, store } = mount();
+      const before = buttonFor(el, stays)!;
+      before.focus();
+      store.set({ scenario: assumptions });
+      const after = buttonFor(el, stays)!;
+      expect(before.isConnected).toBe(false);
+      expect(document.activeElement).toBe(after);
+
+      document.body.replaceChildren();
+      const second = mount();
+      buttonFor(second.el, goes)!.focus();
+      second.store.set({ scenario: assumptions });
+      expect(buttonFor(second.el, goes)).toBeUndefined();
+      expect(document.activeElement).toBe(second.el.querySelector('#alloc-detail .panel-section-title'));
+    });
+
+    test('a facility that is no longer listed gives focus to the list heading', () => {
+      const { el, store } = mount();
+      buttonFor(el, 'grocery')!.focus();
+      store.set({ year: 2090 }); // nothing crosses grocery's guide in 2090
+      expect(buttonFor(el, 'grocery')).toBeUndefined();
+      const heading = el.querySelector<HTMLElement>('#alloc-detail .panel-section-title')!;
+      expect(heading.textContent).toBe(HEADING);
+      expect(document.activeElement).toBe(heading);
+      expect(heading.getAttribute('tabindex')).toBe('-1'); // takes focus from a script, is not another Tab stop
+    });
+
+    test('a facility that moves into the collapsed group keeps focus, with the group opened for it', () => {
+      const { el, store } = mount();
+      const before = buttonFor(el, 'restaurant')!;
+      expect(before.closest('details')).toBeNull(); // listed in the open table in 2100
+      before.focus();
+      store.set({ year: 2095 }); // in 2095 it sits in the collapsed group
+      const after = buttonFor(el, 'restaurant')!;
+      const group = after.closest('details.alloc-more') as HTMLDetailsElement;
+      expect(group).not.toBeNull();
+      expect(group.open).toBe(true);
+      expect(document.activeElement).toBe(after);
+    });
+
+    test('a facility inside the collapsed group keeps focus across a step, and the group stays open', () => {
+      const { el, store } = mount();
+      const group = el.querySelector<HTMLDetailsElement>('details.alloc-more')!;
+      group.open = true;
+      const before = buttonFor(el, 'hotel')!;
+      expect(before.closest('details')).toBe(group); // in the collapsed group in 2100
+      before.focus();
+      expect(document.activeElement).toBe(before);
+      store.set({ year: 2095 }); // and in 2095
+      const after = buttonFor(el, 'hotel')!;
+      expect(after).not.toBe(before);
+      expect((after.closest('details') as HTMLDetailsElement).open).toBe(true);
+      expect(document.activeElement).toBe(after);
+    });
+
+    test('a facility inside the collapsed group that is no longer listed gives focus to the heading', () => {
+      const { el, store } = mount();
+      el.querySelector<HTMLDetailsElement>('details.alloc-more')!.open = true;
+      buttonFor(el, 'hotel')!.focus();
+      store.set({ year: 2090 });
+      expect(buttonFor(el, 'hotel')).toBeUndefined();
+      expect(document.activeElement).toBe(el.querySelector('#alloc-detail .panel-section-title'));
+    });
+
+    test('a step of the form keeps focus too (the list is rebuilt for it as well)', () => {
+      const { el, q, choose } = mount();
+      const before = buttonFor(el, 'grocery')!;
+      before.focus();
+      choose(q<HTMLSelectElement>('#alloc-target'), 'pref:13'); // the visitor changes the target by script while focus is on the list
+      expect(before.isConnected).toBe(false);
+      expect(el.contains(document.activeElement)).toBe(true);
+      expect(document.activeElement).not.toBe(document.body);
+    });
+
+    test('focus that is not in the list is left alone, and nothing steals it when nothing has focus', () => {
+      const { el, q, store } = mount();
+      const slider = q<HTMLInputElement>('#alloc-percent');
+      slider.focus();
+      store.set({ year: 2095 });
+      expect(document.activeElement).toBe(slider);
+      (document.activeElement as HTMLElement).blur();
+      store.set({ year: 2090 });
+      expect(document.activeElement).toBe(document.body);
+      expect(el.querySelector('#alloc-detail .panel-section-title')!.hasAttribute('tabindex')).toBe(false); // not made focusable unless needed
+    });
+
+    test('the facility button still works after focus was handed to the rebuilt list', () => {
+      const { el, store } = mount();
+      buttonFor(el, 'grocery')!.focus();
+      store.set({ year: 2095 });
+      (document.activeElement as HTMLButtonElement).click();
+      expect(store.get().allocation?.focusFacilityId).toBe('grocery');
+      expect(buttonFor(el, 'grocery')!.getAttribute('aria-pressed')).toBe('true');
+    });
+  });
+
   test('an overlay put on the map from elsewhere together with a new year turns the toggle off and still recomputes the year', () => {
     const { q, store } = mount();
     q<HTMLButtonElement>('#alloc-map-toggle').click();

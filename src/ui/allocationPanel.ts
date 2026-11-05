@@ -579,6 +579,36 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
     }
   }
 
+  /**
+   * Keyboard focus inside the result list, taken before the list is rebuilt: `inside` is true when something in it has
+   * focus, and `facilityId` names the facility when that is a facility-name button.
+   */
+  function focusInDetail(): { inside: boolean; facilityId: string | undefined } {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || !detailEl.contains(active)) return { inside: false, facilityId: undefined };
+    return { inside: true, facilityId: active.dataset.facility };
+  }
+
+  /**
+   * Puts focus back after the list was rebuilt (a year step, new assumptions, a changed form): on the same facility's
+   * button when it is still in the list (opening the collapsed group if that is where it now sits), else on the list's
+   * heading, so a keyboard user is not thrown back to the top of the page.
+   */
+  function restoreDetailFocus(before: { inside: boolean; facilityId: string | undefined }): void {
+    if (!before.inside) return;
+    const button = before.facilityId === undefined ? undefined : [...detailEl.querySelectorAll<HTMLButtonElement>('.alloc-focus')].find((b) => b.dataset.facility === before.facilityId);
+    if (button) {
+      const group = button.closest('details');
+      if (group && !group.open) group.open = true; // a button inside a closed group cannot take focus
+      button.focus();
+      return;
+    }
+    const heading = detailEl.querySelector<HTMLElement>('.panel-section-title');
+    if (!heading) return;
+    heading.tabIndex = -1; // a heading takes focus from a script, not from the Tab key
+    heading.focus();
+  }
+
   const rowOpts: RowOptions = {
     get focused() {
       return mapActive ? focusFacilityId : undefined;
@@ -626,7 +656,9 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
       );
       if (cause === 'form') setText(announceEl, announceAllocation({ targetName: targetName(form), percent: form.percent, sourceNames }));
       if (mapActive) pushOverlay(c, s, form);
+      const hadFocus = focusInDetail();
       detailEl.replaceChildren(detailElement(c.summary, rowOpts));
+      restoreDetailFocus(hadFocus);
     } catch (e) {
       if (!(e instanceof RangeError)) console.error('allocation failed', e);
       lastComputed = undefined;
