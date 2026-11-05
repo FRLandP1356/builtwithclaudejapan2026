@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { repoPath } from '../../test/helpers/paths';
 import { makeRealContext, realAppData } from '../../test/helpers/realPanelContext';
 import type { FacilityFlip } from '../engine/allocation';
+import { crossingCounts } from './allocationView';
 import { deriveTotals, yearIndex } from './derive';
 import type { Listener, Store } from './state';
 import type { Area, Facility } from '../engine/types';
@@ -413,7 +414,7 @@ describe('mountAllocation', () => {
     // the essential group comes first and carries its own heading
     const headings = [...q('#alloc-result').querySelectorAll('tr.alloc-group')].map((h) => h.textContent);
     expect(headings[0]).toBe('くらしの基本の施設');
-    expect(r[0].text).toContain('人口の目安以上になる町');
+    expect(r[0].text).toContain('人口の目安を下回らなくなる町');
     expect(r.some((x) => x.text.includes('高野町'))).toBe(true);
     // a row reads: name, before, after, signed difference
     const grocery = r.find((x) => x.name === '飲食料品小売業')!;
@@ -434,8 +435,35 @@ describe('mountAllocation', () => {
     expect(notes).toContain('国土交通省の目安は三大都市圏を除く統計ですが、ここでは三大都市圏の町も同じ目安で数えています。');
     expect(notes).not.toContain('表の対象外');
     for (const w of FORBIDDEN) expect(el.textContent).not.toContain(w);
-    // the wording the brief asks for
-    expect(el.textContent).toContain('人口の目安以上');
+    // the wording the brief asks for: the map's words (a town that is no longer below the guide), never 「目安以上」
+    expect(el.textContent).toContain('人口の目安を下回らなくなる');
+    expect(el.textContent).not.toContain('目安以上');
+  });
+
+  test('the words for a town crossing are the map\'s words (crossingCounts), in the table, its headings and its notes', async () => {
+    const { el, q, slide, text } = mount();
+    // the same two phrases the map's tooltip and markers use
+    const gained = (crossingCounts({ gained: 1, lost: 0 }) ?? '').replace(/ \+1$/, '');
+    const lost = (crossingCounts({ gained: 0, lost: 2 }) ?? '').replace(/ −2$/, '');
+    expect(gained).toBe('人口の目安を下回らなくなる町');
+    expect(lost).toBe('人口の目安を下回る町');
+    expect(el.querySelector('.alloc-example')!.textContent).toContain(gained);
+    await slide(-30);
+    expect([...el.querySelectorAll('.alloc-example')].some((line) => line.textContent!.startsWith(lost))).toBe(true);
+    // the column headings say what the counts are, in those words
+    const spoken = [...el.querySelectorAll('#alloc-result table.alloc-table-visible thead th .sr-only')].map((n) => n.textContent);
+    expect(spoken).toEqual(['割り振る前の、人口の目安を下回らない町の数', '割り振った後の、人口の目安を下回らない町の数', '町の数の増減']);
+    expect(text('#alloc-detail .panel-section-title + .note')).toBe(
+      '各施設について、人口の目安を下回らない町の数を、割り振る前と後で並べています。施設名を押すと、またいだ町を地図に示します。',
+    );
+    expect(text('.alloc-notes')).toContain(
+      '「人口の目安」は、国土交通省の統計で、その施設がある確率が50%になる人口の大きさです。町の人口がその大きさより少ないことを「人口の目安を下回る」、割り振りでその大きさ以上になることを「人口の目安を下回らなくなる」と書いています。',
+    );
+    // the heading and the pressed-name label keep the words the rest of the app uses for a crossing
+    expect(text('#alloc-result .panel-section-title')).toBe('施設の人口の目安をまたぐ町の数');
+    expect(q('.alloc-name').getAttribute('aria-label')).toMatch(/。目安をまたいだ町を地図に示す$/);
+    expect(el.textContent).not.toContain('目安以上');
+    expect(el.textContent).not.toContain('人口の目安以上');
   });
 
   test('moving the amount to a cut re-words the sentence and the label', async () => {

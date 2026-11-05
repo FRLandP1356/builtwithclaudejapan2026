@@ -280,7 +280,7 @@ const TEMPLATE = `
   <div class="alloc-notes">
     <p class="note">人口の差は全国で見ると小さいので、人口の目安をまたぐ町の数で示しています。</p>
     <p class="note">国土交通省の目安は三大都市圏を除く統計ですが、ここでは三大都市圏の町も同じ目安で数えています。</p>
-    <p class="note">「人口の目安」は、国土交通省の統計で、その施設がある確率が50%になる人口の大きさです。「目安以上」は、その大きさ以上の町のことです。</p>
+    <p class="note">「人口の目安」は、国土交通省の統計で、その施設がある確率が50%になる人口の大きさです。町の人口がその大きさより少ないことを「人口の目安を下回る」、割り振りでその大きさ以上になることを「人口の目安を下回らなくなる」と書いています。</p>
     <p class="note">実際の人口の動きの見通しではなく、「もし割り振ったら」の計算です。</p>
   </div>`;
 
@@ -312,7 +312,7 @@ function rowElement(r: FlipRow, opts: RowOptions): HTMLTableRowElement {
   nameBtn.setAttribute('aria-label', `${r.name}。目安をまたいだ町を地図に示す`);
   nameBtn.addEventListener('click', () => opts.onFocus(r.facilityId));
   head.append(nameBtn);
-  if (r.gained.count > 0) head.append(exampleLine('人口の目安以上になる町', r.gained));
+  if (r.gained.count > 0) head.append(exampleLine('人口の目安を下回らなくなる町', r.gained));
   if (r.lost.count > 0) head.append(exampleLine('人口の目安を下回る町', r.lost));
   const diff = h('td', r.diff < 0 ? 'num alloc-down' : 'num', signedCount(r.diff));
   tr.append(head, h('td', 'num', countFormat.format(r.before)), h('td', 'num', countFormat.format(r.after)), diff);
@@ -336,7 +336,7 @@ function tableElement(rows: FlipRow[], grouped: boolean, className: string, rowO
     }
     return cell;
   };
-  hr.append(th('施設'), th('前', 'num', '割り振る前の、人口の目安以上の町の数'), th('後', 'num', '割り振った後の、人口の目安以上の町の数'), th('差', 'num', '町の数の増減'));
+  hr.append(th('施設'), th('前', 'num', '割り振る前の、人口の目安を下回らない町の数'), th('後', 'num', '割り振った後の、人口の目安を下回らない町の数'), th('差', 'num', '町の数の増減'));
   thead.append(hr);
   table.append(thead);
 
@@ -372,7 +372,7 @@ function detailElement(summary: AllocationSummary, rowOpts: RowOptions): HTMLEle
     return section;
   }
   section.append(
-    h('p', 'note', '各施設について、人口の目安以上の町の数を、割り振る前と後で並べています。施設名を押すと、またいだ町を地図に示します。'),
+    h('p', 'note', '各施設について、人口の目安を下回らない町の数を、割り振る前と後で並べています。施設名を押すと、またいだ町を地図に示します。'),
     tableElement(summary.visible, true, 'alloc-table-visible', rowOpts),
   );
   if (summary.hidden.length > 0) {
