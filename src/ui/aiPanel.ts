@@ -12,9 +12,9 @@
 // detached element (one Worker request, no listeners, nothing global). Mounting a second time into the same slot tears
 // the first mount down, so the interface is never doubled.
 import './aiPanel.css';
-import { ask } from '../ai/client';
+import { ask, MSG_NOT_AVAILABLE } from '../ai/client';
 import type { AskResult, Message, TraceItem } from '../ai/client';
-import { findCached, loadCachedAnswers, SAMPLE_QUESTIONS } from '../ai/cached';
+import { findCached, loadCachedAnswers, SAMPLE_QUESTIONS, verifiedSampleQuestions } from '../ai/cached';
 import type { CachedAnswers } from '../ai/cached';
 import type { EngineContext } from '../ai/tools';
 import { isScenarioError, sanitizeScenario, scenarioKey } from '../data/runner';
@@ -413,20 +413,33 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     return box;
   }
 
-  function renderFailureSamples(): HTMLElement {
+  /**
+   * Buttons for the sample questions that have a verified saved answer, under a failure notice. While every saved
+   * answer is still a placeholder there is nothing to offer, so there is nothing here and nothing says there is.
+   */
+  function renderFailureSamples(): HTMLElement | null {
+    const questions = verifiedSampleQuestions(cache);
+    if (questions.length === 0) return null;
     const list = h('ul', { class: 'ai-samples' });
-    for (const question of SAMPLE_QUESTIONS) list.append(sampleButton(question));
+    for (const question of questions) list.append(sampleButton(question));
     return h('div', { class: 'ai-fail-samples' }, h('p', { class: 'note' }, PANEL_TEXT.trySaved), list);
   }
 
   function renderAnswer(question: string, result: AskResult): HTMLElement {
-    const article = h('article', { class: 'ai-answer' }, h('p', { class: 'ai-question' }, h('span', { class: 'sr-only' }, '質問：'), question));
     const failed = result.status === 'unavailable' || result.status === 'error';
+    // No Worker behind the endpoint: one plain sentence instead of a "try again" that cannot work (kept to one on the page by showResult).
+    const notAvailable = failed && result.reason === 'not_configured';
+    const article = h(
+      'article',
+      { class: 'ai-answer', 'data-role': notAvailable ? 'ai-unavailable' : undefined },
+      h('p', { class: 'ai-question' }, h('span', { class: 'sr-only' }, '質問：'), question),
+    );
 
     if (failed) {
-      article.append(h('p', { class: 'ai-fail' }, result.message ?? PANEL_TEXT.crashed));
+      article.append(h('p', { class: 'ai-fail' }, notAvailable ? (result.message ?? MSG_NOT_AVAILABLE) : (result.message ?? PANEL_TEXT.crashed)));
       if (result.trace.length > 0) article.append(renderTrace(result.trace));
-      article.append(renderFailureSamples());
+      const saved = renderFailureSamples();
+      if (saved) article.append(saved);
       return article;
     }
 
@@ -475,8 +488,11 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
 
   /** Shows a finished ask at the top of the list. The older failure notices lose their sample buttons (the newest keeps its own). */
   function showResult(question: string, result: AskResult): void {
+    const article = renderAnswer(question, result); // drawn first: if it throws, the page is left as it was
     for (const old of answersEl.querySelectorAll('.ai-fail-samples')) old.remove();
-    answersEl.prepend(renderAnswer(question, result));
+    // The "not available" sentence is on the page once: the newest one replaces the one before it.
+    if (article.dataset.role === 'ai-unavailable') for (const old of answersEl.querySelectorAll('[data-role="ai-unavailable"]')) old.remove();
+    answersEl.prepend(article);
     // Bounded growth: the oldest answers leave the page, and their buttons and closures with them.
     while (answersEl.childElementCount > MAX_ANSWERS) answersEl.lastElementChild?.remove();
   }

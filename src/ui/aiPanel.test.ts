@@ -589,19 +589,54 @@ describe('numbers that could not be checked', () => {
   });
 });
 
+/** The three facts: not available now, why, and what still works. */
+const NOT_AVAILABLE_TEXT =
+  'このバージョンでは、AIへの質問は使えません（AIの接続先がまだ用意されていません）。地図、数値、前提の調整、人口の割り振りはそのまま使えます。';
+const TRY_LATER_TEXT = 'いまはAIに接続できません。時間をおいて、もう一度お試しください。';
+const SAVED_HINT_TEXT = 'いまはAIに接続できません。保存済みの質問を試してください。';
+const pendingEntry = (i: number): CachedAnswer => savedEntry(SAMPLE_QUESTIONS[i]!, '', { id: `q${i + 1}`, status: 'pending', trace: [] });
+const allPending = (): CachedAnswers => cacheOf(...SAMPLE_QUESTIONS.map((_, i) => pendingEntry(i)));
+const unavailableNotices = (m: Mounted): HTMLElement[] => m.qa('.ai-answers [data-role="ai-unavailable"]');
+const countOf = (text: string, part: string): number => text.split(part).length - 1;
+
 describe('when the AI cannot be reached', () => {
-  it('429 with cached:true: the message and the sample questions again, below it', async () => {
+  it('429 with cached:true and no verified saved answer: try again later, and no saved questions are offered or mentioned', async () => {
     const s = script(jsonResponse({ error: 'rate_limited', cached: true }, 429));
-    const m = mount({ fetchFn: s.fetchFn });
+    const m = mount({ fetchFn: s.fetchFn, cache: allPending() });
     m.typeAndSend('どこかの町は？');
     await answersCount(m, 1);
 
     const article = m.answers()[0]!;
-    expect(article.textContent).toContain('いまはAIに接続できません。保存済みの質問を試してください。');
-    const again = [...article.querySelectorAll<HTMLButtonElement>('.ai-fail-samples button')];
-    expect(again.map((b) => b.textContent)).toEqual(SAMPLE_QUESTIONS);
+    expect(article.querySelector('.ai-fail')!.textContent).toBe(TRY_LATER_TEXT);
+    expect(article.querySelector('.ai-fail-samples')).toBeNull();
+    expect(article.querySelectorAll('button')).toHaveLength(0);
+    expect(article.textContent).not.toContain('保存済み');
+    expect(article.hasAttribute('data-role')).toBe(false); // not the "not available" notice
     expect(article.querySelector('.ai-trace')).toBeNull();
     expect(m.textarea.value).toBe('どこかの町は？'); // kept for another try
+  });
+
+  it('429 with cached:true and one verified saved answer: the message says so and offers exactly that question', async () => {
+    const s = script(jsonResponse({ error: 'rate_limited', cached: true }, 429));
+    const verified = savedEntry(SAMPLE_QUESTIONS[2]!, '保存済みの答えです。', { id: 'q3' });
+    const m = mount({ fetchFn: s.fetchFn, cache: cacheOf(pendingEntry(0), pendingEntry(1), verified, pendingEntry(3), pendingEntry(4)) });
+    m.typeAndSend('どこかの町は？');
+    await answersCount(m, 1);
+
+    const article = m.answers()[0]!;
+    expect(article.querySelector('.ai-fail')!.textContent).toBe(SAVED_HINT_TEXT);
+    expect(article.querySelector('.ai-fail-samples .note')!.textContent).toBe(PANEL_TEXT.trySaved);
+    expect([...article.querySelectorAll<HTMLButtonElement>('.ai-fail-samples button')].map((b) => b.textContent)).toEqual([SAMPLE_QUESTIONS[2]]);
+  });
+
+  it('every verified sample gets a button in the notice, in the order the samples are listed', async () => {
+    const s = script(jsonResponse({ error: 'upstream_error' }, 502));
+    const entries = [4, 0, 2].map((i) => savedEntry(SAMPLE_QUESTIONS[i]!, '保存済みの答えです。', { id: `q${i + 1}` }));
+    const m = mount({ fetchFn: s.fetchFn, cache: cacheOf(...entries) });
+    m.typeAndSend('どこかの町は？');
+    await answersCount(m, 1);
+    const buttons = [...m.answers()[0]!.querySelectorAll<HTMLButtonElement>('.ai-fail-samples button')];
+    expect(buttons.map((b) => b.textContent)).toEqual([SAMPLE_QUESTIONS[0], SAMPLE_QUESTIONS[2], SAMPLE_QUESTIONS[4]]);
   });
 
   it('the sample buttons in the notice work: a saved answer appears, and the old notice drops its buttons', async () => {
@@ -629,12 +664,155 @@ describe('when the AI cannot be reached', () => {
     expect(article.textContent).toContain('いまはAIに接続できないため、保存済みの答えを表示しています。');
   });
 
-  it('a request the Worker refuses (403) is an error with the sample questions', async () => {
-    const m = mount({ fetchFn: script(jsonResponse({ error: 'origin_not_allowed' }, 403)).fetchFn });
-    m.typeAndSend('どこ？');
+  it('a request the Worker refuses (403) is an error; the saved questions follow only when some answer is verified', async () => {
+    const none = mount({ fetchFn: script(jsonResponse({ error: 'origin_not_allowed' }, 403)).fetchFn, cache: allPending() });
+    none.typeAndSend('どこ？');
+    await answersCount(none, 1);
+    expect(none.answers()[0]!.textContent).toContain('AIへの問い合わせでエラーが起きました');
+    expect(none.answers()[0]!.querySelector('.ai-fail-samples')).toBeNull();
+    expect(none.answers()[0]!.textContent).not.toContain('保存済み');
+    expect(none.answers()[0]!.hasAttribute('data-role')).toBe(false);
+
+    const all = mount(
+      { fetchFn: script(jsonResponse({ error: 'origin_not_allowed' }, 403)).fetchFn, cache: cacheOf(...SAMPLE_QUESTIONS.map((q, i) => savedEntry(q, '保存済みの答えです。', { id: `q${i + 1}` }))) },
+      makeContext(),
+      (() => {
+        const other = document.createElement('section');
+        other.id = 'panel-ai-second';
+        document.body.append(other);
+        return other;
+      })(),
+    );
+    all.typeAndSend('どこ？');
+    await answersCount(all, 1);
+    expect(all.answers()[0]!.querySelectorAll('.ai-fail-samples button')).toHaveLength(5);
+  });
+});
+
+describe('when there is no AI behind the page (nothing is deployed)', () => {
+  const html = (): Response => new Response('<!doctype html><title>2100年の日本</title>', { status: 200, headers: { 'content-type': 'text/html' } });
+  const noWorker: Array<[string, () => Step]> = [
+    ['404', () => jsonResponse({ error: 'not_found' }, 404)],
+    ['405', () => new Response('Method Not Allowed', { status: 405 })],
+    ['a 200 with the index page', html],
+    ['a failed connection to the default address', () => new TypeError('Failed to fetch')],
+  ];
+
+  it.each(noWorker)('%s: a sample click shows the plain sentence, not the retry text, and no retry button', async (_name, step) => {
+    const s = script(step());
+    const m = mount({ fetchFn: s.fetchFn, cache: allPending() });
+    m.samples()[1]!.click();
     await answersCount(m, 1);
-    expect(m.answers()[0]!.textContent).toContain('AIへの問い合わせでエラーが起きました');
-    expect(m.answers()[0]!.querySelectorAll('.ai-fail-samples button')).toHaveLength(5);
+
+    const article = m.answers()[0]!;
+    expect(article.getAttribute('data-role')).toBe('ai-unavailable');
+    expect(article.querySelector('.ai-question')!.textContent).toContain(SAMPLE_QUESTIONS[1]!);
+    expect(article.querySelector('.ai-fail')!.textContent).toBe(NOT_AVAILABLE_TEXT);
+    expect(article.textContent).not.toContain('時間をおいて');
+    expect(article.textContent).not.toContain('もう一度');
+    expect(article.textContent).not.toContain('保存済み');
+    expect(article.querySelectorAll('button')).toHaveLength(0);
+    expect(s.mock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a result that names the reason but carries no message still shows the plain sentence', async () => {
+    vi.mocked(ask).mockResolvedValueOnce({ answer: '', trace: [], unverified: [], fromCache: false, status: 'unavailable', reason: 'not_configured', messages: [] });
+    const m = mount({ cache: allPending() });
+    m.samples()[0]!.click();
+    await answersCount(m, 1);
+    expect(m.answers()[0]!.querySelector('.ai-fail')!.textContent).toBe(NOT_AVAILABLE_TEXT);
+  });
+
+  it('the five sample buttons stay (they are the tour), and are usable again after the sentence', async () => {
+    const m = mount({ fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn, cache: allPending() });
+    m.samples()[0]!.click();
+    await answersCount(m, 1);
+    expect(m.samples().map((b) => b.textContent)).toEqual(SAMPLE_QUESTIONS);
+    expect(m.samples().every((b) => !b.disabled)).toBe(true);
+  });
+
+  it('the sentence is on the page once: asking again replaces it and shows the newest question', async () => {
+    const s = script(jsonResponse({ error: 'not_found' }, 404), jsonResponse({ error: 'not_found' }, 404), jsonResponse({ error: 'not_found' }, 404));
+    const m = mount({ fetchFn: s.fetchFn, cache: allPending() });
+    m.samples()[0]!.click();
+    await answersCount(m, 1);
+    m.samples()[3]!.click();
+    await vi.waitFor(() => expect(m.answers()[0]!.querySelector('.ai-question')!.textContent).toContain(SAMPLE_QUESTIONS[3]!));
+    m.typeAndSend('自分の質問');
+    await vi.waitFor(() => expect(m.answers()[0]!.querySelector('.ai-question')!.textContent).toContain('自分の質問'));
+
+    expect(s.mock).toHaveBeenCalledTimes(3); // it did ask each time
+    expect(m.answers()).toHaveLength(1);
+    expect(unavailableNotices(m)).toHaveLength(1);
+    expect(countOf(m.q('.ai-answers').textContent!, NOT_AVAILABLE_TEXT)).toBe(1);
+  });
+
+  it('the sentence leaves nothing else changed: answers before it stay, and a later answer goes above it', async () => {
+    const s = script(textResponse('一つ目の答え。'), jsonResponse({ error: 'not_found' }, 404), textResponse('三つ目の答え。'));
+    const m = mount({ fetchFn: s.fetchFn, cache: allPending() });
+    m.typeAndSend('一つ目');
+    await answersCount(m, 1);
+    m.typeAndSend('二つ目');
+    await answersCount(m, 2);
+    m.typeAndSend('三つ目');
+    await answersCount(m, 3);
+    expect(m.answers().map((a) => a.querySelector('.ai-answer-text')?.textContent ?? 'notice')).toEqual(['三つ目の答え。', 'notice', '一つ目の答え。']);
+    expect(unavailableNotices(m)).toHaveLength(1);
+  });
+
+  it('a verified saved question is still offered under the sentence; pending ones are not', async () => {
+    const s = script(jsonResponse({ error: 'not_found' }, 404));
+    const verified = savedEntry(SAMPLE_QUESTIONS[3]!, '保存済みの答えです。', { id: 'q4' });
+    const m = mount({ fetchFn: s.fetchFn, cache: cacheOf(pendingEntry(0), pendingEntry(1), pendingEntry(2), verified, pendingEntry(4)) });
+    m.typeAndSend('どこかの町は？');
+    await answersCount(m, 1);
+    const article = m.answers()[0]!;
+    expect(article.querySelector('.ai-fail')!.textContent).toBe(NOT_AVAILABLE_TEXT);
+    expect([...article.querySelectorAll<HTMLButtonElement>('.ai-fail-samples button')].map((b) => b.textContent)).toEqual([SAMPLE_QUESTIONS[3]]);
+  });
+
+  it('a verified saved answer is shown for its sample question at the start, with no request at all', async () => {
+    const s = script();
+    const m = mount({ fetchFn: s.fetchFn, cache: cacheOf(savedEntry(TOKYO_QUESTION, '保存済みの答えです。')) });
+    m.samples()[0]!.click();
+    await answersCount(m, 1);
+    expect(s.mock).not.toHaveBeenCalled();
+    expect(m.answers()[0]!.querySelector('.ai-answer-text')!.textContent).toBe('保存済みの答えです。');
+    expect(unavailableNotices(m)).toHaveLength(0);
+  });
+
+  it('busy or down is not the same: a 502, and a failed connection to an address that was configured, still say to try again later', async () => {
+    const a = mount({ fetchFn: script(jsonResponse({ error: 'upstream_error' }, 502)).fetchFn, cache: allPending() });
+    a.samples()[0]!.click();
+    await answersCount(a, 1);
+    expect(a.answers()[0]!.querySelector('.ai-fail')!.textContent).toBe(TRY_LATER_TEXT);
+    expect(unavailableNotices(a)).toHaveLength(0);
+
+    const slot = document.createElement('section');
+    document.body.append(slot);
+    const b = mount({ fetchFn: script(new TypeError('Failed to fetch')).fetchFn, endpoint: 'https://worker.example.test/api/chat', cache: allPending() }, makeContext(), slot);
+    b.samples()[0]!.click();
+    await answersCount(b, 1);
+    expect(b.answers()[0]!.querySelector('.ai-fail')!.textContent).toBe(TRY_LATER_TEXT);
+    expect(unavailableNotices(b)).toHaveLength(0);
+  });
+
+  it('the sentence passes the same wording rules as the rest of the panel', async () => {
+    const m = mount({ fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn, cache: allPending() });
+    m.samples()[0]!.click();
+    await answersCount(m, 1);
+    const text = m.answers()[0]!.textContent!;
+    expect(text).not.toMatch(/残せない|予測|残すべき|残さない|諦め|閉鎖|やめるべき|守るべき|切り捨て/);
+    expect(text).not.toMatch(/[\u2460-\u2473]/);
+  });
+
+  it('keyboard focus goes back to the sample button that was pressed', async () => {
+    const m = mount({ fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn, cache: allPending() });
+    const button = m.samples()[2]!;
+    button.focus();
+    button.click();
+    await answersCount(m, 1);
+    expect(document.activeElement).toBe(button);
   });
 });
 

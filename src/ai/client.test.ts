@@ -878,6 +878,15 @@ describe('an endpoint that is not there', () => {
     expect(result.trace.map((t) => t.tool)).toEqual(['find_area']);
   });
 
+  it('a_stop_that_arrives_before_a_page_that_is_not_JSON_is_read_is_still_an_abort', async () => {
+    const controller = new AbortController();
+    const s = script(() => {
+      controller.abort();
+      return html();
+    });
+    await expect(ask('q', ctx, { fetchFn: s.fetchFn, signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
   it('a_user_abort_while_the_body_is_read_is_still_an_abort, not_available', async () => {
     const controller = new AbortController();
     const body = new ReadableStream({ start: (c) => controller.signal.addEventListener('abort', () => c.error(controller.signal.reason)) });

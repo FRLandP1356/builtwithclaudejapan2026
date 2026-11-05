@@ -367,7 +367,7 @@ async function callModel(messages: Message[], env: Env): Promise<ModelTurn> {
   try {
     data = await response.json();
   } catch (error) {
-    if (env.signal?.aborted) throw error;
+    env.signal?.throwIfAborted(); // a stop the visitor asked for is never turned into "not available"
     // A page that is not JSON (a static host answering with its index.html) means no Worker is there. A body that was
     // cut off on the way is a transport failure like any other.
     throw isSyntaxError(error) ? new RequestFailure('not_configured') : transportFailure(error, env);
