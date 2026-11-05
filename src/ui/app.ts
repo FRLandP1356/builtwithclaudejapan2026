@@ -14,6 +14,7 @@ import { deriveTotals, ratioAt, yearIndex, type Totals } from './derive';
 import { formatPct, formatPop } from './format';
 import { breadcrumbs, buildSearchIndex, goUp, levelOf, pickArea, pickPref, prefOfArea, type Selection } from './nav';
 import { mountSearch } from './search';
+import { mountAIPanel } from './aiPanel';
 import { APP_LEAD, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, SOURCES } from './sources';
 import { createAppStore, DEFAULT_YEAR, type AppState, type PanelContext, type Store } from './state';
 import { mountTownPanel } from './townPanel';
@@ -48,8 +49,7 @@ const PANEL_TITLES: ReadonlyArray<{ key: keyof PanelSlots; id: string; title: st
 ];
 
 // -----------------------------------------------------------------------------------------------------------------
-// Panel registry. Tasks 9, 10 and 13 each replace exactly ONE line below with their own mount call, for example
-// `mountTownPanel(slots.town, ctx);`. Nothing else in this file needs to change for a panel.
+// Panel registry: one mount call per slot; each returns its teardown, which `destroy()` calls.
 // -----------------------------------------------------------------------------------------------------------------
 function mountPanels(ctx: PanelContext, slots: PanelSlots): Array<() => void> {
   void ctx;
@@ -57,7 +57,7 @@ function mountPanels(ctx: PanelContext, slots: PanelSlots): Array<() => void> {
   teardowns.push(mountTownPanel(slots.town, ctx));
   teardowns.push(mountControls(slots.controls, ctx));
   teardowns.push(mountAllocation(slots.allocation, ctx));
-  mountPlaceholder(slots.ai, '日本語で質問すると、計算の結果をもとに答えます。'); // Task 13: teardowns.push(mountAIPanel(slots.ai, ctx))
+  teardowns.push(mountAIPanel(slots.ai, ctx));
   return teardowns;
 }
 // -----------------------------------------------------------------------------------------------------------------

@@ -1,0 +1,207 @@
+/* The AI panel (Task 13b-2). Tokens and shared components only (src/ui/theme.css, src/ui/DESIGN.md): no new colours,
+   no cards, no shadows. Rust (--decline) is reserved for "below the guide", so the warning is carried by weight and a
+   thick ink rule instead. */
+
+.ai-panel {
+  display: grid;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.ai-panel .panel-section {
+  margin-top: 0;
+}
+/* .btn sets display, which would otherwise win over the hidden attribute. */
+.ai-panel [hidden] {
+  display: none;
+}
+
+/* Sample questions: full-width buttons, text left-aligned, wrapping onto two lines when long. */
+.ai-samples {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.ai-sample {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  padding: var(--sp-2) var(--sp-3);
+  line-height: 1.5;
+}
+
+/* Free input */
+.ai-input {
+  width: 100%;
+  min-height: 96px;
+  padding: var(--sp-2) var(--sp-3);
+  font-family: var(--font-body);
+  line-height: var(--lh-body);
+  resize: vertical;
+}
+.ai-input[readonly] {
+  background: var(--paper-2);
+}
+.ai-input[aria-invalid='true'] {
+  border-width: 2px;
+  border-color: var(--ink);
+  padding: calc(var(--sp-2) - 1px) calc(var(--sp-3) - 1px); /* the border grows by 1px each side; the text does not move */
+}
+.ai-help {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.ai-counter {
+  white-space: nowrap;
+}
+.ai-counter.is-over {
+  color: var(--ink);
+  font-weight: 600;
+}
+.ai-input-msg {
+  margin: 0;
+  font-size: var(--fs-14);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* Waiting: one calm line and a stop button. The text element stays in the page (empty) so the live region is registered. */
+.ai-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.ai-status-text {
+  margin: 0;
+  font-size: var(--fs-14);
+  color: var(--ink-2);
+}
+/* A 2px border always, so that highlighting it (accent colour and tint, no shadow) does not change its size. */
+.ai-panel .ai-new {
+  border-width: 2px;
+  padding: 0 calc(var(--sp-4) - 1px);
+}
+.ai-panel .ai-new.is-attention {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Answers: newest first, separated by a rule, no card chrome. */
+.ai-answers {
+  display: grid;
+}
+.ai-answer {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-4) 0;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.ai-question {
+  margin: 0;
+  font-weight: 600;
+}
+.ai-answer-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ai-answer-text {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: var(--lh-body);
+}
+.ai-answer .note {
+  margin: 0;
+}
+.ai-warning {
+  display: grid;
+  gap: var(--sp-1);
+  border-left: 4px solid var(--ink);
+  color: var(--ink);
+}
+.ai-warning p {
+  margin: 0;
+}
+.ai-warning .ai-warning-lead {
+  font-weight: 600;
+}
+.ai-fail {
+  margin: 0;
+  color: var(--ink);
+}
+.ai-fail-samples {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+/* What the answer was built from: the tool calls, in order. */
+.ai-answer summary {
+  min-height: 40px;
+  padding: var(--sp-2) 0;
+  color: var(--accent);
+  cursor: pointer;
+}
+.ai-trace-list {
+  margin: 0;
+  padding-left: var(--sp-5);
+}
+.ai-trace-item {
+  padding: var(--sp-2) 0;
+}
+.ai-trace-item + .ai-trace-item {
+  border-top: 1px solid var(--line);
+}
+.ai-trace-name {
+  margin: 0;
+  font-weight: 600;
+}
+.ai-trace-label {
+  margin: var(--sp-1) 0 0;
+}
+.ai-trace-input {
+  margin: 0;
+  font-size: var(--fs-13);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.ai-json {
+  max-height: 320px;
+  margin: var(--sp-2) 0;
+  padding: var(--sp-3);
+  overflow: auto;
+  background: var(--paper-2);
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: var(--fs-13);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ai-copy-status {
+  font-size: var(--fs-13);
+  color: var(--ink-2);
+}
+
+/* Links back to the map and to the assumptions panel */
+.ai-scenarios {
+  display: grid;
+  gap: var(--sp-3);
+}
+.ai-scenario {
+  display: grid;
+  gap: var(--sp-2);
+  justify-items: start;
+}
+.ai-scenario p {
+  margin: 0;
+}
+.ai-scenario-msg {
+  font-size: var(--fs-14);
+  color: var(--ink-2);
+}
