@@ -110,15 +110,16 @@ export function overlayCovers(overlay: AllocationOverlay, areaCodes: readonly st
 }
 
 /**
- * 「目安以上になる町 +1、下回る町 −1」: only the sides that have towns. A side with none is left out, so no "−0" is printed
- * (「目安以上になる町 +1」 / 「目安を下回る町 −2」); `undefined` when neither side has any.
- * 「以上」, not 「上回る」: the engine counts a town as at the guide from pop >= p50 (facilityStatus: not below), so a town that
- * lands exactly on the guide has reached it; 「下回る」 (pop < p50) is exact for the other side.
+ * 「人口の目安を下回らなくなる町 +1、下回る町 −1」: only the sides that have towns. A side with none is left out, so no "−0"
+ * is printed (「人口の目安を下回らなくなる町 +1」 / 「人口の目安を下回る町 −2」); `undefined` when neither side has any.
+ * The words are the town panel's status words: a town is 「人口の目安を下回る」 when facilityStatus says 'below' (pop < p50), and
+ * one that gained is no longer below (pop >= p50: 'edge' or 'ok'). 「目安以上」 is not used: in this app 「目安」 would then mean the
+ * p50 value here but the 50-80% band in the town panel.
  */
 export function crossingCounts(c: { gained: number; lost: number }): string | undefined {
-  if (c.gained > 0 && c.lost > 0) return `目安以上になる町 +${c.gained}、下回る町 −${c.lost}`;
-  if (c.gained > 0) return `目安以上になる町 +${c.gained}`;
-  if (c.lost > 0) return `目安を下回る町 −${c.lost}`;
+  if (c.gained > 0 && c.lost > 0) return `人口の目安を下回らなくなる町 +${c.gained}、下回る町 −${c.lost}`;
+  if (c.gained > 0) return `人口の目安を下回らなくなる町 +${c.gained}`;
+  if (c.lost > 0) return `人口の目安を下回る町 −${c.lost}`;
   return undefined;
 }
 
@@ -133,8 +134,8 @@ export function allocationLines(v: AllocationView, kind: PlaceKind, code: string
         const counts = crossingCounts(c);
         if (counts) lines.push(`${v.focus.name}：${counts}`);
       }
-    } else if (v.gained.has(code)) lines.push(`${v.focus.name}が目安以上になる（増えた）`);
-    else if (v.lost.has(code)) lines.push(`${v.focus.name}が目安を下回る（減った）`);
+    } else if (v.gained.has(code)) lines.push(`${v.focus.name}が人口の目安を下回らなくなる`);
+    else if (v.lost.has(code)) lines.push(`${v.focus.name}が人口の目安を下回る`);
   }
   return lines;
 }

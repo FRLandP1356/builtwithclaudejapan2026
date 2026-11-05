@@ -799,15 +799,15 @@ describe('allocation overlay on the map', () => {
     expect(markers[0].classList.contains('marker-gain')).toBe(true);
     expect(markers[1].classList.contains('marker-loss')).toBe(true);
     const wakayama = svg.querySelector('path.area[data-code="30"]')!;
-    expect(wakayama.getAttribute('aria-label')).toMatch(/飲食料品小売業：目安以上になる町 \+1(、|$)/);
+    expect(wakayama.getAttribute('aria-label')).toMatch(/飲食料品小売業：人口の目安を下回らなくなる町 \+1(、|$)/);
     expect(wakayama.getAttribute('aria-label')).not.toContain('下回る町'); // no towns fell: nothing is said about them
     const tokyo = svg.querySelector('path.area[data-code="13"]')!;
-    expect(tokyo.getAttribute('aria-label')).toContain('飲食料品小売業：目安を下回る町 −1');
-    expect(tokyo.getAttribute('aria-label')).not.toContain('以上になる町');
+    expect(tokyo.getAttribute('aria-label')).toContain('飲食料品小売業：人口の目安を下回る町 −1');
+    expect(tokyo.getAttribute('aria-label')).not.toContain('下回らなくなる町');
     for (const a of [wakayama, tokyo]) expect(a.getAttribute('aria-label')).not.toMatch(/[+−]0(?![.\d])/);
     wakayama.dispatchEvent(new Event('pointerover', { bubbles: true }));
     const tipText = svg.parentElement!.querySelector('.map-tip')!.textContent!;
-    expect(tipText).toContain('目安以上になる町 +1');
+    expect(tipText).toContain('人口の目安を下回らなくなる町 +1');
     expect(tipText).not.toMatch(/[+−]0(?![.\d])/);
     expect(markers.map((m) => m.getAttribute('data-for'))).toEqual(['30', '13']);
     expect(svg.querySelector('.markers')!.getAttribute('aria-hidden')).toBe('true'); // the numbers are in the labels
@@ -819,13 +819,13 @@ describe('allocation overlay on the map', () => {
     expect(gain).toBe(prefSvg.querySelector('path.area[data-code="30206"]')!.getAttribute('d'));
     expect(prefSvg.querySelector('.ring-loss')!.getAttribute('d')).toBe('');
     expect(prefSvg.querySelectorAll('.marker')).toHaveLength(0);
-    expect(prefSvg.querySelector('path.area[data-code="30206"]')!.getAttribute('aria-label')).toContain('飲食料品小売業が目安以上になる（増えた）');
+    expect(prefSvg.querySelector('path.area[data-code="30206"]')!.getAttribute('aria-label')).toContain('飲食料品小売業が人口の目安を下回らなくなる');
 
     store.set({ selectedPref: '13' });
     await settle();
     const tokyoSvg = root.querySelector('.map-host:not([hidden]) svg')!;
     expect(tokyoSvg.querySelector('.ring-loss')!.getAttribute('d')).toBe(tokyoSvg.querySelector('path.area[data-code="13402"]')!.getAttribute('d'));
-    expect(tokyoSvg.querySelector('path.area[data-code="13402"]')!.getAttribute('aria-label')).toContain('下回る（減った）');
+    expect(tokyoSvg.querySelector('path.area[data-code="13402"]')!.getAttribute('aria-label')).toContain('飲食料品小売業が人口の目安を下回る');
 
     store.set({ allocation: undefined });
     expect(tokyoSvg.querySelector('.ring-loss')!.getAttribute('d')).toBe('');
