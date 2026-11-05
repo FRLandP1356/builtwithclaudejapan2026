@@ -103,6 +103,9 @@ describe('worker/wrangler.jsonc', () => {
     // Invocation logs would record request details (client address, headers) that the Worker works to keep out of
     // its own logs.
     expect(config.observability?.logs?.invocation_logs).toBe(false);
+    // Every request's console lines are kept: the sampling rate (1 when unset) is 100%. A lower rate, or 0, would
+    // silently drop the "rate counter write failed" warning the operator relies on.
+    expect(config.observability?.logs?.head_sampling_rate ?? 1).toBe(1);
     expect(config.observability?.traces?.enabled ?? false).toBe(false);
   });
 });
