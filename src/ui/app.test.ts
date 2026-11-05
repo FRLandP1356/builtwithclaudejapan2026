@@ -76,7 +76,8 @@ describe('mountApp shell', () => {
     const { root, visibleHost, crumbs } = await mount();
     expect(root.querySelector('main')).not.toBeNull();
     expect([...root.querySelectorAll('.panel')].map((p) => p.id)).toEqual(['panel-town', 'panel-controls', 'panel-allocation', 'panel-ai']);
-    expect(root.querySelectorAll('.panel .panel-empty')).toHaveLength(4);
+    expect(root.querySelectorAll('.panel .panel-empty')).toHaveLength(3); // the AI panel is mounted (Task 13); the other three are placeholders
+    expect(root.querySelectorAll('#panel-ai .ai-samples button')).toHaveLength(5);
     expect(visibleHost()?.classList.contains('map-host-national')).toBe(true);
     expect(visibleHost()?.querySelectorAll('path.area')).toHaveLength(3);
     expect(crumbs()).toBe('日本');
