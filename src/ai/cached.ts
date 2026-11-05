@@ -21,7 +21,7 @@ export interface CachedAnswers {
 /** The sample questions, in the order the panel lists them. Ids q1..q5 in cached_answers.json follow this order. */
 export const SAMPLE_QUESTIONS: string[] = [
   '日本の人口が減り出してから、東京はどうなっていますか？',
-  '田辺市の2100年の子どもの数は、何人くらいですか？',
+  '田辺市の2100年の人口は何人くらいで、65歳以上は何割ですか？',
   '和歌山県の人口を10%増やすと、ほかの地域はどうなりますか？',
   '人口が3,000人を下回る町は、2100年に何町ありますか？',
   '公式の推計と、このアプリの試算は、どう違いますか？',
