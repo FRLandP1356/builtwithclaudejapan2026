@@ -19,7 +19,7 @@
 //      question and tool loop do not fit, nothing is sent (status 'unavailable', needsNewConversation).
 //
 // No DOM. The engine is reached only through EngineContext / runTool.
-import { findCached } from './cached';
+import { findCached, verifiedSampleQuestions } from './cached';
 import type { CachedAnswer, CachedAnswers } from './cached';
 import { checkNumbers } from './numberCheck';
 import { runTool } from './tools';
@@ -129,7 +129,10 @@ export const CLIENT_LIMITS = { maxMessages: 36, maxChars: 40_000, maxBytes: 56_0
 
 const TRUNCATION_MARKER = '…（結果が長すぎるため、ここから先は省略しました）';
 
+/** The AI is busy or down right now, and there are saved answers to look at meanwhile. */
 const MSG_UNAVAILABLE = 'いまはAIに接続できません。保存済みの質問を試してください。';
+/** The same, when there are no saved answers to offer (so none is mentioned). */
+const MSG_TRY_LATER = 'いまはAIに接続できません。時間をおいて、もう一度お試しください。';
 /** Nothing is deployed behind the endpoint: not a matter of waiting. Three facts: not available, why, what still works. */
 export const MSG_NOT_AVAILABLE =
   'このバージョンでは、AIへの質問は使えません（AIの接続先がまだ用意されていません）。地図、数値、前提の調整、人口の割り振りはそのまま使えます。';
@@ -518,7 +521,8 @@ function failureResult(
   };
 }
 
-function messageForFailure(kind: FailureKind): string {
+/** `cache` decides whether "try the saved questions" may be said: it is only true while some saved answer is verified. */
+function messageForFailure(kind: FailureKind, cache: CachedAnswers | null): string {
   switch (kind) {
     case 'too_long':
       return MSG_TOO_LONG;
@@ -527,7 +531,7 @@ function messageForFailure(kind: FailureKind): string {
     case 'not_configured':
       return MSG_NOT_AVAILABLE;
     default:
-      return MSG_UNAVAILABLE;
+      return verifiedSampleQuestions(cache).length > 0 ? MSG_UNAVAILABLE : MSG_TRY_LATER;
   }
 }
 
@@ -631,7 +635,7 @@ async function converse(question: string, cache: CachedAnswers | null, conversat
       const saved = findCached(cache, question);
       if (saved) return savedAnswerResult(saved, currentHistory(conversation), question, MSG_SAVED);
     }
-    const failed = failureResult('unavailable', messageForFailure(error.kind), '', conversation);
+    const failed = failureResult('unavailable', messageForFailure(error.kind, cache), '', conversation);
     if (error.kind === 'not_configured') failed.reason = 'not_configured';
     return failed;
   }

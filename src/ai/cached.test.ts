@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { findCached, loadCachedAnswers, normalizeQuestion, SAMPLE_QUESTIONS } from './cached';
+import { findCached, loadCachedAnswers, normalizeQuestion, SAMPLE_QUESTIONS, verifiedSampleQuestions } from './cached';
 import type { CachedAnswer, CachedAnswers } from './cached';
 
 const JSON_FILE = fileURLToPath(new URL('../../public/data/cached_answers.json', import.meta.url));
@@ -85,6 +85,31 @@ describe('findCached', () => {
     expect(findCached(null, entry().question)).toBeNull();
     expect(findCached(cacheOf(entry({ question: '' })), '')).toBeNull();
     expect(findCached(cacheOf(entry()), '？')).toBeNull();
+  });
+});
+
+describe('verifiedSampleQuestions', () => {
+  const sample = (i: number, overrides: Partial<CachedAnswer> = {}): CachedAnswer => entry({ id: `q${i + 1}`, question: SAMPLE_QUESTIONS[i]!, ...overrides });
+  const pending = (i: number): CachedAnswer => sample(i, { status: 'pending', answer: '' });
+
+  it('is_empty_for_no_cache_and_while_every_saved_answer_is_a_placeholder', () => {
+    expect(verifiedSampleQuestions(null)).toEqual([]);
+    expect(verifiedSampleQuestions(cacheOf(...SAMPLE_QUESTIONS.map((_, i) => pending(i))))).toEqual([]);
+    expect(verifiedSampleQuestions(cacheOf())).toEqual([]);
+  });
+
+  it('lists_only_the_samples_whose_saved_answer_is_verified, in the order the samples are listed', () => {
+    const cache = cacheOf(sample(3), pending(0), sample(1), pending(2), pending(4));
+    expect(verifiedSampleQuestions(cache)).toEqual([SAMPLE_QUESTIONS[1], SAMPLE_QUESTIONS[3]]);
+  });
+
+  it('lists_all_five_when_all_are_verified', () => {
+    expect(verifiedSampleQuestions(cacheOf(...SAMPLE_QUESTIONS.map((_, i) => sample(i))))).toEqual(SAMPLE_QUESTIONS);
+  });
+
+  it('does_not_count_a_verified_answer_that_is_blank_or_to_another_question', () => {
+    const cache = cacheOf(sample(0, { answer: ' ' }), entry({ id: 'x', question: 'サンプルにない質問' }));
+    expect(verifiedSampleQuestions(cache)).toEqual([]);
   });
 });
 
