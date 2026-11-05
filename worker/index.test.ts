@@ -300,6 +300,53 @@ describe('cors_blocks_other_origin', () => {
   });
 });
 
+// ---------------------------------------------------------------- hardening
+
+describe('x-content-type-options: nosniff on every response the Worker builds', () => {
+  it('is set on success, every error status, the preflight, and the routing refusals', async () => {
+    const big = JSON.stringify({ messages: [{ role: 'user', content: 'hi' }], pad: 'a'.repeat(70_000) });
+    const cases: Array<[string, number, () => Promise<Response>]> = [
+      ['200 relay', 200, () => handleRequest(chatRequest(validBody()), makeEnv(), mockFetch())],
+      ['400 invalid_json', 400, () => handleRequest(chatRequest(null, { rawBody: '{bad' }), makeEnv(), mockFetch())],
+      ['400 invalid_messages', 400, () => handleRequest(chatRequest(validBody({ messages: [] })), makeEnv(), mockFetch())],
+      ['403 origin', 403, () => handleRequest(chatRequest(validBody(), { origin: 'https://evil.example' }), makeEnv(), mockFetch())],
+      ['404', 404, () => handleRequest(chatRequest(validBody(), { path: '/x' }), makeEnv(), mockFetch())],
+      ['405', 405, () => handleRequest(chatRequest(validBody(), { method: 'GET' }), makeEnv(), mockFetch())],
+      ['413', 413, () => handleRequest(chatRequest(null, { rawBody: big }), makeEnv(), mockFetch())],
+      ['429 daily', 429, () => handleRequest(chatRequest(validBody()), makeEnv({ DAILY_IP_LIMIT: '0' }), mockFetch())],
+      [
+        '429 burst',
+        429,
+        () => handleRequest(chatRequest(validBody()), makeEnv({ IP_LIMITER: new FakeLimiter(0) as unknown as RateLimit }), mockFetch()),
+      ],
+      ['502 upstream', 502, () => handleRequest(chatRequest(validBody()), makeEnv(), mockFetch(() => jsonResponse({}, 500)))],
+      [
+        '503 store down',
+        503,
+        () => {
+          const env = makeEnv();
+          env.kv.failing = true;
+          return handleRequest(chatRequest(validBody()), env, mockFetch());
+        },
+      ],
+      ['503 misconfigured', 503, () => handleRequest(chatRequest(validBody()), makeEnv({ IP_HASH_SECRET: '' }), mockFetch())],
+      ['204 preflight', 204, () => handleRequest(chatRequest(undefined, { method: 'OPTIONS' }), makeEnv(), mockFetch())],
+    ];
+    for (const [name, status, run] of cases) {
+      const res = await run();
+      expect(res.status, name).toBe(status);
+      expect(res.headers.get('x-content-type-options'), name).toBe('nosniff');
+    }
+  });
+
+  it('is also set when the exported Worker handler answers', async () => {
+    const { default: worker } = await import('./index');
+    const res = await worker.fetch(chatRequest(validBody(), { path: '/nope' }), makeEnv());
+    expect(res.status).toBe(404);
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+  });
+});
+
 // ----------------------------------------------------------------- validation
 
 describe('request validation', () => {

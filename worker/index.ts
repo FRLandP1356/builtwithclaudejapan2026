@@ -65,6 +65,7 @@ function jsonResponse(body: unknown, status: number, corsOrigin: string | null, 
   const headers = new Headers(extraHeaders);
   headers.set('content-type', 'application/json; charset=utf-8');
   headers.set('cache-control', 'no-store');
+  headers.set('x-content-type-options', 'nosniff');
   headers.set('vary', 'Origin');
   if (corsOrigin !== null) headers.set('access-control-allow-origin', corsOrigin);
   return new Response(typeof body === 'string' ? body : JSON.stringify(body), { status, headers });
@@ -78,6 +79,7 @@ function preflightResponse(corsOrigin: string): Response {
       'access-control-allow-methods': 'POST, OPTIONS',
       'access-control-allow-headers': 'content-type',
       'access-control-max-age': '86400',
+      'x-content-type-options': 'nosniff',
       vary: 'Origin',
     },
   });
@@ -187,8 +189,10 @@ export async function handleRequest(
     return jsonResponse({ error: 'method_not_allowed' }, 405, null, { allow: 'POST, OPTIONS' });
   }
 
-  // Only the public page's origin may use this Worker. A request without an Origin header is refused too:
-  // browsers always send one on a cross-origin POST.
+  // Only the public page's origin gets CORS headers, so the BROWSERS of other websites cannot read our answers or
+  // spend our quota from their pages. This is not authentication: curl and any script outside a browser can send
+  // whatever Origin they like. (A request without an Origin header is refused too, because browsers always send one
+  // on a cross-origin POST.) The hard limits are the counters and, above all, the Anthropic workspace spend limit.
   const origin = request.headers.get('origin');
   if (origin === null || !allowedOriginSet(env).has(origin)) {
     return jsonResponse({ error: 'origin_not_allowed' }, 403, null);
