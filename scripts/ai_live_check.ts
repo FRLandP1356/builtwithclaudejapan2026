@@ -2,10 +2,12 @@
 //
 // What it does: talks to the real Worker with the app's own ask() (src/ai/client.ts), a real EngineContext built from
 // public/data, and a fetch wrapper that adds the page Origin, paces the requests, retries a 429/503 after a pause and
-// tees every upstream response into a machine log. Phases (pick with --phases, default 1,2,3,7):
+// tees every upstream response into a machine log. Phases (pick with --phases, default 1,2,3,3b,7):
 //   1  the five sample questions, each in a fresh conversation -> public/data/cached_answers.json (status stays 'pending')
 //   2  tool coverage: a question per tool until all 8 tools were called successfully by the real model
 //   3  one long conversation (12 to 20 questions, history passed on) with tool calls, to see trimming
+//   3b a second long conversation whose questions ask for derived numbers (differences, shares, ratios): the model then
+//      tends to think before a tool call, so more thinking blocks end up in the history that is trimmed
 //   6  (does not exist: the refusal path is covered by unit tests, not tested live)
 //   7  token size: a one-line question and a question of 20,000 Japanese characters (sent straight to the Worker,
 //      because ask() itself keeps requests under 56,000 bytes and would refuse it). 7a and 7b can be run apart.
@@ -45,7 +47,7 @@ const MAX_REQUESTS = 330;
 const CACHE_WINDOW_MS = 5 * 60 * 1000;
 /** Sonnet 5.5, US dollars per million tokens. */
 const PRICE = { input: 2, cacheWrite: 2.5, cacheRead: 0.2, output: 10 };
-const DEFAULT_PHASES = ['1', '2', '3', '7'];
+const DEFAULT_PHASES = ['1', '2', '3', '3b', '7'];
 
 type Rec = Record<string, unknown>;
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -118,6 +120,26 @@ const LONG_QUESTIONS: string[] = [
   '札幌市と大阪市の2100年の人口を比べると、どちらが多いですか？',
   '子ども女性比を1割下げたとき、札幌市の2100年の人口はどう変わりますか？',
   '稚内市の2100年の人口は、2020年から何人減りますか？',
+];
+
+/** Phase 3b: derived numbers and comparisons, which make the model reason (and so think) before it calls a tool. */
+const LONG_QUESTIONS_B: string[] = [
+  '田辺市の人口は、2020年から2100年までに何%減りますか？',
+  '白浜町は何%減りますか？ 田辺市と比べて、どちらの減り方が大きいですか？',
+  'その二つの減る割合の差は、何ポイントですか？',
+  '和歌山市の2020年と2100年の総人口と、減る割合を教えてください。',
+  '和歌山県内で、2100年に人口が1万人を超える市区町村は何件ありますか？',
+  '田辺市で人口の移動が半分になると、2100年の人口は標準の前提と比べて何%違いますか？',
+  '田辺市で子ども女性比が1.2倍になると、2100年の人口は標準と比べて何人増えますか？',
+  '白浜町の2050年と2100年の65歳以上の人数の差は、何人ですか？',
+  '高野町の2050年の人口は、人口の目安を下回る施設がありますか？ ある場合は何件ですか？',
+  '夕張市の2100年の人口は、田辺市の2100年の人口の何分の一ですか？',
+  '夕張市の2100年は、今のどのくらいの人口の町に近いですか？',
+  '北海道で2100年に人口が1,000人を下回る市区町村は何件で、全体の何%ですか？',
+  '札幌市の2020年から2100年までの人口の減り方は、田辺市と比べてどうですか？',
+  '和歌山県の人口を5%増やし、同じ人数を全国から人口比で引くと、田辺市の2050年の人口は何人になりますか？',
+  '最初に聞いた田辺市の減る割合を、もう一度教えてください。',
+  '田辺市、白浜町、和歌山市のうち、2020年と比べて2100年の人口が最も多く残るのはどこですか？',
 ];
 
 const ONE_LINER = 'こんにちは。';
@@ -692,16 +714,20 @@ async function phase2(h: Harness): Promise<void> {
 // Phase 3: one long conversation
 // ---------------------------------------------------------------------------------------------------------------
 
-async function phase3(h: Harness): Promise<void> {
+/**
+ * One long conversation: every question gets the previous result's `messages` as history. At least 12 questions; after
+ * that it stops once trimming has been seen in three questions (otherwise it goes on to the end of the list).
+ */
+async function longConversation(h: Harness, phase: string, prefix: string, questions: string[]): Promise<void> {
   let conv: Message[] = [];
-  let convFirst = LONG_QUESTIONS[0]!;
+  let convFirst = questions[0]!;
   const turns: Rec[] = [];
   let trimTurns = 0;
   let resets = 0;
-  for (let i = 0; i < LONG_QUESTIONS.length && !state.stop; i++) {
-    const question = LONG_QUESTIONS[i]!;
+  for (let i = 0; i < questions.length && !state.stop; i++) {
+    const question = questions[i]!;
     if (conv.length === 0) convFirst = question;
-    const { result, entry } = await runAsk(h, '3', `long_${String(i + 1).padStart(2, '0')}`, question, conv, convFirst);
+    const { result, entry } = await runAsk(h, phase, `${prefix}_${String(i + 1).padStart(2, '0')}`, question, conv, convFirst);
     turns.push({ n: i + 1, askId: entry.id, status: entry.status, calls: entry.callSeqs.length, trimmedExchanges: entry.trimmedExchanges, historyMessagesIn: entry.historyMessagesIn, messagesOut: entry.messagesOut, tools: entry.trace.map((t) => t.tool) });
     if (entry.trimmed) trimTurns++;
     if (result) {
@@ -712,11 +738,13 @@ async function phase3(h: Harness): Promise<void> {
         conv = result.messages;
       }
     }
-    // At least 12 turns; stop there once trimming has been seen in two turns, else go on up to 20.
-    if (i + 1 >= 12 && trimTurns >= 2) break;
+    if (i + 1 >= 12 && trimTurns >= 3) break;
   }
-  state.phases['3'] = { turns, turnsAsked: turns.length, trimTurns, conversationResets: resets };
+  state.phases[phase] = { turns, turnsAsked: turns.length, trimTurns, conversationResets: resets };
 }
+
+const phase3 = (h: Harness): Promise<void> => longConversation(h, '3', 'long', LONG_QUESTIONS);
+const phase3b = (h: Harness): Promise<void> => longConversation(h, '3b', 'longB', LONG_QUESTIONS_B);
 
 // ---------------------------------------------------------------------------------------------------------------
 // Phase 6 and 7
@@ -851,6 +879,20 @@ function buildSummary(h: Harness | null): Rec {
   const trimmedCalls = ok.filter((c) => c.request.conversationTrimmed);
   const transformedTrimmedCalls = trimmedCalls.filter((c) => Array.isArray(c.response!.input_transformations) && (c.response!.input_transformations as unknown[]).length > 0);
 
+  // Thinking blocks: how many the model wrote, and how the calls that carried one behaved.
+  const thinkingWritten = ok.reduce((n, c) => n + c.response!.content.filter((b) => b.type === 'thinking').length, 0);
+  const withThinking = ok.filter((c) => (c.request.blocks.thinking ?? 0) > 0);
+  const emptyList = (c: CallEntry): boolean => Array.isArray(c.response!.input_transformations) && (c.response!.input_transformations as unknown[]).length === 0;
+  const thinking = {
+    blocksWrittenByTheModel: thinkingWritten,
+    thinkingTokensTotal: ok.reduce((n, c) => n + num((((c.response!.usage as Rec | undefined)?.output_tokens_details) as Rec | undefined)?.thinking_tokens), 0),
+    callsSentWithAThinkingBlock: withThinking.length,
+    ofThemNotTrimmedAndEmptyTransformations: withThinking.filter((c) => !c.request.conversationTrimmed && emptyList(c)).length,
+    ofThemNotTrimmed: withThinking.filter((c) => !c.request.conversationTrimmed).length,
+    ofThemTrimmedWithAThinkingDropped: withThinking.filter((c) => c.request.conversationTrimmed && !emptyList(c)).length,
+    ofThemTrimmed: withThinking.filter((c) => c.request.conversationTrimmed).length,
+  };
+
   const failures = state.calls.filter((c) => c.httpStatus !== 200).map((c) => ({ seq: c.seq, phase: c.phase, label: c.label, attempt: c.attempt, httpStatus: c.httpStatus, error: c.error ?? null, errorBody: c.errorBody ?? null, request: c.request }));
   const models = [...new Set(ok.map((c) => String(c.response!.model)))];
 
@@ -867,6 +909,7 @@ function buildSummary(h: Harness | null): Rec {
     cache,
     stopReasons,
     maxTokensFindings: maxTokens,
+    thinking,
     toolsCalledSuccessfully: Object.fromEntries(state.toolOk),
     toolsNeverCalledSuccessfully: h ? h.toolNames.filter((n) => (state.toolOk.get(n) ?? 0) === 0) : null,
     inputTransformations: {
@@ -917,7 +960,7 @@ function parseArgs(argv: string[], root: string): Opts {
     return i >= 0 ? argv[i + 1] : undefined;
   };
   if (argv.includes('--help')) {
-    out('node scripts/ai_live_check.ts [--phases 1,2,3,7] [--log <file>] [--answers <file>] [--dry-run]');
+    out('node scripts/ai_live_check.ts [--phases 1,2,3,3b,7] [--log <file>] [--answers <file>] [--dry-run]');
     process.exit(0);
   }
   const endpoint = get('--endpoint') ?? WORKER_URL;
@@ -965,6 +1008,7 @@ async function main(): Promise<void> {
     if (opts.phases.has('1')) await phase1(h);
     if (opts.phases.has('2') && !state.stop) await phase2(h);
     if (opts.phases.has('3') && !state.stop) await phase3(h);
+    if (opts.phases.has('3b') && !state.stop) await phase3b(h);
     if ([...opts.phases].some((p) => p.startsWith('7')) && !state.stop) await phase7(h, opts.phases);
   } finally {
     const summary = buildSummary(h);
