@@ -104,7 +104,7 @@ describe('worker/wrangler.jsonc', () => {
     // its own logs.
     expect(config.observability?.logs?.invocation_logs).toBe(false);
     // Every request's console lines are kept: the sampling rate (1 when unset) is 100%. A lower rate, or 0, would
-    // silently drop the "rate counter write failed" warning the operator relies on.
+    // silently drop the error lines (for example "rate limit store unavailable") the operator relies on.
     expect(config.observability?.logs?.head_sampling_rate ?? 1).toBe(1);
     expect(config.observability?.traces?.enabled ?? false).toBe(false);
   });

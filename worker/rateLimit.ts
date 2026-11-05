@@ -135,24 +135,28 @@ async function readCount(kv: KVNamespace, key: string): Promise<number> {
 
 /**
  * Charges one request against the per-IP and the total daily quota. `key` is the visitor's `clientKey`, computed once
- * per request by the caller. Returns false (and charges nothing) when either quota is used up.
+ * per request by the caller. Returns false (and charges nothing) when either quota is used up. THROWS when a counter
+ * cannot be read or cannot be saved; the caller answers 503 and never calls the upstream API (fail closed).
  *
- * BEST-EFFORT ONLY, not a security control. KV has no atomic increment and is eventually consistent, so this is
- * read-then-write: concurrent requests read the same values and overwrite each other's increments (lost updates).
- * A burst is therefore undercounted: a wave of N simultaneous requests that all read before any write all pass, and
- * the total then advances only by the number of distinct shards they hit (at most 16, about 15 for N = 50). So the
- * overshoot is up to N - 1 for the wave that crosses the cap, and sustained waves overshoot by a multiple of N (the
- * table in worker/README.md comes from rateLimit.test.ts). The hard stop on spending is the spend limit of the
- * Anthropic workspace that owns the API key.
+ * NOT A SECURITY CONTROL: a courtesy limit. KV has no atomic increment and is eventually consistent, so this is
+ * read-then-write: concurrent requests read the same values before any of them writes. What bounds the damage is
+ * that KV accepts only one write per second to a key, and that a request whose counters cannot be saved is refused
+ * (below): in a wave of N simultaneous requests only the first writer of each key succeeds, so at most one request
+ * per shard (16) gets through per second, and the total overshoots its cap by at most TOTAL_SHARDS - 1 per wave
+ * (the table in worker/README.md comes from rateLimit.test.ts). Staleness across Cloudflare locations is not
+ * modelled and can add to that. The hard stop on spending is the spend limit of the Anthropic workspace that owns
+ * the API key.
  *
  * The total is sharded over TOTAL_SHARDS keys (`total:<date>:<0..15>`); the cap is checked against their sum. The old
  * single `total:<date>` key is never read or written.
  *
- * Reads fail closed: the IP key and all shard keys are read together, and if any of them cannot be read the error is
- * thrown and the caller answers 503, because without the counters nothing is enforced. Writes do not: KV allows one
- * write per second to the same key, and a visitor who got past the checks must not be turned away because a counter
- * could not be saved. Only this visitor's shard and the IP key are written, each in its own try/catch (sequential,
- * shard first); a failure is logged once (no key, no address, no error text) and the request is allowed.
+ * FAILS CLOSED, reads and writes alike (owner's decision: when the limiter cannot count, the service stops). The IP
+ * key and all shard keys are read together, and if any read fails the error is thrown. The visitor's shard and the IP
+ * key are then saved together, and if either save fails the error is thrown too: a request that cannot be counted is
+ * not served. Otherwise the daily caps would silently stop working as soon as KV refuses writes (a second write to one
+ * key within a second, or the Workers Free plan's 1,000 writes a day for the whole account).
+ * If only one of the two saves succeeded, that counter is one too high for a call that is never made. That errs on the
+ * side of refusing and expires with the key; nothing is rolled back.
  */
 export async function consumeQuota(
   kv: KVNamespace,
@@ -168,18 +172,13 @@ export async function consumeQuota(
   const totalCount = shardCounts.reduce((sum, count) => sum + count, 0);
   if (ipCount >= limits.perIp || totalCount >= limits.total) return false;
 
+  // Saved together; both are awaited (allSettled) so the answer is not given while a save is still in flight.
   const shard = shardOf(key);
-  let writeFailed = false;
-  for (const [counterKey, count] of [
-    [shardKeys[shard]!, shardCounts[shard]! + 1],
-    [ipKey, ipCount + 1],
-  ] as const) {
-    try {
-      await kv.put(counterKey, String(count), { expirationTtl: COUNTER_TTL_SECONDS });
-    } catch {
-      writeFailed = true;
-    }
-  }
-  if (writeFailed) console.warn('rate counter write failed');
+  const saves = await Promise.allSettled([
+    kv.put(shardKeys[shard]!, String(shardCounts[shard]! + 1), { expirationTtl: COUNTER_TTL_SECONDS }),
+    kv.put(ipKey, String(ipCount + 1), { expirationTtl: COUNTER_TTL_SECONDS }),
+  ]);
+  // The error carries no key, address or KV error text; the caller logs one constant line.
+  if (saves.some((save) => save.status === 'rejected')) throw new Error('rate counter write failed');
   return true;
 }
