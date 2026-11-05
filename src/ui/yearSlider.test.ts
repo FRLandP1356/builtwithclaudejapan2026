@@ -51,6 +51,22 @@ describe('mountYearSlider', () => {
     expect(note.textContent).toBe(OFFICIAL_NOTE);
   });
 
+  test('the estimate note wraps between phrases: 「（予測ではありません）」 is one unbreakable piece', () => {
+    const { note } = setup(2100);
+    const pieces = [...note.querySelectorAll('.keep')].map((e) => e.textContent);
+    expect(pieces).toEqual(['2050年より後は、', 'このアプリの試算です', '（予測ではありません）']);
+    expect(pieces.join('')).toBe(ESTIMATE_NOTE);
+    expect(note.textContent).toBe(`試算${ESTIMATE_NOTE}`); // the badge and the sentence, unchanged
+    expect(note.querySelector('.badge-estimate')?.nextElementSibling?.className).toBe('keep');
+  });
+
+  test('focus() moves keyboard focus to the range input', () => {
+    const { slider, input } = setup();
+    expect(document.activeElement).not.toBe(input);
+    slider.focus();
+    expect(document.activeElement).toBe(input);
+  });
+
   test('moving the range reports the year', () => {
     const { input, onChange } = setup();
     input.value = '2075';
