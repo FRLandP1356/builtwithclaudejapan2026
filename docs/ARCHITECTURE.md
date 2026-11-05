@@ -34,7 +34,7 @@ src/ai/tools.ts（8つの道具。同じ engine を呼ぶ）◀── src/ai/cli
 | `src/map` | 日本・県の地図、色（2020年比の対数。割り振りを表示する時は人口の変化）、凡例、キーボードの操作（`keyboard.ts`。地図ごとに Tab の停止位置は1つで、矢印・PageUp/PageDown・Home/End で移る） |
 | `src/ui` | 骨組み `app.ts`（地図へのスキップリンク、Esc で割り振りを消す）、共有の状態 `state.ts`（選択、年、前提、割り振りの地図表示 `allocation`）、パネル 4つ（町の詳細、前提、割り振り、AI）。割り振りを地図に出す部分は `allocationOverlay.ts`・`allocationView.ts`・`allocationCore.ts`。見た目の決まりは `DESIGN.md` と `theme.css` |
 | `src/ai` | `toolDefs`（道具の定義。データだけ）、`tools`（道具の実装）、`numberCheck`（答えの数字の検査）、`client`（Worker とのやり取りと道具のループ）、`cached`（保存済みの答え） |
-| `worker` | `index`（`POST /api/chat`。上流への要求の本体とヘッダーは定数と検査済みの `messages` と道具の定義だけから作る）、`validate`（本文の検査と作り直し）、`rateLimit`（IP ごとの1日の回数と、16個のキーに分けた全体の1日の回数。短時間の連続の制限 `IP_LIMITER` は `index` が呼ぶ。書き込みの失敗は通し、読み出しの失敗は止める）、`systemPrompt`。すべての応答に `nosniff`、想定外の失敗は同じ形の 500、ログは固定の文字列だけ |
+| `worker` | `index`（`POST /api/chat`。上流への要求の本体とヘッダーは定数と検査済みの `messages` と道具の定義だけから作る）、`validate`（本文の検査と作り直し）、`rateLimit`（IP ごとの1日の回数と、16個のキーに分けた全体の1日の回数。短時間の連続の制限 `IP_LIMITER` は `index` が呼ぶ。読み出しも書き込みも、失敗したら止める（503。上流は呼ばない））、`systemPrompt`。すべての応答に `nosniff`、想定外の失敗は同じ形の 500、ログは固定の文字列だけ |
 
 ## 守っている4つの約束
 
