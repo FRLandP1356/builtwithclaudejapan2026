@@ -51,6 +51,22 @@ class FakeLimiter {
   }
 }
 
+/**
+ * A KV that, like the real one, refuses a second write to the same key within one second (it throws, as the real one
+ * does with "KV PUT failed: 429 Too Many Requests"). Time is Date.now(), which the tests control with setSystemTime.
+ */
+class OneWritePerSecondKV extends FakeKV {
+  private lastWriteMs = new Map<string, number>();
+
+  override async put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void> {
+    const now = Date.now();
+    const last = this.lastWriteMs.get(key);
+    if (last !== undefined && now - last < 1000) throw new Error('KV PUT failed: 429 Too Many Requests');
+    this.lastWriteMs.set(key, now);
+    return super.put(key, value, options);
+  }
+}
+
 const ORIGIN = 'https://town-2100.pages.dev';
 const API_KEY = 'sk-ant-test-SECRET-0123456789';
 const IP_HASH_SECRET = 'test-ip-hash-secret-0123456789';
@@ -705,8 +721,10 @@ describe('rate limits', () => {
     expect((await call('::ffff:c633:6402')).status).toBe(429); // 198.51.100.2
   });
 
-  it('is best-effort: a concurrent burst is undercounted (lost updates), as worker/README.md says', async () => {
-    // Every read finishes before any write starts, which is what a burst on real KV looks like.
+  it('a concurrent burst reads the counters before any write lands, so a KV that accepts every write lets all of it through', async () => {
+    // Every read finishes before any write starts, which is what a burst on real KV looks like. FakeKV accepts every
+    // write (real KV refuses a second write to a key within a second: see the next tests), so this is the pure
+    // read-before-write race.
     class SlowReadKV extends FakeKV {
       override async get(key: string): Promise<string | null> {
         const value = await super.get(key);
@@ -721,9 +739,8 @@ describe('rate limits', () => {
       Array.from({ length: 50 }, () => handleRequest(chatRequest(validBody()), env, fetchFn)),
     );
     const passed = results.filter((res) => res.status === 200).length;
-    // The documented limitation: far more than 3 (per IP) and 5 (total) get through. The real cap is the
-    // Anthropic workspace spend limit. If this ever fails because the limiter became exact, update the README.
-    // All 50 read the same empty counters before any write landed, so all 50 pass.
+    // All 50 read the same empty counters before any write landed, so all 50 pass: far more than 3 (per IP) and 5
+    // (total). The real cap on money is the Anthropic workspace spend limit.
     expect(passed).toBe(50);
     expect(fetchFn).toHaveBeenCalledTimes(passed);
   });
@@ -766,27 +783,103 @@ describe('rate limits', () => {
     }
   });
 
-  it('allows the request, with one detail-free warning, when the hot total counter cannot be written (KV: 1 write per second per key)', async () => {
+  it('FAILS CLOSED when the visitor\'s shard counter cannot be written: 503, no upstream call, one constant log line', async () => {
     const env = makeEnv();
     env.kv.failPutFor = (key) => key.startsWith('total:');
     const fetchFn = mockFetch();
     const res = await handleRequest(chatRequest(validBody(), { ip: '203.0.113.7' }), env, fetchFn);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual(OK_BODY);
-    expect(fetchFn).toHaveBeenCalledTimes(1);
-    // The per-IP counter was still saved (the shard write is the one that failed).
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: 'service_unavailable' });
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(fetchFn).not.toHaveBeenCalled();
+    // The per-IP counter was saved together with it (one count too many for a call that is never made).
     expect(env.kv.puts.map((put) => put.key.split(':')[0])).toEqual(['ip']);
-    expect(consoleCalls()).toEqual([['warn', 'rate counter write failed']]);
+    expect(consoleCalls()).toEqual([['error', 'rate limit store unavailable']]);
   });
 
-  it('allows the request when no counter can be written, and still counts nothing it could not save', async () => {
+  it('FAILS CLOSED when the visitor\'s own counter (the IP key) cannot be written: 503, no upstream call', async () => {
+    const env = makeEnv();
+    env.kv.failPutFor = (key) => key.startsWith('ip:');
+    const fetchFn = mockFetch();
+    const res = await handleRequest(chatRequest(validBody(), { ip: '203.0.113.7' }), env, fetchFn);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: 'service_unavailable' });
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(env.kv.puts.map((put) => put.key.split(':')[0])).toEqual(['total']);
+    expect(consoleCalls()).toEqual([['error', 'rate limit store unavailable']]);
+  });
+
+  it('FAILS CLOSED when no counter can be written: 503, nothing saved, no upstream call', async () => {
     const env = makeEnv();
     env.kv.failPutFor = () => true;
     const fetchFn = mockFetch();
     const res = await handleRequest(chatRequest(validBody()), env, fetchFn);
-    expect(res.status).toBe(200);
-    expect(fetchFn).toHaveBeenCalledTimes(1);
-    expect(consoleCalls()).toEqual([['warn', 'rate counter write failed']]);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: 'service_unavailable' });
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(env.kv.puts).toHaveLength(0);
+    expect(consoleCalls()).toEqual([['error', 'rate limit store unavailable']]);
+  });
+
+  it('a KV that refuses writes (the Workers Free plan\'s daily write quota used up) stops the AI instead of leaving it uncounted', async () => {
+    const env = makeEnv();
+    env.kv.failPutFor = () => true; // every write refused, as after the 1,000-writes-a-day quota
+    const fetchFn = mockFetch();
+    for (let i = 0; i < 5; i++) {
+      const res = await handleRequest(chatRequest(validBody(), { ip: `198.51.100.${i + 1}` }), env, fetchFn);
+      expect(res.status, `request ${i + 1}`).toBe(503);
+    }
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('with a KV that refuses a second write to a key within a second: the second call from one visitor gets 503, a different visitor is served, a second later it works again', async () => {
+    // The visitors must land on different shards, or the shard key alone would refuse the second one.
+    const visitorShard = async (ip: string) => shardOf(await clientKey(IP_HASH_SECRET, ip));
+    const first = '203.0.113.7';
+    let other = '';
+    for (let i = 1; i < 200 && other === ''; i++) {
+      const candidate = `198.51.100.${i}`;
+      if ((await visitorShard(candidate)) !== (await visitorShard(first))) other = candidate;
+    }
+    expect(other).not.toBe('');
+
+    const env = makeEnv({ RATE_KV: new OneWritePerSecondKV() as unknown as KVNamespace });
+    const fetchFn = mockFetch();
+    const call = (ip: string) => handleRequest(chatRequest(validBody(), { ip }), env, fetchFn);
+
+    expect((await call(first)).status).toBe(200);
+    const again = await call(first); // the same instant: its IP key and its shard were just written
+    expect(again.status).toBe(503);
+    expect(await again.json()).toEqual({ error: 'service_unavailable' });
+    expect(fetchFn).toHaveBeenCalledTimes(1); // no upstream call for the refused one
+    expect((await call(other)).status).toBe(200); // another visitor, another shard
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+
+    vi.setSystemTime(new Date('2026-11-05T12:00:01Z')); // one second later
+    expect((await call(first)).status).toBe(200);
+    expect(fetchFn).toHaveBeenCalledTimes(3);
+  });
+
+  it('a burst of simultaneous visitors: only the first writer of each shard is served, the rest get 503 and no upstream call', async () => {
+    class SlowReadOneWriteKV extends OneWritePerSecondKV {
+      override async get(key: string): Promise<string | null> {
+        const value = await super.get(key);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return value;
+      }
+    }
+    const env = makeEnv({ DAILY_TOTAL_LIMIT: '5', DAILY_IP_LIMIT: '100', RATE_KV: new SlowReadOneWriteKV() as unknown as KVNamespace });
+    const fetchFn = mockFetch();
+    const ips = Array.from({ length: 50 }, (_, i) => `192.0.2.${i + 1}`);
+    const shards = new Set(await Promise.all(ips.map(async (ip) => shardOf(await clientKey(IP_HASH_SECRET, ip)))));
+    const results = await Promise.all(ips.map((ip) => handleRequest(chatRequest(validBody(), { ip }), env, fetchFn)));
+    const served = results.filter((res) => res.status === 200).length;
+    const refused = results.filter((res) => res.status === 503).length;
+    expect(served).toBe(shards.size); // one per distinct shard (at most 16), although the cap is 5
+    expect(served).toBeLessThanOrEqual(TOTAL_SHARDS);
+    expect(served + refused).toBe(50);
+    expect(fetchFn).toHaveBeenCalledTimes(served);
   });
 
   it('fails closed (503) when a counter cannot be READ, even though writes would work: no upstream call', async () => {
@@ -1439,9 +1532,9 @@ describe('console output: exactly these constant lines, nothing else', () => {
       },
     },
     {
-      name: 'rate counter write failed (a KV write throws an Error holding the key and the address)',
-      status: 200,
-      calls: [['warn', 'rate counter write failed']],
+      name: 'a counter cannot be saved (a KV write throws an Error holding the key and the address)',
+      status: 503,
+      calls: [['error', 'rate limit store unavailable']],
       run: () => {
         const kv = {
           get: async () => null,
@@ -1470,7 +1563,7 @@ describe('console output: exactly these constant lines, nothing else', () => {
     });
   }
 
-  it('covers every console call in the source: nine call sites, with exactly these argument texts', () => {
+  it('covers every console call in the source: eight call sites, with exactly these argument texts', () => {
     // A tenth log line, or an extra argument on one of these, fails here until the table above is extended.
     const sites = [...`${indexSource}\n${rateLimitSource}`.matchAll(/console\.(log|info|warn|error|debug)\(([^;]*)\);/g)].map(
       (match) => `${match[1]}(${match[2]})`,
@@ -1481,7 +1574,6 @@ describe('console output: exactly these constant lines, nothing else', () => {
         "error('rate limit store unavailable')",
         "error('unexpected error')",
         'error(`server configuration missing: ${missing}`)',
-        "warn('rate counter write failed')",
         "warn('upstream body rejected')",
         "warn('upstream body unreadable')",
         "warn('upstream request failed')",

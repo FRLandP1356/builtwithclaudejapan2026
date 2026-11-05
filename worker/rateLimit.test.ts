@@ -42,9 +42,15 @@ class RecordingKV {
 
 const asKV = (kv: RecordingKV) => kv as unknown as KVNamespace;
 
-let warn: ReturnType<typeof vi.spyOn>;
+const CONSOLE_METHODS = ['log', 'info', 'warn', 'error', 'debug'] as const;
+
+/** Every console call made so far as [method, ...arguments]. consumeQuota itself must make none. */
+function consoleCalls(): unknown[][] {
+  return CONSOLE_METHODS.flatMap((method) => vi.mocked(console[method]).mock.calls.map((args) => [method, ...args]));
+}
+
 beforeEach(() => {
-  warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  for (const method of CONSOLE_METHODS) vi.spyOn(console, method).mockImplementation(() => {});
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -154,7 +160,7 @@ describe('shardOf', () => {
 });
 
 describe('consumeQuota', () => {
-  it('reads the IP key and all 16 shard keys, then writes this visitor\'s shard first and the IP key second, one after the other', async () => {
+  it('reads the IP key and all 16 shard keys, then saves this visitor\'s shard and the IP key together (both started before either finishes)', async () => {
     const kv = new RecordingKV();
     expect(await consume(kv, '203.0.113.7')).toBe(true);
     const visitor = await clientKey(SECRET, '203.0.113.7');
@@ -162,7 +168,7 @@ describe('consumeQuota', () => {
     const mine = shardKey(shardOf(visitor));
     expect([...kv.gets].sort()).toEqual([ipKey, ...ALL_SHARD_KEYS].sort());
     expect([...kv.store.keys()]).toEqual([mine, ipKey]);
-    expect(kv.events).toEqual([`start:${mine}`, `end:${mine}`, `start:${ipKey}`, `end:${ipKey}`]);
+    expect(kv.events).toEqual([`start:${mine}`, `start:${ipKey}`, `end:${mine}`, `end:${ipKey}`]);
   });
 
   it('never reads or writes the old single total:<date> key', async () => {
@@ -215,38 +221,63 @@ describe('consumeQuota', () => {
     expect(kv.events).toEqual([]);
   });
 
-  it('still saves the IP counter, and allows the request, when the shard write fails (one warning, no details)', async () => {
+  it('FAILS CLOSED when the shard write fails: it rejects, so the caller answers 503; no console output', async () => {
     const kv = new RecordingKV();
     kv.failPutFor = (key) => key.startsWith('total:');
-    expect(await consume(kv, '203.0.113.7')).toBe(true);
+    await expect(consume(kv, '203.0.113.7')).rejects.toThrow('rate counter write failed');
+    // The pair was saved together, so the other counter did get its +1: one count too many for a call that is never
+    // made. That errs on the side of refusing; nothing is rolled back.
     expect([...kv.store.keys()]).toHaveLength(1);
     expect([...kv.store.keys()][0]).toMatch(/^ip:2026-11-05:[0-9a-f]{32}$/);
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith('rate counter write failed');
+    expect(consoleCalls()).toEqual([]);
   });
 
-  it('still saves the visitor\'s shard, and allows the request, when the IP write fails', async () => {
+  it('FAILS CLOSED when the visitor\'s IP-key write fails: it rejects; the shard counter is one too high', async () => {
     const kv = new RecordingKV();
     kv.failPutFor = (key) => key.startsWith('ip:');
-    expect(await consume(kv, '203.0.113.7')).toBe(true);
+    await expect(consume(kv, '203.0.113.7')).rejects.toThrow('rate counter write failed');
     expect([...kv.store.keys()]).toEqual([shardKey(shardOf(await clientKey(SECRET, '203.0.113.7')))]);
-    expect(warn).toHaveBeenCalledTimes(1);
+    expect(consoleCalls()).toEqual([]);
   });
 
-  it('allows the request and warns once, not twice, when both writes fail', async () => {
+  it('FAILS CLOSED when both writes fail: it rejects and saves nothing', async () => {
     const kv = new RecordingKV();
     kv.failPutFor = () => true;
-    expect(await consume(kv, '203.0.113.7')).toBe(true);
+    await expect(consume(kv, '203.0.113.7')).rejects.toThrow('rate counter write failed');
     expect(kv.store.size).toBe(0);
-    expect(warn).toHaveBeenCalledTimes(1);
-    // Nothing identifying in the log: the one call is exactly the constant string (no key, address or Error).
-    expect(warn.mock.calls).toEqual([['rate counter write failed']]);
+    expect(consoleCalls()).toEqual([]);
   });
 
-  it('does not warn when the writes succeed', async () => {
+  it('the error it throws carries no key, address or KV error text', async () => {
+    const kv = new RecordingKV();
+    kv.failPutFor = () => true;
+    const error = await consume(kv, '203.0.113.7').catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe('rate counter write failed');
+    expect(String((error as Error).stack)).not.toMatch(/203\.0\.113\.7|kv put failed|total:|ip:/);
+  });
+
+  it('waits for BOTH saves before answering, even when one fails at once and the other is slow', async () => {
+    class SlowSecondKV extends RecordingKV {
+      override async put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void> {
+        if (key.startsWith('ip:')) {
+          for (let i = 0; i < 20; i++) await Promise.resolve();
+          return super.put(key, value, options);
+        }
+        throw new Error('shard write refused');
+      }
+    }
+    const kv = new SlowSecondKV();
+    await expect(consume(kv, '203.0.113.7')).rejects.toThrow('rate counter write failed');
+    // The slow IP save had finished by the time consumeQuota rejected (it is not left running behind the answer).
+    expect([...kv.store.keys()]).toHaveLength(1);
+    expect(kv.events).toContain(`end:${[...kv.store.keys()][0]}`);
+  });
+
+  it('does not log anything when the writes succeed', async () => {
     const kv = new RecordingKV();
     await consume(kv, '203.0.113.7');
-    expect(warn).not.toHaveBeenCalled();
+    expect(consoleCalls()).toEqual([]);
   });
 
   it('still refuses (false) when a quota is used up, whether or not writes would fail', async () => {
@@ -255,7 +286,7 @@ describe('consumeQuota', () => {
     kv.store.set(shardKey(4), '100');
     expect(await consume(kv, '203.0.113.7')).toBe(false);
     expect(kv.events).toEqual([]); // nothing was written, so there was nothing to fail
-    expect(warn).not.toHaveBeenCalled();
+    expect(consoleCalls()).toEqual([]);
   });
 
   it('refuses on the per-IP quota too, without writing', async () => {
@@ -391,9 +422,10 @@ describe('consumeQuota', () => {
 });
 
 // A wave is N visitors whose reads all complete before any of their writes land (what a burst looks like on real
-// KV). KV refuses a second write to the same key within one second; consecutive waves are one second apart, so the
-// first writer to a shard in each wave succeeds and the others are refused. Every visitor is new, so only the total
-// cap is in play. This is the single-location, writes-visible-at-once, best case: more locations make it worse.
+// KV). KV refuses a second write to the same key within one second; consecutive waves are `gapMs` apart. A request
+// whose counters cannot both be saved is refused (fail closed), so only the first writer of each key in a wave can be
+// served. The state of the daily total is the sum of the 16 shards. This is the single-location, writes-visible-at-once
+// best case: staleness across locations is not modelled.
 class WaveKV {
   store = new Map<string, string>();
   private snapshot = new Map<string, string>();
@@ -426,11 +458,31 @@ class WaveKV {
   }
 }
 
+interface WaveResult {
+  /** Served: the counters were saved and the request would go on to the upstream API. */
+  passed: number;
+  /** Refused because a daily cap is used up (429). */
+  capped: number;
+  /** Refused because the counters could not be saved (503 "try again later"). */
+  unavailable: number;
+}
+
 /** One wave: every key in `keys` calls consumeQuota at the same moment, all reading the state at the wave's start. */
-async function runWave(kv: WaveKV, keys: string[], clockMs: number, limits: { perIp: number; total: number }): Promise<number> {
+async function runWave(kv: WaveKV, keys: string[], clockMs: number, limits: { perIp: number; total: number }): Promise<WaveResult> {
   kv.startWave(clockMs);
-  const outcomes = await Promise.all(keys.map((key) => consumeQuota(kv as unknown as KVNamespace, key, limits, NOW)));
-  return outcomes.filter(Boolean).length;
+  const outcomes = await Promise.all(
+    keys.map((key) =>
+      consumeQuota(kv as unknown as KVNamespace, key, limits, NOW).then(
+        (allowed) => (allowed ? ('passed' as const) : ('capped' as const)),
+        () => 'unavailable' as const,
+      ),
+    ),
+  );
+  return {
+    passed: outcomes.filter((outcome) => outcome === 'passed').length,
+    capped: outcomes.filter((outcome) => outcome === 'capped').length,
+    unavailable: outcomes.filter((outcome) => outcome === 'unavailable').length,
+  };
 }
 
 /** N visitors, each new, calling at the same moment. */
@@ -438,82 +490,111 @@ async function distinctVisitors(n: number, wave: number): Promise<string[]> {
   return Promise.all(Array.from({ length: n }, (_, i) => clientKey(SECRET, `10.${Math.floor(wave / 250)}.${wave % 250}.${i}`)));
 }
 
-/** Runs waves until a whole wave is refused. `keysOf(wave)` says who calls in each wave; waves are `gapMs` apart. */
+interface Sustained extends WaveResult {
+  waves: number;
+  kv: WaveKV;
+}
+
+/**
+ * Runs waves until one is refused by a cap (429) with nobody served. `keysOf(wave)` says who calls in each wave;
+ * waves are `gapMs` apart. Returns the totals over all waves.
+ */
 async function sustained(
   keysOf: (wave: number) => Promise<string[]>,
   limits: { perIp: number; total: number },
   gapMs = 1000,
-): Promise<{ passed: number; waves: number; kv: WaveKV }> {
+): Promise<Sustained> {
   const kv = new WaveKV();
-  let passed = 0;
+  const totals = { passed: 0, capped: 0, unavailable: 0 };
   let waves = 0;
   for (let wave = 0; wave < 5000; wave++) {
-    const ok = await runWave(kv, await keysOf(wave), wave * gapMs, limits);
-    if (ok === 0) break;
-    passed += ok;
+    const result = await runWave(kv, await keysOf(wave), wave * gapMs, limits);
+    if (result.passed === 0 && result.capped > 0) break;
+    totals.passed += result.passed;
+    totals.unavailable += result.unavailable;
     waves += 1;
   }
-  return { passed, waves, kv };
+  return { ...totals, waves, kv };
 }
 
 const CAP = { perIp: 60, total: 400 };
 
-/** Waves of `visitors` simultaneous new visitors, one wave a second, until a whole wave is refused. */
+/** Waves of `visitors` simultaneous new visitors, one wave a second, until a cap bites. */
 const sustainedWaves = (visitors: number) => sustained((wave) => distinctVisitors(visitors, wave), CAP);
 
-describe('overshoot of the daily total under simultaneous requests (cap 400; the table in worker/README.md)', () => {
-  it('a single wave that starts just under the cap lets all N through (overshoot N - 1), then the cap holds', async () => {
+describe('overshoot of the daily total under simultaneous requests, failing closed (cap 400; the table in worker/README.md)', () => {
+  it('a wave of N simultaneous visitors serves only the first writer of each shard: at most 16, one per distinct shard', async () => {
     const kv = new WaveKV();
-    kv.store.set(shardKey(0), '399');
-    const passed = await runWave(kv, await distinctVisitors(50, 0), 0, CAP);
-    expect(passed).toBe(50); // every one of the 50 read 399 before any write: the worst overshoot is N - 1 = 49
-    // The sum advanced by the shards that were hit (at most 16), so the very next wave is refused in full.
-    expect(kv.total()).toBeGreaterThan(399);
-    expect(kv.total()).toBeLessThanOrEqual(399 + TOTAL_SHARDS);
-    expect(await runWave(kv, await distinctVisitors(50, 1), 1000, CAP)).toBe(0);
+    kv.store.set(shardKey(0), '399'); // one call left under the cap of 400
+    const keys = await distinctVisitors(50, 0);
+    const distinctShards = new Set(keys.map(shardOf)).size;
+    const result = await runWave(kv, keys, 0, CAP);
+    // Every one of the 50 read 399, so none was capped; the others could not save their shard counter and got a 503.
+    expect(result.capped).toBe(0);
+    expect(result.passed).toBe(distinctShards);
+    expect(result.passed).toBeGreaterThan(1);
+    expect(result.passed).toBeLessThanOrEqual(TOTAL_SHARDS);
+    expect(result.unavailable).toBe(50 - distinctShards);
+    // The overshoot of the cap is what passed minus the one call that was left: at most TOTAL_SHARDS - 1 = 15.
+    expect(kv.total()).toBe(399 + result.passed);
+    // The very next wave sees the sum over the cap and serves nobody.
+    const next = await runWave(kv, await distinctVisitors(50, 1), 1000, CAP);
+    expect(next).toEqual({ passed: 0, capped: 50, unavailable: 0 });
   });
 
-  it('sustained waves, one a second: the exact calls allowed before the cap bites, as quoted in worker/README.md', async () => {
+  it('sustained waves, one a second: the exact calls served before the cap bites, as quoted in worker/README.md', async () => {
     // Deterministic: the HMAC of fixed addresses under a fixed secret, and a KV model that refuses a second write to
     // a key within one second. These are the numbers in the README table. They change if the sharding rule, the
     // secret SECRET or the addresses in distinctVisitors change; then change the README table too.
-    const expected: Record<number, number> = { 1: 400, 2: 414, 3: 420, 5: 455, 10: 520, 20: 700, 50: 1300 };
-    for (const [n, calls] of Object.entries(expected)) {
-      expect((await sustainedWaves(Number(n))).passed, `waves of ${n}`).toBe(calls);
+    const expected: Record<number, { passed: number; unavailable: number }> = {
+      1: { passed: 400, unavailable: 0 },
+      2: { passed: 400, unavailable: 14 },
+      3: { passed: 401, unavailable: 19 },
+      5: { passed: 403, unavailable: 52 },
+      10: { passed: 402, unavailable: 118 },
+      20: { passed: 409, unavailable: 291 },
+      50: { passed: 403, unavailable: 897 },
+    };
+    for (const [n, want] of Object.entries(expected)) {
+      const result = await sustainedWaves(Number(n));
+      expect({ passed: result.passed, unavailable: result.unavailable }, `waves of ${n}`).toEqual(want);
+      // Every served call was counted exactly once in the total, and the total overshoots 400 by at most 15.
+      expect(result.kv.total()).toBe(result.passed);
+      expect(result.passed).toBeGreaterThanOrEqual(400);
+      expect(result.passed).toBeLessThanOrEqual(400 + TOTAL_SHARDS - 1);
     }
   });
 
-  it('faster waves overshoot more: 50 simultaneous requests every 0.2 s (the shards still take one write a second)', async () => {
-    const { passed } = await sustained((wave) => distinctVisitors(50, wave), CAP, 200);
-    expect(passed).toBe(6200); // the exact count of this deterministic model (124 waves of 50)
+  it('faster waves do not overshoot more: 50 simultaneous requests every 0.2 s still serve only one write a second per shard', async () => {
+    const result = await sustained((wave) => distinctVisitors(50, wave), CAP, 200);
+    expect({ passed: result.passed, unavailable: result.unavailable }).toEqual({ passed: 400, unavailable: 5800 });
+    expect(result.kv.total()).toBe(result.passed);
+    expect(result.passed).toBeGreaterThanOrEqual(400);
+    expect(result.passed).toBeLessThanOrEqual(400 + TOTAL_SHARDS - 1);
   });
 
-  it('one visitor sending concurrent calls passes its own counters: 20 at a time, once a second, until its cap of 60', async () => {
-    // Concurrent calls from one visitor all read the same counts, so each wave of 20 adds only 1 to the visitor's IP
-    // counter and shard (one write a second per key): 60 waves of 20 before the per-visitor cap bites.
+  it('one visitor sending 20 concurrent calls: only one is served per second, so it stops exactly at its own cap of 60', async () => {
+    // Concurrent calls from one visitor all read the same counts and then race for the same two keys (its IP key and
+    // its shard): one write a second per key, so one call is served and 19 get a 503. 60 waves reach the cap.
     const key = await clientKey(SECRET, '203.0.113.7');
-    const { passed, waves } = await sustained(async () => Array<string>(20).fill(key), CAP);
-    expect(waves).toBe(60);
-    expect(passed).toBe(1200);
+    const result = await sustained(async () => Array<string>(20).fill(key), CAP);
+    expect(result.waves).toBe(60);
+    expect(result.passed).toBe(60);
+    expect(result.unavailable).toBe(60 * 19);
   });
 
-  it('...and several such visitors in turn are held back only by the total of 400: 8,000 calls', async () => {
-    // A new visitor each wave, each sending 20 concurrent calls: the total advances by 1 a wave, so 400 waves of 20.
-    const { passed, waves } = await sustained(async (wave) => Array<string>(20).fill((await distinctVisitors(1, wave))[0]!), CAP);
-    expect(waves).toBe(400);
-    expect(passed).toBe(8000);
+  it('...and new such visitors in turn: one call is served per wave, so the total stops at its cap of 400', async () => {
+    const result = await sustained(async (wave) => Array<string>(20).fill((await distinctVisitors(1, wave))[0]!), CAP);
+    expect(result.waves).toBe(400);
+    expect(result.passed).toBe(400);
+    expect(result.unavailable).toBe(400 * 19);
   });
 
-  it('the single-key reference (arithmetic, not production code): 50 x 400 = 20,000 calls, far above the sharded 1,300', async () => {
-    // A 4-line model of the old single total key, where every wave advances the one counter by 1. It is plain
-    // arithmetic, not the production code with one shard (the shard count is a constant of the module).
-    let counter = 0;
-    let passed = 0;
-    while (counter < 400) {
-      passed += 50;
-      counter += 1;
-    }
-    expect(passed).toBe(20_000);
-    expect((await sustainedWaves(50)).passed).toBeLessThan(passed / 10);
+  it('visitors who call less than once a second are all served until the cap (the "try again later" is for bursts)', async () => {
+    // One call per second from a new visitor each time, and the same visitor again 20 s later: never two writes to a
+    // key within a second, so nobody gets a 503 and the cap is exact.
+    const result = await sustained((wave) => distinctVisitors(1, wave % 200), CAP);
+    expect(result.unavailable).toBe(0);
+    expect(result.passed).toBe(400);
   });
 });

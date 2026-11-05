@@ -281,8 +281,8 @@ async function routeRequest(request: Request, env: Env, fetchFn: typeof fetch): 
   try {
     allowed = await consumeQuota(env.RATE_KV, visitor, limits);
   } catch {
-    // Fail closed on a failed READ: without the counters the spending cap cannot be enforced. (A failed write is
-    // handled inside consumeQuota and does not end up here.)
+    // Fail closed on a failed read OR a failed write of the counters (owner's decision, Ruling 38): a request that
+    // cannot be counted is not served, so no upstream call is made. One constant line covers both.
     console.error('rate limit store unavailable');
     return jsonResponse({ error: 'service_unavailable' }, 503, origin);
   }
