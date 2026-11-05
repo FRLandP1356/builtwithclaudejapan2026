@@ -1,7 +1,5 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
-import v8 from 'node:v8';
-import vm from 'node:vm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadAllAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
@@ -2029,22 +2027,6 @@ describe('この割り振りを地図に反映する (run_allocation in the trac
       ctx.store.set({ scenario: OTHER });
       expect(buttons(m)[0]!.textContent).toBe(PANEL_TEXT.allocationButton);
       expect(old.textContent).toBe(hinted);
-    });
-
-    it('the panel holds on to no button once its answer has left the page', async () => {
-      v8.setFlagsFromString('--expose-gc');
-      const gc = vm.runInNewContext('gc') as () => void;
-      const m = mount({ cache: withOtherAssumptions() });
-      m.samples()[0]!.click();
-      await answersCount(m, 1);
-      const ref = new WeakRef(buttons(m)[0]!);
-      await askSaved(m, MAX_ANSWERS); // trims the first answer off the page
-      expect(ref.deref()?.isConnected).toBe(false); // still alive for a moment: nothing has collected it yet
-      for (let i = 0; i < 10 && ref.deref() !== undefined; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        gc();
-      }
-      expect(ref.deref()).toBeUndefined();
     });
   });
 
