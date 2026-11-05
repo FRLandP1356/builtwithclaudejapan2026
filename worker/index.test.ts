@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TOOL_DEFS, TOOL_NAMES } from '../src/ai/toolDefs';
 import { handleRequest, type Env } from './index';
-import { DEFAULT_IP_LIMIT, DEFAULT_TOTAL_LIMIT } from './rateLimit';
+import { clientKey, COUNTER_TTL_SECONDS, DEFAULT_IP_LIMIT, DEFAULT_TOTAL_LIMIT, shardOf, TOTAL_SHARDS } from './rateLimit';
 import { SYSTEM_PROMPT } from './systemPrompt';
 
 // ---------------------------------------------------------------- test doubles
@@ -14,12 +14,14 @@ class FakeKV {
   failing = false;
   /** Makes only get() throw (put keeps working). */
   failGet = false;
+  /** Makes get() throw for the keys this returns true for. */
+  failGetFor: ((key: string) => boolean) | null = null;
   /** Makes put() throw for the keys this returns true for. */
   failPutFor: ((key: string) => boolean) | null = null;
 
   async get(key: string): Promise<string | null> {
     this.gets.push(key);
-    if (this.failing || this.failGet) throw new Error('kv down');
+    if (this.failing || this.failGet || this.failGetFor?.(key)) throw new Error('kv down');
     return this.store.get(key) ?? null;
   }
 
@@ -666,7 +668,9 @@ describe('rate limits', () => {
     await handleRequest(chatRequest(validBody(), { ip: '203.0.113.77' }), env, mockFetch());
     expect(env.kv.puts.length).toBeGreaterThanOrEqual(2);
     for (const put of env.kv.puts) {
-      expect(put.options?.expirationTtl).toBeGreaterThanOrEqual(60);
+      // A counter must outlive its UTC day: a 60 s TTL would turn the daily limits into per-minute limits.
+      expect(put.options?.expirationTtl).toBeGreaterThanOrEqual(86_400);
+      expect(put.options?.expirationTtl).toBe(COUNTER_TTL_SECONDS);
       expect(put.key).not.toContain('203.0.113.77');
       expect(put.key).toContain('2026'); // keyed by UTC date
     }
@@ -711,14 +715,47 @@ describe('rate limits', () => {
     const passed = results.filter((res) => res.status === 200).length;
     // The documented limitation: far more than 3 (per IP) and 5 (total) get through. The real cap is the
     // Anthropic workspace spend limit. If this ever fails because the limiter became exact, update the README.
-    expect(passed).toBeGreaterThan(5);
+    // All 50 read the same empty counters before any write landed, so all 50 pass.
+    expect(passed).toBe(50);
     expect(fetchFn).toHaveBeenCalledTimes(passed);
   });
 
-  it('writes the total counter first and the IP counter second', async () => {
+  it('writes only the visitor\'s total shard first and the IP counter second, never the old single total key', async () => {
     const env = makeEnv();
-    await handleRequest(chatRequest(validBody()), env, mockFetch());
-    expect(env.kv.puts.map((put) => put.key.split(':')[0])).toEqual(['total', 'ip']);
+    await handleRequest(chatRequest(validBody(), { ip: '203.0.113.7' }), env, mockFetch());
+    const visitor = await clientKey(IP_HASH_SECRET, '203.0.113.7');
+    expect(env.kv.puts.map((put) => put.key)).toEqual([`total:2026-11-05:${shardOf(visitor)}`, `ip:2026-11-05:${visitor}`]);
+    expect(env.kv.puts.map((put) => put.value)).toEqual(['1', '1']);
+  });
+
+  it('spreads visitors over the total shards, and the cap is the SUM over them (not any one shard)', async () => {
+    const env = makeEnv({ DAILY_TOTAL_LIMIT: '40', DAILY_IP_LIMIT: '1000' });
+    const fetchFn = mockFetch();
+    let passed = 0;
+    for (let i = 0; i < 60; i++) {
+      const res = await handleRequest(chatRequest(validBody(), { ip: `192.0.2.${i + 1}` }), env, fetchFn);
+      if (res.status === 200) passed += 1;
+      else expect(res.status).toBe(429);
+    }
+    expect(passed).toBe(40);
+    const shardKeys = [...env.kv.store.keys()].filter((key) => key.startsWith('total:'));
+    expect(shardKeys.length).toBeGreaterThan(8); // 40 visitors do not all land on one or two shards
+    expect(shardKeys.every((key) => /^total:2026-11-05:(\d|1[0-5])$/.test(key))).toBe(true);
+    expect(shardKeys.length).toBeLessThanOrEqual(TOTAL_SHARDS);
+    const sum = shardKeys.reduce((acc, key) => acc + Number(env.kv.store.get(key)), 0);
+    expect(sum).toBe(40);
+  });
+
+  it('fails closed (503) when ANY one of the total shards cannot be read', async () => {
+    for (let shard = 0; shard < TOTAL_SHARDS; shard++) {
+      const env = makeEnv();
+      env.kv.failGetFor = (key) => key === `total:2026-11-05:${shard}`;
+      const fetchFn = mockFetch();
+      const res = await handleRequest(chatRequest(validBody()), env, fetchFn);
+      expect(res.status, `shard ${shard}`).toBe(503);
+      expect(fetchFn).not.toHaveBeenCalled();
+      expect(env.kv.puts).toHaveLength(0);
+    }
   });
 
   it('allows the request, with one detail-free warning, when the hot total counter cannot be written (KV: 1 write per second per key)', async () => {
@@ -729,7 +766,7 @@ describe('rate limits', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(OK_BODY);
     expect(fetchFn).toHaveBeenCalledTimes(1);
-    // The per-IP counter was still saved.
+    // The per-IP counter was still saved (the shard write is the one that failed).
     expect(env.kv.puts.map((put) => put.key.split(':')[0])).toEqual(['ip']);
     const warnings = vi.mocked(console.warn).mock.calls;
     expect(warnings).toEqual([['rate counter write failed']]);

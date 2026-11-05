@@ -261,9 +261,12 @@ async function routeRequest(request: Request, env: Env, fetchFn: typeof fetch): 
   };
   // Burst limit first (20 calls per 60 s per visitor, see wrangler.jsonc). The binding is per Cloudflare location and
   // eventually consistent, a courtesy limit like the daily counters. A refusal here costs no KV read or write.
+  // The visitor's HMAC'd identity is computed once and shared by the burst limiter and the daily counters.
+  let visitor: string;
   let withinBurst: boolean;
   try {
-    const outcome = await env.IP_LIMITER.limit({ key: await clientKey(env.IP_HASH_SECRET, clientIp) });
+    visitor = await clientKey(env.IP_HASH_SECRET, clientIp);
+    const outcome = await env.IP_LIMITER.limit({ key: visitor });
     withinBurst = outcome.success;
   } catch {
     // Fail closed, like a KV read failure: without the limiter the burst cap cannot be enforced.
@@ -276,7 +279,7 @@ async function routeRequest(request: Request, env: Env, fetchFn: typeof fetch): 
 
   let allowed: boolean;
   try {
-    allowed = await consumeQuota(env.RATE_KV, clientIp, limits, env.IP_HASH_SECRET);
+    allowed = await consumeQuota(env.RATE_KV, visitor, limits);
   } catch {
     // Fail closed on a failed READ: without the counters the spending cap cannot be enforced. (A failed write is
     // handled inside consumeQuota and does not end up here.)
