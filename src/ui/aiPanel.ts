@@ -369,29 +369,30 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
   }
 
   /**
-   * For each run_allocation call that returned a result (allocationOffers): a button that recomputes that allocation
-   * locally from the tool INPUT (never from the model's text or the tool result) and draws it on the map, moving the
-   * year slider to the allocation's year. A bad input is refused with a message (text only).
+   * What an allocation button needs to repaint its hint when the screen's assumptions change: its text without the
+   * hint, and the assumptions it would bring. Kept per button in a WeakMap and found again through the page, so a
+   * button whose answer was trimmed, cleared or replaced is let go with it: there is no list to prune.
    */
-  /** The allocation buttons on screen, with the scenario each would bring; their hint follows the screen's scenario. */
-  const allocationButtons: Array<{ button: HTMLButtonElement; text: string; scenario: Scenario | undefined }> = [];
+  const allocationOffer = new WeakMap<HTMLButtonElement, { text: string; scenario: Scenario | undefined }>();
   function paintAllocationButtons(): void {
     const current = scenarioKey(ctx.store.get().scenario);
-    for (let i = allocationButtons.length - 1; i >= 0; i--) {
-      const b = allocationButtons[i]!;
-      if (!root.contains(b.button)) {
-        allocationButtons.splice(i, 1); // the answer was trimmed or cleared
-        continue;
-      }
-      const differs = b.scenario !== undefined && scenarioKey(b.scenario) !== current;
-      const text = differs ? `${b.text}${PANEL_TEXT.allocationScenarioHint}` : b.text;
-      if (b.button.textContent !== text) b.button.textContent = text;
+    for (const button of root.querySelectorAll<HTMLButtonElement>('button[data-role="apply-allocation"]')) {
+      const offer = allocationOffer.get(button);
+      if (!offer) continue;
+      const differs = offer.scenario !== undefined && scenarioKey(offer.scenario) !== current;
+      const text = differs ? `${offer.text}${PANEL_TEXT.allocationScenarioHint}` : offer.text;
+      if (button.textContent !== text) button.textContent = text;
     }
   }
   const unsubscribeScenario = ctx.store.subscribe((s, prev) => {
     if (s.scenario !== prev.scenario) paintAllocationButtons();
   });
 
+  /**
+   * For each run_allocation call that returned a result (allocationOffers): a button that recomputes that allocation
+   * locally from the tool INPUT (never from the model's text or the tool result) and draws it on the map, moving the
+   * year slider to the allocation's year. A bad input is refused with a message (text only).
+   */
   function renderAllocationOffers(trace: TraceItem[]): HTMLElement | null {
     const inputs = allocationOffers(trace);
     if (inputs.length === 0) return null;
@@ -406,7 +407,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
       const scenario = typeof read === 'string' ? undefined : read;
       const differs = scenario !== undefined && scenarioKey(scenario) !== scenarioKey(ctx.store.get().scenario);
       const button = h('button', { type: 'button', class: 'btn', 'data-role': 'apply-allocation' }, differs ? `${text}${PANEL_TEXT.allocationScenarioHint}` : text);
-      allocationButtons.push({ button, text, scenario });
+      allocationOffer.set(button, { text, scenario });
       button.addEventListener('click', () => {
         const rebuilt = orElse(() => overlayFromToolInput(input, ctx.data, ctx.runner), { error: PANEL_TEXT.allocationFailed });
         if ('error' in rebuilt) {

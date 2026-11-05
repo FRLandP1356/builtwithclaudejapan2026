@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
+import v8 from 'node:v8';
+import vm from 'node:vm';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { loadAllAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
@@ -1690,6 +1692,73 @@ describe('この割り振りを地図に反映する (run_allocation in the trac
     expect(errors).toEqual([]);
     expect(ctx.store.get().allocation).toBeUndefined();
     expect(answer.querySelector('.ai-allocations .ai-scenario-msg')!.textContent).not.toBe('');
+  });
+
+  describe('the allocation buttons of answers that left the page', () => {
+    const OTHER = { cwrMult: 1.2, migMode: 'hold' as const, migScale: 1, infraStrength: 0 };
+    const withOtherAssumptions = (): CachedAnswers => {
+      const input = { target: { kind: 'pref', code: '30' }, deltaPercent: 10, year: 2100, scenario: { cwrMult: 1.2 } };
+      return cacheOf(savedEntry(TOKYO_QUESTION, '保存済みの答えです。', { trace: [{ tool: 'run_allocation', input, result: { year: 2100 } }] }));
+    };
+    const hinted = `${PANEL_TEXT.allocationButton}${PANEL_TEXT.allocationScenarioHint}`;
+    const askSaved = async (m: Mounted, times: number): Promise<void> => {
+      for (let i = 0; i < times; i++) {
+        const newest = m.answers()[0];
+        m.samples()[0]!.click();
+        await vi.waitFor(() => expect(m.answers()[0]).not.toBe(newest));
+        await vi.waitFor(() => expect(m.submit.disabled).toBe(false));
+      }
+    };
+    const buttons = (m: Mounted) => m.qa<HTMLButtonElement>('button[data-role="apply-allocation"]');
+
+    it('only the buttons still on the page follow the screen\'s assumptions; one that was trimmed off the page is left as it was', async () => {
+      const ctx = makeContext();
+      const m = mount({ cache: withOtherAssumptions() }, ctx);
+      m.samples()[0]!.click();
+      await answersCount(m, 1);
+      const first = buttons(m)[0]!;
+      expect(first.textContent).toBe(hinted);
+      await askSaved(m, MAX_ANSWERS); // the first answer is now the 21st: trimmed
+      expect(first.isConnected).toBe(false);
+      expect(buttons(m)).toHaveLength(MAX_ANSWERS);
+
+      ctx.store.set({ scenario: OTHER }); // the screen now has the assumptions the buttons would bring
+      expect(buttons(m).every((b) => b.textContent === PANEL_TEXT.allocationButton)).toBe(true);
+      expect(first.textContent).toBe(hinted); // not repainted: it is no longer part of the panel
+      ctx.store.set({ scenario: { cwrMult: 1, migMode: 'hold', migScale: 1, infraStrength: 0 } });
+      expect(buttons(m).every((b) => b.textContent === hinted)).toBe(true);
+    });
+
+    it('a new conversation clears the answers and their buttons; the next answer\'s button is still repainted', async () => {
+      const ctx = makeContext();
+      const m = mount({ cache: withOtherAssumptions() }, ctx);
+      m.samples()[0]!.click();
+      await answersCount(m, 1);
+      const old = buttons(m)[0]!;
+      m.newBtn().click();
+      expect(buttons(m)).toHaveLength(0);
+      m.samples()[0]!.click();
+      await answersCount(m, 1);
+      ctx.store.set({ scenario: OTHER });
+      expect(buttons(m)[0]!.textContent).toBe(PANEL_TEXT.allocationButton);
+      expect(old.textContent).toBe(hinted);
+    });
+
+    it('the panel holds on to no button once its answer has left the page', async () => {
+      v8.setFlagsFromString('--expose-gc');
+      const gc = vm.runInNewContext('gc') as () => void;
+      const m = mount({ cache: withOtherAssumptions() });
+      m.samples()[0]!.click();
+      await answersCount(m, 1);
+      const ref = new WeakRef(buttons(m)[0]!);
+      await askSaved(m, MAX_ANSWERS); // trims the first answer off the page
+      expect(ref.deref()?.isConnected).toBe(false); // still alive for a moment: nothing has collected it yet
+      for (let i = 0; i < 10 && ref.deref() !== undefined; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        gc();
+      }
+      expect(ref.deref()).toBeUndefined();
+    });
   });
 
   it('offers nothing when no run_allocation was used, and numbers each button when several were', async () => {
