@@ -78,24 +78,29 @@ function headerHtml(): string {
   return `<header class="app-head"><h1 class="app-title">${APP_TITLE}</h1><p class="app-lead">${APP_LEAD}</p></header>`;
 }
 
+/** `<main>` stays a plain landmark; the live region is a child. */
 function renderLoading(root: HTMLElement): void {
   root.innerHTML = `${headerHtml()}
-    <main class="load-skeleton" role="status" aria-live="polite">
-      <p class="load-status">データを読み込んでいます（約2MB）</p>
-      <div class="skeleton skeleton-line" style="width:40%"></div>
-      <div class="skeleton skeleton-map"></div>
-      <div class="skeleton skeleton-line" style="width:70%"></div>
+    <main>
+      <div class="load-skeleton" role="status" aria-live="polite">
+        <p class="load-status">データを読み込んでいます（約2MB）</p>
+        <div class="skeleton skeleton-line" style="width:40%"></div>
+        <div class="skeleton skeleton-map"></div>
+        <div class="skeleton skeleton-line" style="width:70%"></div>
+      </div>
     </main>`;
 }
 
 function renderError(root: HTMLElement, err: unknown, retry: () => void): void {
   const detail = err instanceof Error ? err.message : String(err);
   root.innerHTML = `${headerHtml()}
-    <main class="load-error" role="alert">
-      <h2>データを読み込めませんでした</h2>
-      <p>${escapeHtml(detail)}</p>
-      <p>通信の状態を確かめてから、もう一度お試しください。</p>
-      <button type="button" class="btn btn-primary" id="retry">もう一度読み込む</button>
+    <main>
+      <div class="load-error" role="alert">
+        <h2>データを読み込めませんでした</h2>
+        <p>${escapeHtml(detail)}</p>
+        <p>通信の状態を確かめてから、もう一度お試しください。</p>
+        <button type="button" class="btn btn-primary" id="retry">もう一度読み込む</button>
+      </div>
     </main>`;
   root.querySelector<HTMLButtonElement>('#retry')?.addEventListener('click', retry);
 }
@@ -218,16 +223,21 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     host.hidden = true;
     stage.insertBefore(host, overlay);
     const prefName = data.prefNames.get(pp) ?? pp;
-    const map = mountPrefectureMap(host, {
-      topology,
-      label: `${prefName}の地図。市区町村を選ぶと、その町の数字が出ます`,
-      ariaLabel: (code, name) => ariaFor(totals.area.get(code), name),
-      tooltip: (code, name) => tooltipFor(totals.area.get(code), name),
-      onPick: (code) => store.set(pickArea({ code, prefCode: pp })),
-    });
-    const entry = { host, map };
-    prefMaps.set(pp, entry);
-    return entry;
+    try {
+      const map = mountPrefectureMap(host, {
+        topology,
+        label: `${prefName}の地図。市区町村を選ぶと、その町の数字が出ます`,
+        ariaLabel: (code, name) => ariaFor(totals.area.get(code), name),
+        tooltip: (code, name) => tooltipFor(totals.area.get(code), name),
+        onPick: (code) => store.set(pickArea({ code, prefCode: pp })),
+      });
+      const entry = { host, map };
+      prefMaps.set(pp, entry);
+      return entry;
+    } catch (e) {
+      host.remove(); // a broken topology leaves nothing behind; the caller shows the error
+      throw e;
+    }
   }
 
   function showOverlay(content: Node | string): void {
@@ -269,9 +279,10 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     let entry = prefMaps.get(pp);
     if (!entry) {
       showOverlay('地図を読み込んでいます');
-      let topo: Topology;
       try {
-        topo = await loadPrefGeo(pp, geoOpts);
+        const topo = await loadPrefGeo(pp, geoOpts);
+        if (token !== showToken) return;
+        entry = prefMaps.get(pp) ?? mountPref(pp, topo); // a malformed topology throws here and gets the error overlay
       } catch (e) {
         if (token !== showToken) return; // a newer request owns the overlay now
         const box = document.createElement('div');
@@ -286,8 +297,6 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
         showOverlay(box);
         return;
       }
-      if (token !== showToken) return;
-      entry = prefMaps.get(pp) ?? mountPref(pp, topo);
     }
     switchTo(entry.map, entry.host);
   }
@@ -405,7 +414,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     renderHeadline(s);
     if (selChanged) announcePlace(s);
     // The map was replaced (drill-down or back): keep keyboard focus in the map region instead of dropping it.
-    if (prefChanged) headName.focus();
+    if (prefChanged) headName.focus({ preventScroll: true });
   });
 
   const s0 = store.get();

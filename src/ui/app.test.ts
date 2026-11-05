@@ -14,6 +14,8 @@ const prefTopo = (pp: string) =>
 interface Control {
   slow?: string;
   fail?: string;
+  /** A prefecture whose topology file is well-formed JSON but has no `areas` object. */
+  broken?: string;
   brokenNational?: boolean;
   failAll?: boolean;
 }
@@ -28,6 +30,7 @@ function makeFetch(control: Control) {
     if (m) {
       const pp = m[1];
       if (pp === control.fail) return Promise.resolve(json({}, 404));
+      if (pp === control.broken) return Promise.resolve(json({ type: 'Topology', objects: {}, arcs: [] }));
       if (pp === control.slow) return new Promise<Response>((resolve) => pending.set(pp, () => resolve(json(prefTopo(pp)))));
       return Promise.resolve(json(prefTopo(pp)));
     }
@@ -234,5 +237,96 @@ describe('startup failures', () => {
     expect(h).toBeUndefined();
     expect(root.textContent).toContain('データを読み込めませんでした');
     expect(root.querySelector('.skeleton')).toBeNull();
+  });
+
+  test('loading and error states keep <main> a plain landmark with the live region inside it', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const root = document.createElement('div');
+    document.body.append(root);
+    const { fetchStub } = makeFetch({ failAll: true });
+    const pending = mountApp(root, { fetch: fetchStub, base: '/', prefGeoCache: new Map() });
+    const mainWhileLoading = root.querySelector('main')!;
+    expect(mainWhileLoading.getAttribute('role')).toBeNull();
+    expect(mainWhileLoading.querySelector('[role="status"]')).not.toBeNull();
+    await pending;
+    const mainAfter = root.querySelector('main')!;
+    expect(mainAfter.getAttribute('role')).toBeNull();
+    expect(mainAfter.querySelector('[role="alert"]')).not.toBeNull();
+  });
+});
+
+describe('Task 8 leftovers', () => {
+  test('a malformed prefecture topology shows the error overlay with retry, not the loading text forever', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { store, overlay, visibleHost } = await mount({ broken: '13' });
+    store.set({ selectedPref: '13' });
+    await settle();
+    expect(overlay.hidden).toBe(false);
+    expect(overlay.textContent).not.toContain('地図を読み込んでいます');
+    expect(overlay.querySelector('button')?.textContent).toBe('もう一度読み込む');
+    expect(visibleHost()?.classList.contains('map-host-national')).toBe(true); // the broken host was removed
+    store.set({ selectedPref: '30' });
+    await settle();
+    expect(overlay.hidden).toBe(true);
+  });
+
+  test('the headline is not a live region; the place status is announced once per selection change', async () => {
+    const { root, store } = await mount();
+    expect(root.querySelector('.map-headline')!.getAttribute('aria-live')).toBeNull();
+    const status = root.querySelector('.place-status')!;
+    expect(status.getAttribute('role')).toBe('status');
+    expect(status.textContent).toBe('');
+    store.set({ selectedPref: '30' });
+    await settle();
+    const first = status.textContent;
+    expect(first).toContain('和歌山県');
+    store.set({ year: 2055 });
+    store.set({ year: 2060 });
+    expect(status.textContent).toBe(first); // year changes do not re-announce
+    store.set({ selectedArea: '30206' });
+    expect(status.textContent).toContain('田辺市');
+  });
+
+  test('switching maps drops the hover state of the map that goes away', async () => {
+    const { root, store } = await mount();
+    const nationalSvg = root.querySelector('.map-host-national svg')!;
+    const path = nationalSvg.querySelector('path.area[data-code="30"]')!;
+    path.dispatchEvent(new Event('pointerover', { bubbles: true }));
+    const tip = root.querySelector('.map-host-national .map-tip') as HTMLElement;
+    expect(tip.hidden).toBe(false);
+    expect(nationalSvg.querySelector('.ring-hover')!.getAttribute('d')).not.toBe('');
+    store.set({ selectedPref: '30' });
+    await settle();
+    expect(tip.hidden).toBe(true);
+    expect(nationalSvg.querySelector('.ring-hover')!.getAttribute('d')).toBe('');
+  });
+
+  test('destroy() tears the hover state down: the tooltip goes, and a late pointer event does nothing', async () => {
+    const { root, store } = await mount();
+    const nationalSvg = root.querySelector('.map-host-national svg')!;
+    const path = nationalSvg.querySelector('path.area[data-code="30"]')!;
+    path.dispatchEvent(new Event('pointerover', { bubbles: true }));
+    const tip = root.querySelector('.map-host-national .map-tip') as HTMLElement;
+    expect(tip.hidden).toBe(false);
+    const get = vi.spyOn(store, 'get');
+    handle!.destroy();
+    handle = undefined;
+    expect(tip.isConnected).toBe(false);
+    path.dispatchEvent(new Event('pointerover', { bubbles: true })); // e.g. a pointer still over the old SVG
+    nationalSvg.querySelector('path.area[data-code="13"]')!.dispatchEvent(new Event('pointerover', { bubbles: true }));
+    expect(get).not.toHaveBeenCalled(); // no tooltip was computed for the torn-down map
+  });
+
+  test('focus moves to the headline without scrolling', async () => {
+    const { store, root } = await mount();
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    store.set({ selectedPref: '30' });
+    await settle();
+    const head = root.querySelector('.map-headline-name');
+    expect(document.activeElement).toBe(head);
+    const onHead = focus.mock.contexts.map((c, i) => [c, focus.mock.calls[i]![0]] as const).filter(([c]) => c === head);
+    expect(onHead.length).toBeGreaterThan(0);
+    for (const [, arg] of onHead) expect(arg).toEqual({ preventScroll: true });
+    focus.mockRestore();
   });
 });
