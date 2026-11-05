@@ -183,7 +183,7 @@ export interface SeriesChartView {
 
 /** Under the data table: the 公式推計 column is the published figure; this app's own numbers are recomputed from the published assumptions. */
 export const TABLE_NOTE =
-  '公式推計の列は、社人研が発表した値です。このアプリは、公表された仮定から公式の方法で計算し直しています。そのため、2050年までの地図や町の数字は、発表値と数人違うことがあります。';
+  '公式推計の列は、社人研が発表した値です。このアプリは、公表された仮定から公式の方法で計算し直しています。そのため、2050年までの地図や町の数字は、発表値と、町では数人、都道府県では数十人ほど違うことがあります。';
 
 const W = 360;
 const H = 232;

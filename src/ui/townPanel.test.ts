@@ -11,6 +11,7 @@ import { DEFAULT_SCENARIO, type Area, type Groups, type Scenario } from '../engi
 import { deriveTotals } from './derive';
 import { evaluateFacilities, PERMANENT_NOTE, summaryLine } from './facilityPanel';
 import { formatPct, formatPop } from './format';
+import { phrases } from './phrases';
 import { PYRAMID_HALF_WIDTH, pyramidScale } from './pyramid';
 import { formatAxisCount, SERIES_VIEW, TABLE_NOTE } from './seriesChart';
 import { createAppStore, type AllocationOverlay, type Store } from './state';
@@ -166,6 +167,9 @@ describe('mountTownPanel: updates only what changed', () => {
     const printed = (label: string) => [...section.querySelectorAll('svg.series-svg text')].filter((t) => t.textContent === label).length;
     expect(printed('2075年')).toBe(1); // not an axis year: the marker label says it
     expect(printed('2100年')).toBe(1); // the axis label
+    store.set({ year: 2050 }); // the official / estimate boundary is not an axis year: its label must stay
+    expect(printed('2050年')).toBe(1);
+    expect(q('.chart-marker-label')!.textContent).toBe('2050年');
     for (const year of [2100, 2020, 2060, 2040, 2080]) {
       store.set({ year });
       expect(printed(`${year}年`), `${year}年 printed`).toBe(1);
@@ -188,9 +192,13 @@ describe('mountTownPanel: updates only what changed', () => {
     expect(note.classList.contains('note')).toBe(true);
     expect(note.textContent).toContain('社人研が発表した値');
     expect(note.textContent).toContain('公表された仮定から公式の方法で計算し直しています');
-    expect(note.textContent).toContain('数人違うことがあります');
+    expect(note.textContent).toContain('町では数人、都道府県では数十人ほど違うことがあります');
     expect(note.textContent).not.toContain('予測');
     expect(section.querySelectorAll('.chart-table-note')).toHaveLength(1); // only the series table has it
+    // laid out as no-break phrases, one span per phrase (2 lines at 390px break between them, not inside)
+    const keeps = [...note.querySelectorAll(':scope > .keep')].map((k) => k.textContent);
+    expect(keeps).toEqual(phrases(TABLE_NOTE));
+    expect(keeps.length).toBeGreaterThanOrEqual(5);
     expect(q('.series-figure .chart-table')!.lastElementChild).toBe(note); // after the table wrapper
     expect(note.previousElementSibling?.classList.contains('table-wrap')).toBe(true);
     const rows = chartRows(section);
@@ -352,6 +360,23 @@ describe('the official line, through the panel', () => {
     expect(rows.get(2025)![0]).toBe(fmt(tanabe.official[2025]));
     expect(rows.get(2025)![1]).toBe('－'); // the estimate line starts at 2050
     expect(rows.get(2100)![0]).toBe('－');
+  });
+
+  test('the table note\'s claim holds on the real data: the app\'s 2050 numbers differ from the published ones by a few people in a town, a few dozen in a prefecture', () => {
+    const series = runner.run(DEFAULT_SCENARIO);
+    let worstTown = 0;
+    const prefDiff = new Map<string, number>();
+    for (const a of areas) {
+      const d = total(series.get(a.code)![2050]) - a.official[2050];
+      worstTown = Math.max(worstTown, Math.abs(d));
+      prefDiff.set(a.prefCode, (prefDiff.get(a.prefCode) ?? 0) + d);
+    }
+    const worstPref = Math.max(...[...prefDiff.values()].map(Math.abs));
+    expect(worstTown).toBeGreaterThan(1); // so the note is needed
+    expect(worstTown).toBeLessThan(10); // 数人: a single digit
+    expect(worstPref).toBeGreaterThan(10);
+    expect(worstPref).toBeLessThan(100); // 数十人: two digits
+    expect(TABLE_NOTE).toContain('町では数人、都道府県では数十人ほど違うことがあります');
   });
 
   test('a prefecture sums every area of it, villages (no age assumptions) included', () => {
