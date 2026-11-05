@@ -1,5 +1,7 @@
-export const DEFAULT_IP_LIMIT = 20;
-export const DEFAULT_TOTAL_LIMIT = 300;
+// Daily limits, counted in UPSTREAM CALLS, not in questions: one question can use up to 9 calls (a tool round trip
+// each, see src/ai/client.ts), so 60 calls per visitor is between 6 questions (each at the worst case of 9 calls) and 60. Worst-case cost: worker/README.md.
+export const DEFAULT_IP_LIMIT = 60;
+export const DEFAULT_TOTAL_LIMIT = 400;
 
 // Counters are keyed by UTC date and expire on their own. Two days leaves room for clock edges
 // and is far above the 60 s minimum that KV accepts.

@@ -194,9 +194,9 @@ describe('system prompt and limits', () => {
     expect(SYSTEM_PROMPT).not.toContain('get_series の結果では');
   });
 
-  it('has the documented default limits', () => {
-    expect(DEFAULT_IP_LIMIT).toBe(20);
-    expect(DEFAULT_TOTAL_LIMIT).toBe(300);
+  it('has the documented default limits (Ruling 34): 60 upstream calls a day per visitor, 400 in total', () => {
+    expect(DEFAULT_IP_LIMIT).toBe(60);
+    expect(DEFAULT_TOTAL_LIMIT).toBe(400);
   });
 });
 
@@ -477,16 +477,37 @@ describe('rate limits', () => {
     expect(fetchFn).toHaveBeenCalledTimes(3);
   });
 
-  it('applies a per-IP default of 20 a day', async () => {
+  it('applies a per-IP default of 60 a day when no limit var is set', async () => {
     const env = makeEnv();
     const fetchFn = mockFetch();
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 60; i++) {
       const res = await handleRequest(chatRequest(validBody()), env, fetchFn);
       expect(res.status, `call ${i + 1}`).toBe(200);
     }
     const blocked = await handleRequest(chatRequest(validBody()), env, fetchFn);
     expect(blocked.status).toBe(429);
-    expect(fetchFn).toHaveBeenCalledTimes(20);
+    expect(fetchFn).toHaveBeenCalledTimes(60);
+  });
+
+  it('applies a total default of 400 a day when no limit var is set (many visitors, none over their own 60)', async () => {
+    const env = makeEnv();
+    const fetchFn = mockFetch();
+    const ipOf = (i: number) => `10.${Math.floor(i / 250)}.${i % 250}.1`;
+    for (let i = 0; i < 400; i++) {
+      const res = await handleRequest(chatRequest(validBody(), { ip: ipOf(i) }), env, fetchFn);
+      expect(res.status, `call ${i + 1}`).toBe(200);
+    }
+    const blocked = await handleRequest(chatRequest(validBody(), { ip: ipOf(400) }), env, fetchFn);
+    expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toEqual({ cached: true, error: 'rate_limited' });
+    expect(fetchFn).toHaveBeenCalledTimes(400);
+  });
+
+  it('switches the AI off with DAILY_TOTAL_LIMIT=0 (the after-the-event step in the deploy checklist)', async () => {
+    const fetchFn = mockFetch();
+    const res = await handleRequest(chatRequest(validBody()), makeEnv({ DAILY_TOTAL_LIMIT: '0' }), fetchFn);
+    expect(res.status).toBe(429);
+    expect(fetchFn).not.toHaveBeenCalled();
   });
 
   it('total_limit_returns_429_cached', async () => {

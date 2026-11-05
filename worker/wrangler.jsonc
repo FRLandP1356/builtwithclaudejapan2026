@@ -34,9 +34,10 @@
     // out; it is NOT authentication (curl can send any Origin). The Anthropic workspace spend limit is the hard stop.
     // Replace with the public page's origin at deploy time. Local development only for now.
     "ALLOWED_ORIGINS": "http://localhost:5173"
-    // Optional overrides; defaults are 300 a day in total and 20 a day per IP:
-    // "DAILY_TOTAL_LIMIT": "300",
-    // "DAILY_IP_LIMIT": "20"
+    // Optional overrides; defaults are 400 a day in total and 60 a day per IP. They count upstream calls, and one
+    // question can use up to 9. Set DAILY_TOTAL_LIMIT to "0" to switch the AI off (for example after the event).
+    // "DAILY_TOTAL_LIMIT": "400",
+    // "DAILY_IP_LIMIT": "60"
   }
   // The key and the IP hashing secret are secrets, not vars: `wrangler secret put ANTHROPIC_API_KEY` and
   // `wrangler secret put IP_HASH_SECRET` at deploy time.
