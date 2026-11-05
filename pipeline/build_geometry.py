@@ -136,7 +136,7 @@ def fetch_all(entries: Iterable[Dict[str, Any]]) -> None:
     for entry in entries:
         try:
             status = fetch_sources.fetch_one(entry, raw_dir=RAW_DIR)
-        except (fetch_sources.HashMismatch, fetch_sources.UnsafeFileName, OSError) as exc:
+        except (fetch_sources.HashMismatch, fetch_sources.UnsafeFileName, fetch_sources.DownloadTooLarge, OSError) as exc:
             print(f"FAILED      {entry['file']}: {exc}", file=sys.stderr)
             failed = True
             continue

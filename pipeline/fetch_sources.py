@@ -19,7 +19,7 @@ import os
 import sys
 import tempfile
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOURCES_JSON = os.path.join(ROOT, "pipeline", "sources.json")
@@ -29,10 +29,21 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 CHUNK = 1 << 20
+# Download size cap. sources.json records the size of every file ("bytes"); a download is aborted as
+# soon as it has delivered more than that plus a tolerance of max(64 KiB, 1% of the recorded size).
+# The tolerance only absorbs a server that re-wraps the same file; a different file is caught by the
+# SHA256 check anyway. With no recorded size (--record, or a new entry) the cap is an absolute ceiling.
+SIZE_TOLERANCE_MIN = 64 * 1024
+SIZE_TOLERANCE_PERCENT = 1
+MAX_UNRECORDED_BYTES = 256 * 1024 * 1024
 
 
 class HashMismatch(Exception):
     pass
+
+
+class DownloadTooLarge(Exception):
+    """The server sent more bytes than sources.json records (plus the tolerance); the download was aborted."""
 
 
 class UnsafeFileName(ValueError):
@@ -70,14 +81,40 @@ def sha256_of(path: str) -> str:
     return h.hexdigest()
 
 
-def download(url: str, dest: str) -> None:
-    """Download url to dest atomically (temp file in the same directory, then rename)."""
+def size_limit(expected_bytes: Optional[int]) -> int:
+    """Most bytes a download may deliver: the recorded size plus the tolerance, or the ceiling if none is recorded."""
+    if isinstance(expected_bytes, int) and not isinstance(expected_bytes, bool) and expected_bytes > 0:
+        return expected_bytes + max(SIZE_TOLERANCE_MIN, expected_bytes * SIZE_TOLERANCE_PERCENT // 100)
+    return MAX_UNRECORDED_BYTES
+
+
+def download(url: str, dest: str, expected_bytes: Optional[int] = None, opener: Optional[Callable[..., Any]] = None) -> None:
+    """Download url to dest atomically (temp file in the same directory, then rename).
+
+    The transfer is aborted with DownloadTooLarge, and the partial file deleted, as soon as it would
+    exceed size_limit(expected_bytes): a declared Content-Length over the limit aborts before any body
+    is read, and the body is read in pieces that never go past limit + 1 byte. `opener` replaces
+    urllib.request.urlopen (used by the tests to feed a fake stream).
+    """
+    limit = size_limit(expected_bytes)
+    open_url = opener or urllib.request.urlopen
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(dest), suffix=".part")
     try:
-        with os.fdopen(fd, "wb") as out, urllib.request.urlopen(req, timeout=120) as resp:
-            for block in iter(lambda: resp.read(CHUNK), b""):
+        with os.fdopen(fd, "wb") as out, open_url(req, timeout=120) as resp:
+            headers = getattr(resp, "headers", None)
+            declared = headers.get("Content-Length") if headers is not None else None
+            if declared and declared.strip().isdigit() and int(declared) > limit:
+                raise DownloadTooLarge(f"{url}: server announces {int(declared)} bytes, limit is {limit}")
+            received = 0
+            while True:
+                block = resp.read(min(CHUNK, limit - received + 1))
+                if not block:
+                    break
+                received += len(block)
+                if received > limit:
+                    raise DownloadTooLarge(f"{url}: more than {limit} bytes received (recorded size {expected_bytes})")
                 out.write(block)
         os.replace(tmp, dest)
     except BaseException:
@@ -90,14 +127,15 @@ def fetch_one(entry: Dict[str, Any], raw_dir: str = RAW_DIR, force: bool = False
     """Make sure entry['file'] exists in raw_dir and matches entry['sha256'].
 
     Returns one of "cached", "downloaded", "unverified" (no hash recorded yet).
-    Raises HashMismatch (and removes the bad file) if the content differs, and UnsafeFileName
+    Raises HashMismatch (and removes the bad file) if the content differs, DownloadTooLarge (nothing
+    is kept) if the server sends more than entry['bytes'] plus the tolerance, and UnsafeFileName
     (before anything is written) if entry['file'] is not a plain base name inside raw_dir.
     """
     dest = safe_dest(raw_dir, entry["file"])
     expected: Optional[str] = entry.get("sha256")
     status = "cached"
     if force or not os.path.exists(dest) or (expected and sha256_of(dest) != expected):
-        download(entry["url"], dest)
+        download(entry["url"], dest, expected_bytes=entry.get("bytes"))
         status = "downloaded"
     actual = sha256_of(dest)
     if expected and actual != expected:
@@ -141,7 +179,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"MISMATCH    {exc}", file=sys.stderr)
             failed = True
             continue
-        except (UnsafeFileName, OSError) as exc:
+        except (UnsafeFileName, DownloadTooLarge, OSError) as exc:
             print(f"FAILED      {entry['file']}: {exc}", file=sys.stderr)
             failed = True
             continue

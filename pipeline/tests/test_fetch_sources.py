@@ -5,6 +5,7 @@ import os
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
 from pipeline import fetch_sources
 
@@ -86,6 +87,102 @@ class TestUnsafeFileNames(unittest.TestCase):
         self.assertEqual(pathlib.Path(self.raw, "ok.bin").read_bytes(), b"payload")
 
 
+class FakeResponse:
+    """A urlopen() result that serves `total` bytes (None = endless) and counts what was asked of it."""
+
+    def __init__(self, total=None, content_length=None):
+        self.total = total
+        self.served = 0
+        self.reads = 0
+        self.headers = {} if content_length is None else {"Content-Length": str(content_length)}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self, n=-1):
+        self.reads += 1
+        if n is None or n < 0:
+            raise AssertionError("download must read in bounded pieces, never to the end")
+        n = n if self.total is None else min(n, self.total - self.served)
+        self.served += n
+        return b"x" * n
+
+
+class TestDownloadSizeCap(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dest = os.path.join(self.tmp.name, "raw", "big.bin")
+
+    def run_download(self, resp, expected_bytes):
+        return fetch_sources.download("https://example.invalid/big.bin", self.dest, expected_bytes=expected_bytes,
+                                      opener=lambda req, timeout=None: resp)
+
+    def leftovers(self):
+        d = os.path.dirname(self.dest)
+        return sorted(os.listdir(d)) if os.path.isdir(d) else []
+
+    def test_limit_is_recorded_size_plus_documented_tolerance(self):
+        tol_min, pct = fetch_sources.SIZE_TOLERANCE_MIN, fetch_sources.SIZE_TOLERANCE_PERCENT
+        self.assertEqual(fetch_sources.size_limit(1000), 1000 + tol_min)             # small file: the fixed minimum
+        self.assertEqual(fetch_sources.size_limit(100_000_000), 100_000_000 + 100_000_000 * pct // 100)   # big: 1%
+        self.assertEqual(fetch_sources.size_limit(None), fetch_sources.MAX_UNRECORDED_BYTES)
+        self.assertEqual(fetch_sources.size_limit(0), fetch_sources.MAX_UNRECORDED_BYTES)
+
+    def test_endless_stream_is_cut_off_and_nothing_is_kept(self):
+        limit = fetch_sources.size_limit(1000)
+        resp = FakeResponse(total=None)
+        with self.assertRaises(fetch_sources.DownloadTooLarge):
+            self.run_download(resp, 1000)
+        self.assertEqual(resp.served, limit + 1, "must stop one byte past the limit, not read on")
+        self.assertEqual(self.leftovers(), [], "neither the file nor a .part remains")
+
+    def test_exactly_the_limit_is_accepted_one_byte_more_is_not(self):
+        limit = fetch_sources.size_limit(1000)
+        self.run_download(FakeResponse(total=limit), 1000)
+        self.assertEqual(os.path.getsize(self.dest), limit)
+        os.remove(self.dest)
+        with self.assertRaises(fetch_sources.DownloadTooLarge):
+            self.run_download(FakeResponse(total=limit + 1), 1000)
+        self.assertEqual(self.leftovers(), [])
+
+    def test_content_length_over_the_limit_aborts_before_reading_the_body(self):
+        resp = FakeResponse(total=10, content_length=fetch_sources.size_limit(1000) + 1)
+        with self.assertRaises(fetch_sources.DownloadTooLarge):
+            self.run_download(resp, 1000)
+        self.assertEqual(resp.reads, 0)
+        self.assertEqual(self.leftovers(), [])
+
+    def test_failed_redownload_keeps_no_partial_file_next_to_the_old_one(self):
+        os.makedirs(os.path.dirname(self.dest))
+        with open(self.dest, "wb") as fh:
+            fh.write(b"old")
+        with self.assertRaises(fetch_sources.DownloadTooLarge):
+            self.run_download(FakeResponse(total=None), 1000)
+        self.assertEqual(self.leftovers(), ["big.bin"])
+
+    def test_without_a_recorded_size_the_ceiling_applies(self):
+        with mock.patch.object(fetch_sources, "MAX_UNRECORDED_BYTES", 500):
+            with self.assertRaises(fetch_sources.DownloadTooLarge):
+                self.run_download(FakeResponse(total=2000), None)
+            self.run_download(FakeResponse(total=500), None)
+        self.assertEqual(os.path.getsize(self.dest), 500)
+
+    def test_fetch_one_passes_the_recorded_size(self):
+        raw = os.path.join(self.tmp.name, "fetch")
+        src = pathlib.Path(self.tmp.name) / "src.bin"
+        src.write_bytes(b"y" * (fetch_sources.SIZE_TOLERANCE_MIN + 200))
+        too_big = {"file": "a.bin", "url": src.as_uri(), "bytes": 100}
+        with self.assertRaises(fetch_sources.DownloadTooLarge):
+            fetch_sources.fetch_one(too_big, raw)
+        self.assertEqual(os.listdir(raw), [])
+        fits = {"file": "a.bin", "url": src.as_uri(), "bytes": 200}     # within the tolerance
+        self.assertEqual(fetch_sources.fetch_one(fits, raw), "unverified")
+
+
 class TestSourcesJson(unittest.TestCase):
     def test_four_ipss_files_with_hashes(self):
         data = fetch_sources.load_sources()
@@ -97,6 +194,7 @@ class TestSourcesJson(unittest.TestCase):
         for s in data["sources"]:
             self.assertTrue(s["url"].startswith("https://www.ipss.go.jp/"), s["url"])
             self.assertRegex(s["sha256"], r"^[0-9a-f]{64}$")
+            self.assertIsInstance(s["bytes"], int)
 
 
 if __name__ == "__main__":
