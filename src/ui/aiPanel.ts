@@ -19,17 +19,20 @@ import type { CachedAnswers } from '../ai/cached';
 import type { EngineContext } from '../ai/tools';
 import { isScenarioError, sanitizeScenario, scenarioKey } from '../data/runner';
 import {
+  clipCodePoints,
   compactJson,
+  countCodePoints,
   describeScenario,
   makePlaceNames,
   mapTargets,
   prettyJsonView,
-  scenarioOffer,
+  scenarioOffers,
   toolLabel,
   traceUsesEstimate,
 } from './aiTrace';
 import { ESTIMATE_BADGE, ESTIMATE_NOTE } from './sources';
 import type { PanelContext } from './state';
+import type { Scenario } from '../engine/types';
 
 // ---------------------------------------------------------------------------------------------------------------
 // Options, constants and wording
@@ -45,19 +48,33 @@ export interface AIPanelOptions {
 }
 
 export const MAX_QUESTION_LENGTH = 200;
+/** The most answers kept on the page; the oldest drops off. */
+export const MAX_ANSWERS = 20;
+/**
+ * How long a question waits for the saved answers to load before it goes to the Worker without them. The wait only
+ * exists so that a sample question can be answered from a saved answer the moment the file arrives; a file that is
+ * slow or never comes must not hold a question back.
+ */
+export const CACHE_WAIT_MS = 1500;
 
-const INTRO = '日本語で質問すると、Claudeが計算の結果を引いて答えます。答えの数字は、計算の結果からだけ引いています。';
-const AFTER_2050 = '2050年までの数字は社人研の公式推計、2050年より後の数字は、このアプリの試算です（予測ではありません）。';
-const STATUS_WAITING = '計算の結果を引いています…';
-const MSG_BLANK = '質問を入力してください。';
-const MSG_TOO_LONG = `質問は${MAX_QUESTION_LENGTH}文字までにしてください。`;
-const MSG_CRASHED = 'うまく処理できませんでした。もう一度お試しください。';
-const MSG_COPIED = 'コピーしました';
-const MSG_COPY_FAILED = 'コピーできませんでした。文字を選んでコピーしてください。';
-const MSG_SCENARIO_APPLIED = '画面に反映しました。2050年より後の試算は、この前提で計算されます。';
-const MSG_SCENARIO_ALREADY = 'この前提は、すでに画面に反映されています。';
-const MSG_SCENARIO_REFUSED = 'この前提は範囲外の値を含むため、画面には反映できません。';
-const MSG_SCENARIO_FAILED = 'この前提を画面に反映できませんでした。';
+/** Everything the panel says that is not an answer, in one place (a test scans it for words that must never appear). */
+export const PANEL_TEXT = {
+  intro: '日本語で質問すると、Claudeが計算の結果を引いて答えます。答えの数字は、計算の結果からだけ引いています。',
+  after2050: '2050年までの数字は社人研の公式推計、2050年より後の数字は、このアプリの試算です（予測ではありません）。',
+  waiting: '計算の結果を引いています…',
+  blank: '質問を入力してください。',
+  tooLong: `質問は${MAX_QUESTION_LENGTH}文字までにしてください。`,
+  limitCut: `${MAX_QUESTION_LENGTH}文字までです。超えた分は入力されません。`,
+  crashed: 'うまく処理できませんでした。もう一度お試しください。',
+  copied: 'コピーしました',
+  copyFailed: 'コピーできませんでした。文字を選んでコピーしてください。',
+  scenarioApplied: '画面に反映しました。2050年より後の試算は、この前提で計算されます。',
+  scenarioAlready: 'この前提は、すでに画面に反映されています。',
+  scenarioRefused: 'この前提は範囲外の値を含むため、画面には反映できません。',
+  scenarioFailed: 'この前提を画面に反映できませんでした。',
+  trimmed: '古いやり取りは省略しました',
+  trySaved: '保存済みの質問を試せます。',
+} as const;
 
 const DEFAULT_ENDPOINT = '/api/chat';
 
@@ -111,9 +128,11 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
   const places = makePlaceNames(ctx.data.areas, ctx.data.prefNames);
   const endpoint = options.endpoint ?? configuredEndpoint();
 
-  // Saved answers: loaded once, in the background. A question asked before they arrive waits for them.
+  // Saved answers: loaded once, in the background. A question asked before they arrive waits for them, but only
+  // for CACHE_WAIT_MS and never without showing the waiting status and the stop button (see waitForCache).
   let cache: CachedAnswers | null = null;
   let cacheReady = false;
+  let cacheGaveUp = false; // a question has already stopped waiting: later ones do not wait again
   const cachePromise: Promise<CachedAnswers | null> = Promise.resolve(options.cache === undefined ? loadCachedAnswers() : options.cache)
     .catch(() => null)
     .then((loaded) => {
@@ -138,7 +157,8 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     class: 'input ai-input',
     id: inputId,
     rows: '3',
-    maxlength: String(MAX_QUESTION_LENGTH),
+    // maxlength counts UTF-16 units, so it is only a backstop (400 units hold 200 code points); the exact limit is enforced below
+    maxlength: String(MAX_QUESTION_LENGTH * 2),
     'aria-describedby': `${helpId} ${msgId}`,
     autocomplete: 'off',
   });
@@ -146,7 +166,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
   const inputMsg = h('p', { class: 'ai-input-msg', id: msgId, 'aria-live': 'polite' });
   const submitBtn = h('button', { type: 'submit', class: 'btn btn-primary' }, '質問する');
   const newBtn = h('button', { type: 'button', class: 'btn ai-new', hidden: true }, '新しい質問を始める');
-  const statusText = h('p', { class: 'ai-status-text', role: 'status', 'aria-live': 'polite' });
+  const statusText = h('p', { class: 'ai-status-text', role: 'status', 'aria-live': 'polite', tabindex: '-1' });
   const cancelBtn = h('button', { type: 'button', class: 'btn btn-quiet ai-cancel', hidden: true }, 'やめる');
   const answersEl = h('div', { class: 'ai-answers', 'aria-live': 'polite', 'aria-relevant': 'additions' });
 
@@ -172,8 +192,8 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
   const root = h(
     'div',
     { class: 'ai-panel' },
-    h('p', { class: 'panel-lead' }, INTRO),
-    h('p', { class: 'note' }, AFTER_2050),
+    h('p', { class: 'panel-lead' }, PANEL_TEXT.intro),
+    h('p', { class: 'note' }, PANEL_TEXT.after2050),
     h('div', { class: 'panel-section' }, h('h3', { class: 'panel-section-title' }, '質問の例'), samplesList),
     h('div', { class: 'panel-section' }, h('h3', { class: 'panel-section-title' }, '自分で質問する'), form),
     h('div', { class: 'ai-status' }, statusText, cancelBtn),
@@ -186,21 +206,21 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
   /** A button that asks one of the sample questions. */
   function sampleButton(question: string): HTMLLIElement {
     const button = h('button', { type: 'button', class: 'btn ai-sample', 'data-ask': 'sample' }, question);
-    button.disabled = running;
     button.addEventListener('click', () => void send(question, 'sample', button));
     return h('li', {}, button);
   }
   for (const question of SAMPLE_QUESTIONS) samplesList.append(sampleButton(question));
 
   function updateCounter(): void {
-    const n = textarea.value.length;
+    const n = countCodePoints(textarea.value);
     counter.textContent = `${n} / ${MAX_QUESTION_LENGTH}`;
     counter.classList.toggle('is-over', n > MAX_QUESTION_LENGTH);
   }
 
-  function showInputMessage(message: string): void {
+  /** `invalid` is false for a notice (the text was fixed for the visitor) as opposed to an error to correct. */
+  function showInputMessage(message: string, invalid = true): void {
     inputMsg.textContent = message;
-    if (message) textarea.setAttribute('aria-invalid', 'true');
+    if (message && invalid) textarea.setAttribute('aria-invalid', 'true');
     else textarea.removeAttribute('aria-invalid');
   }
 
@@ -210,6 +230,10 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
 
   /** One thing at a time: while a question runs the controls are off and the stop button is on. */
   function setBusy(busy: boolean): void {
+    // A button that is about to be disabled must not hold the focus: put it on the status line (not on やめる, which
+    // a repeated key press would then activate; やめる stays one Tab away).
+    const active = document.activeElement;
+    if (busy && active instanceof HTMLButtonElement && root.contains(active) && active !== cancelBtn) statusText.focus();
     running = busy;
     textarea.readOnly = busy;
     if (busy) textarea.setAttribute('aria-busy', 'true');
@@ -222,7 +246,8 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
   /** Put keyboard focus back where the visitor was, unless it is somewhere useful already. */
   function restoreFocus(origin: HTMLElement | null): void {
     const active = document.activeElement;
-    const lost = !active || active === document.body || active === cancelBtn || (root.contains(active) && (active as HTMLButtonElement).disabled === true);
+    const lost =
+      !active || active === document.body || active === cancelBtn || active === statusText || (root.contains(active) && (active as HTMLButtonElement).disabled === true);
     if (!lost) return;
     (origin && origin.isConnected ? origin : textarea).focus();
   }
@@ -245,15 +270,15 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
       copy.addEventListener('click', () => {
         const clipboard: Clipboard | undefined = navigator.clipboard;
         if (!clipboard || typeof clipboard.writeText !== 'function') {
-          copyStatus.textContent = MSG_COPY_FAILED;
+          copyStatus.textContent = PANEL_TEXT.copyFailed;
           return;
         }
         clipboard.writeText(view.full).then(
           () => {
-            copyStatus.textContent = MSG_COPIED;
+            copyStatus.textContent = PANEL_TEXT.copied;
           },
           () => {
-            copyStatus.textContent = MSG_COPY_FAILED;
+            copyStatus.textContent = PANEL_TEXT.copyFailed;
           },
         );
       });
@@ -292,30 +317,40 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     return box;
   }
 
-  function renderScenarioOffer(trace: TraceItem[]): HTMLElement | null {
-    const offer = scenarioOffer(trace);
-    if (!offer) return null;
+  /** One assumption from an answer, with a button that applies it. `labelled`: several are offered, so the button says which. */
+  function renderScenarioOffer(offer: Scenario, labelled: boolean): HTMLElement {
     const message = h('p', { class: 'ai-scenario-msg', role: 'status', 'aria-live': 'polite' });
-    const button = h('button', { type: 'button', class: 'btn', 'data-role': 'apply-scenario' }, 'この前提を画面に反映する');
+    const summary = describeScenario(offer);
+    const button = h(
+      'button',
+      { type: 'button', class: 'btn', 'data-role': 'apply-scenario' },
+      labelled ? `この前提を画面に反映する（${summary}）` : 'この前提を画面に反映する',
+    );
     button.addEventListener('click', () => {
       const checked = sanitizeScenario(offer);
       if (isScenarioError(checked)) {
-        message.textContent = MSG_SCENARIO_REFUSED; // Ruling 21: nothing out of range reaches the engine
+        message.textContent = PANEL_TEXT.scenarioRefused; // Ruling 21: nothing out of range reaches the engine
         return;
       }
       if (scenarioKey(ctx.store.get().scenario) === scenarioKey(checked)) {
-        message.textContent = MSG_SCENARIO_ALREADY;
+        message.textContent = PANEL_TEXT.scenarioAlready;
         return;
       }
-      message.textContent = ctx.store.set({ scenario: checked }) ? MSG_SCENARIO_APPLIED : MSG_SCENARIO_FAILED;
+      message.textContent = ctx.store.set({ scenario: checked }) ? PANEL_TEXT.scenarioApplied : PANEL_TEXT.scenarioFailed;
     });
-    return h('div', { class: 'ai-scenario' }, h('p', { class: 'note' }, `この答えの前提：${describeScenario(offer)}`), button, message);
+    return h('div', { class: 'ai-scenario' }, labelled ? null : h('p', { class: 'note' }, `この答えの前提：${summary}`), button, message);
+  }
+
+  function renderScenarioOffers(trace: TraceItem[]): HTMLElement | null {
+    const offers = scenarioOffers(trace);
+    if (offers.length === 0) return null;
+    return h('div', { class: 'ai-scenarios' }, ...offers.map((offer) => renderScenarioOffer(offer, offers.length > 1)));
   }
 
   function renderFailureSamples(): HTMLElement {
     const list = h('ul', { class: 'ai-samples' });
     for (const question of SAMPLE_QUESTIONS) list.append(sampleButton(question));
-    return h('div', { class: 'ai-fail-samples' }, h('p', { class: 'note' }, '保存済みの質問を試せます。'), list);
+    return h('div', { class: 'ai-fail-samples' }, h('p', { class: 'note' }, PANEL_TEXT.trySaved), list);
   }
 
   function renderAnswer(question: string, result: AskResult): HTMLElement {
@@ -323,7 +358,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     const failed = result.status === 'unavailable' || result.status === 'error';
 
     if (failed) {
-      article.append(h('p', { class: 'ai-fail' }, result.message ?? MSG_CRASHED));
+      article.append(h('p', { class: 'ai-fail' }, result.message ?? PANEL_TEXT.crashed));
       if (result.trace.length > 0) article.append(renderTrace(result.trace));
       article.append(renderFailureSamples());
       return article;
@@ -358,14 +393,14 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     article.append(h('p', { class: 'note ai-basis' }, basis.join('')));
 
     if (result.status === 'ok' && result.message) article.append(h('p', { class: 'note ai-message' }, result.message));
-    if (result.trimmed) article.append(h('p', { class: 'note ai-trimmed' }, '古いやり取りは省略しました'));
+    if (result.trimmed) article.append(h('p', { class: 'note ai-trimmed' }, PANEL_TEXT.trimmed));
 
     if (result.trace.length > 0) {
       article.append(renderTrace(result.trace));
       const links = renderMapLinks(result.trace);
       if (links) article.append(links);
-      const scenario = renderScenarioOffer(result.trace);
-      if (scenario) article.append(scenario);
+      const scenarios = renderScenarioOffers(result.trace);
+      if (scenarios) article.append(scenarios);
     }
     return article;
   }
@@ -374,6 +409,40 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
   function showResult(question: string, result: AskResult): void {
     for (const old of answersEl.querySelectorAll('.ai-fail-samples')) old.remove();
     answersEl.prepend(renderAnswer(question, result));
+    // Bounded growth: the oldest answers leave the page, and their buttons and closures with them.
+    while (answersEl.childElementCount > MAX_ANSWERS) answersEl.lastElementChild?.remove();
+  }
+
+  const errorResult = (): AskResult => ({ answer: '', trace: [], unverified: [], fromCache: false, status: 'error', message: PANEL_TEXT.crashed, messages: history });
+
+  /** Waits for the saved answers, but no longer than CACHE_WAIT_MS, and not past a stop: null means "ask without them". */
+  function waitForCache(signal: AbortSignal): Promise<CachedAnswers | null> {
+    if (cacheGaveUp) return Promise.resolve(null);
+    return new Promise((resolve, reject) => {
+      const done = (): void => {
+        clearTimeout(timer);
+        signal.removeEventListener('abort', onAbort);
+      };
+      const onAbort = (): void => {
+        done();
+        reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+      };
+      const timer = setTimeout(() => {
+        done();
+        cacheGaveUp = true;
+        resolve(null);
+      }, CACHE_WAIT_MS);
+      signal.addEventListener('abort', onAbort, { once: true });
+      void cachePromise.then((loaded) => {
+        done();
+        resolve(loaded);
+      });
+    });
+  }
+
+  function showWaiting(): void {
+    statusText.textContent = PANEL_TEXT.waiting;
+    cancelBtn.hidden = false;
   }
 
   // ---- asking -----------------------------------------------------------------------------------------------
@@ -382,24 +451,30 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     if (running || destroyed) return;
     const question = raw.trim();
     if (from === 'typed') {
-      if (question === '') return showInputMessage(MSG_BLANK);
-      if (raw.length > MAX_QUESTION_LENGTH) return showInputMessage(MSG_TOO_LONG);
+      if (question === '') return showInputMessage(PANEL_TEXT.blank);
+      if (countCodePoints(raw) > MAX_QUESTION_LENGTH) return showInputMessage(PANEL_TEXT.tooLong);
       showInputMessage('');
     }
-    const origin = from === 'typed' ? textarea : trigger;
 
     setBusy(true);
     const abort = new AbortController();
     controller = abort;
     let result: AskResult | undefined;
     try {
-      const saved = cacheReady ? cache : await cachePromise;
+      let saved: CachedAnswers | null;
+      if (cacheReady) {
+        saved = cache;
+      } else {
+        showWaiting(); // before anything is awaited: the visitor can see it and stop it
+        saved = await waitForCache(abort.signal);
+      }
       // A saved answer is shown at once: for a sample at any time, for typed text only at the start of a conversation.
       const useSaved = findCached(saved, question) !== null && (from === 'sample' || history.length === 0);
-      if (!useSaved) {
-        statusText.textContent = STATUS_WAITING;
-        cancelBtn.hidden = false;
-        cancelBtn.focus();
+      if (useSaved) {
+        statusText.textContent = '';
+        cancelBtn.hidden = true;
+      } else {
+        showWaiting();
       }
       const answered = await ask(question, engine, {
         endpoint,
@@ -413,7 +488,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     } catch (error) {
       if (!abort.signal.aborted) {
         console.error('AI panel: ask failed', error);
-        result = { answer: '', trace: [], unverified: [], fromCache: false, status: 'error', message: MSG_CRASHED, messages: history };
+        result = errorResult();
       }
     }
 
@@ -424,33 +499,76 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     setBusy(false);
 
     if (result) {
-      history = result.messages;
-      showResult(question, result);
-      if (from === 'typed' && (result.status === 'ok' || result.status === 'unverified_numbers')) {
+      let shown = result;
+      try {
+        showResult(question, result);
+      } catch (error) {
+        // Drawing failed: say so plainly. The answer nobody saw is not put into the conversation.
+        console.error('AI panel: could not draw the answer', error);
+        shown = errorResult();
+        try {
+          showResult(question, shown);
+        } catch (again) {
+          console.error('AI panel: could not draw the error either', again);
+        }
+      }
+      history = shown.messages;
+      if (from === 'typed' && (shown.status === 'ok' || shown.status === 'unverified_numbers')) {
         textarea.value = '';
         updateCounter();
       }
       updateNewButton();
-      if (result.needsNewConversation) {
+      if (shown.needsNewConversation) {
         newBtn.hidden = false;
         newBtn.classList.add('is-attention');
         newBtn.focus();
         return;
       }
     }
-    restoreFocus(origin);
+    restoreFocus(trigger);
   }
 
   // ---- events -----------------------------------------------------------------------------------------------
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
-    void send(textarea.value, 'typed', textarea);
+    // Whoever sent it gets the focus back afterwards: the button that was pressed, not the text field (a phone would open its keyboard).
+    void send(textarea.value, 'typed', (event as SubmitEvent).submitter ?? textarea);
   });
 
-  textarea.addEventListener('input', () => {
+  /** Keeps the first MAX_QUESTION_LENGTH code points and says so, quietly. Not while a conversion (IME) is in progress. */
+  let pasteCut = false;
+  function applyLimit(): void {
+    const { text, cut } = clipCodePoints(textarea.value, MAX_QUESTION_LENGTH);
+    if (cut) {
+      textarea.value = text;
+      textarea.setSelectionRange(text.length, text.length);
+    }
     updateCounter();
-    showInputMessage('');
+    showInputMessage(cut || pasteCut ? PANEL_TEXT.limitCut : '', false);
+    pasteCut = false;
+  }
+
+  textarea.addEventListener('input', (event) => {
+    if ((event as InputEvent).isComposing) {
+      updateCounter();
+      if (inputMsg.textContent) showInputMessage('');
+      return;
+    }
+    applyLimit();
+  });
+  textarea.addEventListener('compositionend', applyLimit);
+  textarea.addEventListener('paste', (event) => {
+    // The browser may cut a long paste at maxlength before any input event shows how long it was: say so now.
+    const pasted = (event as ClipboardEvent).clipboardData?.getData('text') ?? '';
+    const value = textarea.value;
+    const start = textarea.selectionStart ?? value.length;
+    const end = textarea.selectionEnd ?? start;
+    const kept = countCodePoints(value.slice(0, start)) + countCodePoints(value.slice(end));
+    if (kept + countCodePoints(pasted) > MAX_QUESTION_LENGTH) {
+      pasteCut = true;
+      showInputMessage(PANEL_TEXT.limitCut, false);
+    }
   });
 
   textarea.addEventListener('keydown', (event) => {

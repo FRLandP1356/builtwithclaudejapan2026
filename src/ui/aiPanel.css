@@ -44,8 +44,9 @@
   background: var(--paper-2);
 }
 .ai-input[aria-invalid='true'] {
+  border-width: 2px;
   border-color: var(--ink);
-  box-shadow: inset 0 0 0 1px var(--ink);
+  padding: calc(var(--sp-2) - 1px) calc(var(--sp-3) - 1px); /* the border grows by 1px each side; the text does not move */
 }
 .ai-help {
   display: flex;
@@ -78,10 +79,14 @@
   font-size: var(--fs-14);
   color: var(--ink-2);
 }
-.ai-new.is-attention {
+/* A 2px border always, so that highlighting it (accent colour and tint, no shadow) does not change its size. */
+.ai-panel .ai-new {
+  border-width: 2px;
+  padding: 0 calc(var(--sp-4) - 1px);
+}
+.ai-panel .ai-new.is-attention {
   border-color: var(--accent);
   background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 /* Answers: newest first, separated by a rule, no card chrome. */
@@ -184,6 +189,10 @@
 }
 
 /* Links back to the map and to the assumptions panel */
+.ai-scenarios {
+  display: grid;
+  gap: var(--sp-3);
+}
 .ai-scenario {
   display: grid;
   gap: var(--sp-2);

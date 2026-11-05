@@ -8,7 +8,10 @@ import {
   mapTargets,
   prettyJsonView,
   RESULT_DISPLAY_LIMIT,
-  scenarioOffer,
+  MAX_SCENARIO_OFFERS,
+  clipCodePoints,
+  countCodePoints,
+  scenarioOffers,
   toolLabel,
   TOOL_LABELS,
   traceUsesEstimate,
@@ -59,6 +62,15 @@ describe('JSON display', () => {
     const loop: Record<string, unknown> = {};
     loop.self = loop;
     expect(compactJson(loop)).toBe('（表示できません）');
+  });
+
+  it('compactJson cuts a very long input at 4,000 characters and says so', () => {
+    const big = { text: 'あ'.repeat(5000) };
+    const full = JSON.stringify(big);
+    expect(compactJson(big)).toBe(`${full.slice(0, 4000)}…（以下省略）`);
+    expect(compactJson({ a: 1 })).toBe('{"a":1}');
+    const lone = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+    for (const pad of ['', 'a']) expect(lone.test(compactJson({ text: pad + '𠮷'.repeat(4000) }))).toBe(false);
   });
 
   it('prettyJsonView keeps a short result whole', () => {
@@ -138,50 +150,101 @@ describe('mapTargets', () => {
   });
 });
 
-describe('scenarioOffer', () => {
-  it('is null when no input carries a scenario that differs from the default', () => {
-    expect(scenarioOffer([])).toBeNull();
-    expect(scenarioOffer([item('get_series', { areaCode: '13' })])).toBeNull();
-    expect(scenarioOffer([item('run_projection', { areaCode: '13', scenario: {} })])).toBeNull();
-    expect(scenarioOffer([item('run_projection', { areaCode: '13', scenario: { cwrMult: 1, migMode: 'hold', migScale: 1, infraStrength: 0 } })])).toBeNull();
-    expect(scenarioOffer([item('run_projection', { areaCode: '13', scenario: { cwrMult: null } })])).toBeNull();
+describe('scenarioOffers', () => {
+  it('is empty when no input carries a scenario that differs from the default', () => {
+    expect(scenarioOffers([])).toEqual([]);
+    expect(scenarioOffers([item('get_series', { areaCode: '13' })])).toEqual([]);
+    expect(scenarioOffers([item('run_projection', { areaCode: '13', scenario: {} })])).toEqual([]);
+    expect(scenarioOffers([item('run_projection', { areaCode: '13', scenario: { cwrMult: 1, migMode: 'hold', migScale: 1, infraStrength: 0 } })])).toEqual([]);
+    expect(scenarioOffers([item('run_projection', { areaCode: '13', scenario: { cwrMult: null } })])).toEqual([]);
   });
 
-  it('returns the full scenario (defaults filled in) from the first input that differs', () => {
+  it('returns full scenarios (defaults filled in), in the order the model used them', () => {
     const trace = [
       item('get_series', { areaCode: '13', scenario: {} }),
       item('run_projection', { areaCode: '13', scenario: { cwrMult: 1.2 } }),
       item('facility_check', { areaCode: '30206', year: 2100, scenario: { migMode: 'fade' } }),
     ];
-    expect(scenarioOffer(trace)).toEqual({ cwrMult: 1.2, migMode: 'hold', migScale: 1, infraStrength: 0 });
+    expect(scenarioOffers(trace)).toEqual([
+      { cwrMult: 1.2, migMode: 'hold', migScale: 1, infraStrength: 0 },
+      { cwrMult: 1, migMode: 'fade', migScale: 1, infraStrength: 0 },
+    ]);
+  });
+
+  it('lists each distinct scenario once, and at most three', () => {
+    const same = [item('run_projection', { areaCode: '13', scenario: { cwrMult: 1.2 } }), item('get_series', { areaCode: '30', scenario: { cwrMult: 1.2, migScale: 1 } })];
+    expect(scenarioOffers(same)).toHaveLength(1);
+    const many = [0.7, 0.8, 0.9, 1.1, 1.2].map((cwrMult) => item('run_projection', { areaCode: '13', scenario: { cwrMult } }));
+    expect(scenarioOffers(many).map((s) => s.cwrMult)).toEqual([0.7, 0.8, 0.9]);
+    expect(MAX_SCENARIO_OFFERS).toBe(3);
   });
 
   it('looks at every tool that takes a scenario, and only those', () => {
     for (const tool of ['run_projection', 'get_series', 'compare_sources', 'facility_check', 'find_similar_now', 'count_areas', 'run_allocation']) {
-      expect(scenarioOffer([item(tool, { scenario: { migScale: 0.5 } })]), tool).toEqual({ cwrMult: 1, migMode: 'hold', migScale: 0.5, infraStrength: 0 });
+      expect(scenarioOffers([item(tool, { scenario: { migScale: 0.5 } })]), tool).toEqual([{ cwrMult: 1, migMode: 'hold', migScale: 0.5, infraStrength: 0 }]);
     }
-    expect(scenarioOffer([item('find_area', { query: 'x', scenario: { migScale: 0.5 } })])).toBeNull();
+    expect(scenarioOffers([item('find_area', { query: 'x', scenario: { migScale: 0.5 } })])).toEqual([]);
   });
 
   it('passes an out-of-range value through, so that applying it can be refused with a message', () => {
-    expect(scenarioOffer([item('run_projection', { areaCode: '13', scenario: { cwrMult: 9 } })])).toEqual({ cwrMult: 9, migMode: 'hold', migScale: 1, infraStrength: 0 });
+    expect(scenarioOffers([item('run_projection', { areaCode: '13', scenario: { cwrMult: 9 } })])).toEqual([{ cwrMult: 9, migMode: 'hold', migScale: 1, infraStrength: 0 }]);
   });
 
   it('ignores unknown scenario keys', () => {
-    expect(scenarioOffer([item('run_projection', { areaCode: '13', scenario: { evil: 1 } })])).toBeNull();
+    expect(scenarioOffers([item('run_projection', { areaCode: '13', scenario: { evil: 1 } })])).toEqual([]);
   });
 });
 
 describe('describeScenario', () => {
+  const base = { cwrMult: 1, migMode: 'hold', migScale: 1, infraStrength: 0 } as const;
+
   it('names only what differs, in plain words', () => {
     expect(describeScenario({ cwrMult: 1.2, migMode: 'fade', migScale: 0.5, infraStrength: 0.005 })).toBe(
       '子どもの数の倍率 1.2、人口の移動は少しずつ止まる、移動の強さ 0.5、施設の影響 0.005',
     );
-    expect(describeScenario({ cwrMult: 1, migMode: 'hold', migScale: 1, infraStrength: 0 })).toBe('標準の前提');
+    expect(describeScenario(base)).toBe('標準の前提');
   });
 
   it('shows an invalid value as it is instead of failing', () => {
-    expect(describeScenario({ cwrMult: 9, migMode: 'hold', migScale: 1, infraStrength: 0 })).toBe('子どもの数の倍率 9');
+    expect(describeScenario({ ...base, cwrMult: 9 })).toBe('子どもの数の倍率 9');
+  });
+
+  it('keeps small values readable: the infrastructure strength lives in [0, 0.01]', () => {
+    expect(describeScenario({ ...base, infraStrength: 0.0025 })).toBe('施設の影響 0.0025');
+    expect(describeScenario({ ...base, infraStrength: 0.0004 })).toBe('施設の影響 0.0004');
+    expect(describeScenario({ ...base, infraStrength: 0.01 })).toBe('施設の影響 0.01');
+  });
+
+  it('never lets a value that differs from the default read as the default', () => {
+    expect(describeScenario({ ...base, cwrMult: 1.00000001 })).toBe('子どもの数の倍率 1.00000001');
+    expect(describeScenario({ ...base, migScale: 0.99999999 })).toBe('移動の強さ 0.99999999');
+    expect(describeScenario({ ...base, infraStrength: 1e-9 })).toBe('施設の影響 1e-9');
+  });
+
+  it('never lets an out-of-range value read as an allowed one', () => {
+    expect(describeScenario({ ...base, cwrMult: 1.4000001 })).toBe('子どもの数の倍率 1.4000001');
+    expect(describeScenario({ ...base, migScale: 1.5000001 })).toBe('移動の強さ 1.5000001');
+    expect(describeScenario({ ...base, infraStrength: 0.0100001 })).toBe('施設の影響 0.0100001');
+    expect(describeScenario({ ...base, cwrMult: 0.5999999 })).toBe('子どもの数の倍率 0.5999999');
+  });
+
+  it('rounds only what is safe to round (four significant digits)', () => {
+    expect(describeScenario({ ...base, cwrMult: 1.23456 })).toBe('子どもの数の倍率 1.235');
+  });
+});
+
+describe('code points', () => {
+  it('counts an emoji or a rare kanji once', () => {
+    expect(countCodePoints('あい')).toBe(2);
+    expect(countCodePoints('😀𠮷')).toBe(2);
+    expect(countCodePoints('')).toBe(0);
+  });
+
+  it('clips to a number of code points without cutting a pair in half', () => {
+    expect(clipCodePoints('あいう', 2)).toEqual({ text: 'あい', cut: true });
+    expect(clipCodePoints('あい', 2)).toEqual({ text: 'あい', cut: false });
+    expect(clipCodePoints('😀😀😀', 2)).toEqual({ text: '😀😀', cut: true });
+    expect(clipCodePoints('a𠮷b', 2)).toEqual({ text: 'a𠮷', cut: true });
   });
 });
 

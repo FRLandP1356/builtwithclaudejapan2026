@@ -5,14 +5,14 @@ import { loadAllAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
 import { repoPath } from '../../test/helpers/paths';
 import { ask } from '../ai/client';
-import type { Message } from '../ai/client';
+import type { AskResult, Message } from '../ai/client';
 import { SAMPLE_QUESTIONS } from '../ai/cached';
 import type { CachedAnswer, CachedAnswers } from '../ai/cached';
 import type { AppData } from '../data/loader';
 import type { Groups } from '../engine/types';
 import { createRunner } from '../data/runner';
 import type { Runner } from '../data/runner';
-import { mountAIPanel } from './aiPanel';
+import { CACHE_WAIT_MS, MAX_ANSWERS, PANEL_TEXT, mountAIPanel } from './aiPanel';
 import type { AIPanelOptions } from './aiPanel';
 import { createAppStore } from './state';
 import type { PanelContext } from './state';
@@ -184,6 +184,7 @@ async function answersCount(m: Mounted, n: number): Promise<void> {
 afterEach(() => {
   for (const m of mounted.splice(0)) m.destroy();
   document.body.replaceChildren();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -204,7 +205,8 @@ describe('mount', () => {
     const m = mount();
     const label = m.q<HTMLLabelElement>(`label[for="${m.textarea.id}"]`);
     expect(label.textContent).toContain('質問');
-    expect(m.textarea.maxLength).toBe(200);
+    // maxlength counts UTF-16 units, so it is only a backstop (400 units hold 200 code points); the exact limit is enforced in code
+    expect(m.textarea.maxLength).toBe(400);
     expect(m.q('.ai-counter').textContent).toBe('0 / 200');
     expect(m.submit.textContent).toBe('質問する');
     m.textarea.value = 'あいう';
@@ -224,12 +226,14 @@ describe('mount', () => {
     const m = mount();
     expect(m.q('.ai-status-text').getAttribute('role')).toBe('status');
     expect(m.q('.ai-answers').getAttribute('aria-live')).toBe('polite');
+    expect(m.q('.ai-answers').getAttribute('aria-relevant')).toBe('additions'); // clearing the list is not announced
   });
 
   it('keeps the hidden attribute in force on buttons (.btn sets display, which would show a hidden button)', () => {
     const css = readFileSync(repoPath('src/ui/aiPanel.css'), 'utf8');
     expect(css).toMatch(/\.ai-panel \[hidden\]\s*\{\s*display:\s*none/);
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/); // tokens only, no raw colours
+    expect(css).not.toMatch(/box-shadow/); // DESIGN.md: shadows are for the tooltip and the search list only
   });
 
   it('adds no listeners outside its own elements, and builds no HTML from strings', () => {
@@ -476,18 +480,91 @@ describe('keyboard and input rules', () => {
     expect(m.textarea.hasAttribute('aria-invalid')).toBe(false);
   });
 
-  it('enforces 200 characters: maxlength on the field, and a refusal if more gets in', async () => {
+  const input = (m: Mounted, value: string, init: InputEventInit = {}): void => {
+    m.textarea.value = value;
+    m.textarea.dispatchEvent(new InputEvent('input', { bubbles: true, ...init }));
+  };
+  const paste = (m: Mounted, text: string): void => {
+    const event = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', { value: { getData: () => text } });
+    m.textarea.dispatchEvent(event);
+  };
+
+  it('text typed or pasted past 200 characters keeps the first 200 and says so quietly', async () => {
     const s = script(textResponse('はい。'));
     const m = mount({ fetchFn: s.fetchFn });
-    expect(m.textarea.getAttribute('maxlength')).toBe('200');
+    input(m, 'あ'.repeat(201));
+    expect(m.textarea.value).toBe('あ'.repeat(200));
+    expect(m.q('.ai-counter').textContent).toBe('200 / 200');
+    expect(m.q('.ai-input-msg').textContent).toBe(PANEL_TEXT.limitCut);
+    expect(PANEL_TEXT.limitCut).toBe('200文字までです。超えた分は入力されません。');
+    expect(m.textarea.hasAttribute('aria-invalid')).toBe(false); // it is a notice, not an error
+    expect(s.mock).not.toHaveBeenCalled();
 
-    m.typeAndSend('あ'.repeat(201));
-    expect(m.q('.ai-input-msg').textContent).toBe('質問は200文字までにしてください。');
-    expect(m.q('.ai-counter').textContent).toBe('201 / 200');
+    // typing something else clears the notice; the text that fits is sent
+    input(m, 'あ'.repeat(199));
+    expect(m.q('.ai-input-msg').textContent).toBe('');
+    m.submit.click();
+    await answersCount(m, 1);
+    expect(s.body(0).messages[0]!.content).toBe('あ'.repeat(199));
+  });
+
+  it('the paste event shows the notice at once, even when the browser has already cut the text', () => {
+    const m = mount();
+    input(m, 'あ'.repeat(190));
+    m.textarea.setSelectionRange(190, 190);
+    paste(m, 'い'.repeat(50));
+    expect(m.q('.ai-input-msg').textContent).toBe(PANEL_TEXT.limitCut);
+    // the browser then inserts what it can; the notice is still there
+    input(m, 'あ'.repeat(190) + 'い'.repeat(10));
+    expect(m.q('.ai-input-msg').textContent).toBe(PANEL_TEXT.limitCut);
+    expect(m.textarea.value.length).toBe(200);
+  });
+
+  it('a paste that replaces a selection and still fits shows no notice', () => {
+    const m = mount();
+    input(m, 'あ'.repeat(150));
+    m.textarea.setSelectionRange(50, 150);
+    paste(m, 'い'.repeat(100));
+    input(m, 'あ'.repeat(50) + 'い'.repeat(100));
+    expect(m.q('.ai-input-msg').textContent).toBe('');
+    expect(m.q('.ai-counter').textContent).toBe('150 / 200');
+  });
+
+  it('counts code points: an emoji or a rare kanji counts once, and a pair is never cut in half', () => {
+    const m = mount();
+    input(m, '😀'.repeat(200)); // 400 UTF-16 units
+    expect(m.q('.ai-counter').textContent).toBe('200 / 200');
+    expect(m.q('.ai-input-msg').textContent).toBe('');
+    expect(m.textarea.value).toBe('😀'.repeat(200));
+    input(m, '😀'.repeat(200) + '𠮷');
+    expect(m.textarea.value).toBe('😀'.repeat(200));
+    expect(m.q('.ai-input-msg').textContent).toBe(PANEL_TEXT.limitCut);
+    expect(/[\ud800-\udbff](?![\udc00-\udfff])/.test(m.textarea.value)).toBe(false);
+  });
+
+  it('never trims in the middle of an IME conversion; it trims when the conversion ends', () => {
+    const m = mount();
+    input(m, 'あ'.repeat(230), { isComposing: true });
+    expect(m.textarea.value.length).toBe(230);
+    expect(m.q('.ai-counter').textContent).toBe('230 / 200');
+    m.textarea.dispatchEvent(new Event('compositionend', { bubbles: true }));
+    expect(m.textarea.value.length).toBe(200);
+    expect(m.q('.ai-input-msg').textContent).toBe(PANEL_TEXT.limitCut);
+  });
+
+  it('refuses a question that is still too long when it is sent (a value set without an input event), with no request', async () => {
+    const s = script(textResponse('はい。'));
+    const m = mount({ fetchFn: s.fetchFn });
+    m.textarea.value = 'あ'.repeat(201);
+    m.submit.click();
+    expect(m.q('.ai-input-msg').textContent).toBe(PANEL_TEXT.tooLong);
+    expect(m.textarea.getAttribute('aria-invalid')).toBe('true');
     await settle();
     expect(s.mock).not.toHaveBeenCalled();
 
-    m.typeAndSend('あ'.repeat(200));
+    m.textarea.value = '😀'.repeat(200); // 400 units but 200 code points: allowed
+    m.submit.click();
     await answersCount(m, 1);
     expect(s.mock).toHaveBeenCalledTimes(1);
   });
@@ -638,7 +715,7 @@ describe('stopping', () => {
     expect(m.samples().every((b) => !b.disabled)).toBe(true);
     expect(m.textarea.value).toBe('途中でやめる');
     expect(m.newBtn().hidden).toBe(true);
-    expect(document.activeElement).toBe(m.textarea);
+    expect(document.activeElement).toBe(m.submit); // the button that sent it (a phone would open its keyboard for the field)
   });
 
   it('a new question can be asked after stopping, and the stopped one is not in the conversation', async () => {
@@ -655,7 +732,7 @@ describe('stopping', () => {
 });
 
 describe('teardown', () => {
-  it('the returned function aborts a pending request and removes the interface; a late answer changes nothing', async () => {
+  it('the returned function aborts a pending request and removes the interface', async () => {
     const seen: { signal?: AbortSignal | null } = {};
     const m = mount({ fetchFn: script(hangUntilAborted(seen)).fetchFn });
     m.typeAndSend('消える前の質問');
@@ -665,8 +742,33 @@ describe('teardown', () => {
     expect(seen.signal!.aborted).toBe(true);
     expect(m.section.querySelector('.ai-panel')).toBeNull();
     expect(m.section.querySelectorAll('h2')).toHaveLength(1);
-    await settle();
-    expect(m.section.querySelector('.ai-panel')).toBeNull();
+  });
+
+  it('an answer that arrives after the teardown adds nothing, anywhere, and rejects nothing', async () => {
+    let release!: (response: Response) => void;
+    const s = script(() => new Promise<Response>((resolve) => (release = resolve))); // ignores the abort on purpose
+    const rejections: unknown[] = [];
+    const onRejection = (reason: unknown): void => void rejections.push(reason);
+    process.on('unhandledRejection', onRejection);
+    try {
+      const m = mount({ fetchFn: s.fetchFn });
+      const root = m.q('.ai-panel');
+      m.typeAndSend('消えたあとに答えが届く');
+      await vi.waitFor(() => expect(s.mock).toHaveBeenCalledTimes(1));
+
+      m.destroy();
+      release(textResponse('遅れて届いた答えです。'));
+      await settle();
+      await settle();
+      await settle();
+
+      expect(root.querySelector('.ai-answer')).toBeNull(); // the detached interface was left alone
+      expect(m.section.querySelector('.ai-answer')).toBeNull();
+      expect(m.section.textContent).not.toContain('遅れて届いた答え');
+      expect(rejections).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onRejection);
+    }
   });
 
   it('remounting after a teardown starts clean', () => {
@@ -852,6 +954,386 @@ describe('links back to the map and to the assumptions', () => {
     await answersCount(m, 2);
     expect(m.answers()[0]!.querySelector('button[data-role="apply-scenario"]')).toBeNull();
   });
+});
+
+describe('more than one assumption in an answer', () => {
+  const calls = (...inputs: Array<Record<string, unknown>>): Response =>
+    toolUseResponse(...inputs.map((scenario, i) => toolUse(`t${i}`, 'run_projection', { areaCode: '13', scenario })));
+
+  it('offers each distinct scenario as its own button, labelled with what differs, at most three', async () => {
+    const ctx = makeContext();
+    const s = script(
+      calls({ cwrMult: 1.2 }, { migMode: 'fade' }, { infraStrength: 0.0025 }, { migScale: 0.5 }, { cwrMult: 1.2 }),
+      textResponse('四つの前提を計算しました。'),
+    );
+    const m = mount({ fetchFn: s.fetchFn }, ctx);
+    m.typeAndSend('いくつかの前提で');
+    await answersCount(m, 1);
+
+    const buttons = [...m.answers()[0]!.querySelectorAll<HTMLButtonElement>('button[data-role="apply-scenario"]')];
+    expect(buttons.map((b) => b.textContent)).toEqual([
+      'この前提を画面に反映する（子どもの数の倍率 1.2）',
+      'この前提を画面に反映する（人口の移動は少しずつ止まる）',
+      'この前提を画面に反映する（施設の影響 0.0025）',
+    ]);
+
+    buttons[1]!.click();
+    expect(ctx.store.get().scenario).toEqual({ cwrMult: 1, migMode: 'fade', migScale: 1, infraStrength: 0 });
+    const messages = [...m.answers()[0]!.querySelectorAll('.ai-scenario-msg')].map((x) => x.textContent);
+    expect(messages[0]).toBe('');
+    expect(messages[1]).toContain('画面に反映しました');
+    expect(messages[2]).toBe('');
+  });
+
+  it('a lone scenario keeps the plain label and shows what differs above it', async () => {
+    const s = script(calls({ infraStrength: 0.0004 }), textResponse('計算しました。'));
+    const m = mount({ fetchFn: s.fetchFn });
+    m.typeAndSend('一つだけ');
+    await answersCount(m, 1);
+    expect(m.answers()[0]!.querySelector('button[data-role="apply-scenario"]')!.textContent).toBe('この前提を画面に反映する');
+    expect(m.answers()[0]!.querySelector('.ai-scenario')!.textContent).toContain('施設の影響 0.0004');
+  });
+});
+
+describe('the map link brings the map into view on a phone', () => {
+  const addMap = (top: number): HTMLElement => {
+    const map = document.createElement('div');
+    map.className = 'map-column';
+    map.scrollIntoView = vi.fn();
+    map.getBoundingClientRect = () => ({ top }) as DOMRect;
+    document.body.append(map);
+    return map;
+  };
+
+  it('scrolls the map column to the top when it is above the viewport', async () => {
+    const map = addMap(-400);
+    const m = mount({ fetchFn: script(toolUseResponse(toolUse('a', 'get_series', { areaCode: '30206' })), textResponse('田辺市です。')).fetchFn });
+    m.typeAndSend('田辺市は？');
+    await answersCount(m, 1);
+    m.answers()[0]!.querySelector<HTMLButtonElement>('.ai-links button')!.click();
+    expect(map.scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+  });
+
+  it('leaves the page alone when the map is already in view, and when the selection did not change', async () => {
+    const map = addMap(20);
+    const m = mount({ fetchFn: script(toolUseResponse(toolUse('a', 'get_series', { areaCode: '30206' })), textResponse('田辺市です。')).fetchFn });
+    m.typeAndSend('田辺市は？');
+    await answersCount(m, 1);
+    const link = m.answers()[0]!.querySelector<HTMLButtonElement>('.ai-links button')!;
+    link.click();
+    expect(map.scrollIntoView).not.toHaveBeenCalled();
+    (map.getBoundingClientRect as () => DOMRect) = () => ({ top: -400 }) as DOMRect;
+    link.click(); // the same place again: the store reports no change
+    expect(map.scrollIntoView).not.toHaveBeenCalled();
+  });
+});
+
+describe('saved answers that are slow to arrive', () => {
+  const never = (): Promise<CachedAnswers | null> => new Promise(() => undefined);
+  const fakeTimers = (): void => void vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const flush = async (ms = 0): Promise<void> => {
+    await vi.advanceTimersByTimeAsync(ms);
+  };
+
+  it('shows the waiting status and 「やめる」 at once, and after the wait asks the Worker live', async () => {
+    fakeTimers();
+    const s = script(textResponse('一つ目。'), textResponse('二つ目。'));
+    const m = mount({ fetchFn: s.fetchFn, cache: never() });
+    m.samples()[1]!.click();
+
+    expect(m.q('.ai-status-text').textContent).toBe(PANEL_TEXT.waiting); // before anything has been awaited
+    expect(m.cancelBtn().hidden).toBe(false);
+    expect(m.submit.disabled).toBe(true);
+    expect(s.mock).not.toHaveBeenCalled();
+
+    await flush(CACHE_WAIT_MS - 1);
+    expect(s.mock).not.toHaveBeenCalled();
+    await flush(1);
+    expect(s.mock).toHaveBeenCalledTimes(1);
+    await flush();
+    expect(m.answers()).toHaveLength(1);
+    expect(m.answers()[0]!.querySelector('.ai-answer-text')!.textContent).toBe('一つ目。');
+    expect(m.q('.ai-status-text').textContent).toBe('');
+    expect(m.submit.disabled).toBe(false);
+
+    // the wait is not repeated: the saved answers are given up on for the later asks
+    m.samples()[2]!.click();
+    await flush();
+    expect(s.mock).toHaveBeenCalledTimes(2);
+    await flush();
+    expect(m.answers()).toHaveLength(2);
+  });
+
+  it('a typed question waits the same way, with no request until the wait is over', async () => {
+    fakeTimers();
+    const s = script(textResponse('はい。'));
+    const m = mount({ fetchFn: s.fetchFn, cache: never() });
+    m.typeAndSend('入力した質問');
+    expect(m.q('.ai-status-text').textContent).toBe(PANEL_TEXT.waiting);
+    expect(m.cancelBtn().hidden).toBe(false);
+    await flush(CACHE_WAIT_MS);
+    expect(s.mock).toHaveBeenCalledTimes(1);
+    await flush();
+    expect(m.answers()).toHaveLength(1);
+    expect(m.textarea.value).toBe('');
+  });
+
+  it('やめる during the wait returns the panel to idle without any request, and the next question is not blocked', async () => {
+    fakeTimers();
+    const s = script(textResponse('次の答え。'));
+    const m = mount({ fetchFn: s.fetchFn, cache: never() });
+    m.typeAndSend('途中でやめる質問');
+    m.cancelBtn().click();
+    await flush();
+
+    expect(m.answers()).toHaveLength(0);
+    expect(m.q('.ai-status-text').textContent).toBe('');
+    expect(m.cancelBtn().hidden).toBe(true);
+    expect(m.submit.disabled).toBe(false);
+    expect(m.textarea.readOnly).toBe(false);
+    expect(m.samples().every((b) => !b.disabled)).toBe(true);
+    expect(m.textarea.value).toBe('途中でやめる質問');
+    expect(m.newBtn().hidden).toBe(true);
+    await flush(CACHE_WAIT_MS * 4);
+    expect(s.mock).not.toHaveBeenCalled(); // the stopped question never goes out later
+
+    m.submit.click(); // the same text again: not blocked, and it waits (and goes live) afresh
+    await flush(CACHE_WAIT_MS);
+    expect(s.mock).toHaveBeenCalledTimes(1);
+    await flush();
+    expect(m.answers()).toHaveLength(1);
+  });
+
+  it('a teardown during the wait sends nothing afterwards', async () => {
+    fakeTimers();
+    const s = script(textResponse('はい。'));
+    const m = mount({ fetchFn: s.fetchFn, cache: never() });
+    m.typeAndSend('消える質問');
+    m.destroy();
+    await flush(CACHE_WAIT_MS * 4);
+    expect(s.mock).not.toHaveBeenCalled();
+    expect(m.section.querySelector('.ai-panel')).toBeNull();
+  });
+
+  it('saved answers that arrive during the wait are used: the answer appears without a request', async () => {
+    fakeTimers();
+    const s = script(textResponse('使われない。'));
+    const late = new Promise<CachedAnswers | null>((resolve) => setTimeout(() => resolve(cacheOf(savedEntry(TOKYO_QUESTION, '保存済みの答えです。'))), 500));
+    const m = mount({ fetchFn: s.fetchFn, cache: late });
+    m.samples()[0]!.click();
+    expect(m.q('.ai-status-text').textContent).toBe(PANEL_TEXT.waiting);
+    await flush(500);
+    await flush();
+    expect(s.mock).not.toHaveBeenCalled();
+    expect(m.answers()).toHaveLength(1);
+    expect(m.answers()[0]!.querySelector('[data-role="saved-badge"]')).not.toBeNull();
+    expect(m.q('.ai-status-text').textContent).toBe('');
+    expect(m.cancelBtn().hidden).toBe(true);
+  });
+
+  it('saved answers that arrive after the wait are used by the later asks', async () => {
+    fakeTimers();
+    const s = script(textResponse('一つ目。'));
+    let arrive!: (cache: CachedAnswers | null) => void;
+    const m = mount({ fetchFn: s.fetchFn, cache: new Promise<CachedAnswers | null>((resolve) => (arrive = resolve)) });
+    m.samples()[1]!.click();
+    await flush(CACHE_WAIT_MS);
+    await flush();
+    expect(m.answers()).toHaveLength(1);
+
+    arrive(cacheOf(savedEntry(TOKYO_QUESTION, '保存済みの答えです。')));
+    await flush();
+    m.samples()[0]!.click();
+    await flush();
+    expect(s.mock).toHaveBeenCalledTimes(1); // no second request: the saved answer was served
+    expect(m.answers()).toHaveLength(2);
+    expect(m.answers()[0]!.querySelector('[data-role="saved-badge"]')).not.toBeNull();
+  });
+
+  it('a saved-answers load that fails does not block anything', async () => {
+    const s = script(textResponse('はい。'));
+    const m = mount({ fetchFn: s.fetchFn, cache: Promise.reject(new Error('offline')) });
+    await settle();
+    m.samples()[1]!.click();
+    await answersCount(m, 1);
+    expect(s.mock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a saved entry that is still pending is never served: the question goes live', async () => {
+    const s = script(textResponse('生の答えです。'));
+    const m = mount({ fetchFn: s.fetchFn, cache: cacheOf(savedEntry(TOKYO_QUESTION, '', { status: 'pending' })) });
+    await settle();
+    m.samples()[0]!.click();
+    await answersCount(m, 1);
+    expect(s.mock).toHaveBeenCalledTimes(1);
+    expect(m.answers()[0]!.querySelector('.ai-answer-text')!.textContent).toBe('生の答えです。');
+    expect(m.answers()[0]!.querySelector('[data-role="saved-badge"]')).toBeNull();
+  });
+});
+
+describe('keyboard focus while asking', () => {
+  it('a keyboard send keeps focus on the field; やめる is one Tab away and a repeated key does not abort', async () => {
+    let release!: (response: Response) => void;
+    const s = script(() => new Promise<Response>((resolve) => (release = resolve)));
+    const m = mount({ fetchFn: s.fetchFn });
+    m.textarea.focus();
+    m.sendWithShortcut('キーボードで送る');
+    await vi.waitFor(() => expect(s.mock).toHaveBeenCalledTimes(1));
+
+    expect(document.activeElement).toBe(m.textarea);
+    expect(m.cancelBtn().hidden).toBe(false);
+    expect(m.cancelBtn().tabIndex).toBeGreaterThanOrEqual(0);
+    m.textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, repeat: true, bubbles: true, cancelable: true }));
+    expect(m.cancelBtn().hidden).toBe(false);
+    expect(s.mock).toHaveBeenCalledTimes(1);
+
+    release(textResponse('はい。'));
+    await answersCount(m, 1);
+    expect(document.activeElement).toBe(m.textarea);
+  });
+
+  it('a sample click moves focus off the button that is about to be disabled and puts it back when the answer is in', async () => {
+    let release!: (response: Response) => void;
+    const s = script(() => new Promise<Response>((resolve) => (release = resolve)));
+    const m = mount({ fetchFn: s.fetchFn });
+    const button = m.samples()[2]!;
+    button.focus();
+    button.click();
+    await vi.waitFor(() => expect(s.mock).toHaveBeenCalledTimes(1));
+    expect(document.activeElement).toBe(m.q('.ai-status-text'));
+    expect(document.activeElement).not.toBe(m.cancelBtn());
+
+    release(textResponse('はい。'));
+    await answersCount(m, 1);
+    expect(document.activeElement).toBe(button);
+  });
+
+  it('focus the visitor has moved elsewhere is left alone when the answer arrives', async () => {
+    let release!: (response: Response) => void;
+    const s = script(() => new Promise<Response>((resolve) => (release = resolve)));
+    const m = mount({ fetchFn: s.fetchFn });
+    m.textarea.focus();
+    m.sendWithShortcut('待つ');
+    await vi.waitFor(() => expect(s.mock).toHaveBeenCalledTimes(1));
+    m.cancelBtn().focus();
+    m.cancelBtn().blur();
+    const elsewhere = document.createElement('button');
+    document.body.append(elsewhere);
+    elsewhere.focus();
+    release(textResponse('はい。'));
+    await answersCount(m, 1);
+    expect(document.activeElement).toBe(elsewhere);
+  });
+});
+
+describe('growth limits', () => {
+  it('keeps at most 20 answers: the oldest drops off the page', async () => {
+    const fetchFn = vi.fn<typeof fetch>(async () => textResponse('はい。'));
+    const m = mount({ fetchFn });
+    for (let i = 0; i < MAX_ANSWERS + 1; i++) {
+      m.typeAndSend(`質問${i}`);
+      await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(i + 1));
+      await vi.waitFor(() => expect(m.submit.disabled).toBe(false));
+    }
+    expect(MAX_ANSWERS).toBe(20);
+    expect(m.answers()).toHaveLength(20);
+    expect(m.answers()[0]!.querySelector('.ai-question')!.textContent).toContain('質問20');
+    expect(m.answers()[19]!.querySelector('.ai-question')!.textContent).toContain('質問1');
+    expect(m.section.textContent).not.toContain('質問0はい'); // the first one is gone
+  });
+
+  it('cuts a very long tool input at 4,000 characters like a result', async () => {
+    const note = 'あ'.repeat(5000);
+    const s = script(toolUseResponse(toolUse('a', 'get_series', { areaCode: '30206', years: [2050], note })), textResponse('はい。'));
+    const m = mount({ fetchFn: s.fetchFn });
+    m.typeAndSend('長い入力');
+    await answersCount(m, 1);
+    const shown = m.answers()[0]!.querySelector('.ai-trace-input')!.textContent!;
+    expect(shown.endsWith('…（以下省略）')).toBe(true);
+    expect(shown.length).toBe(4000 + '…（以下省略）'.length);
+  });
+});
+
+describe('when drawing an answer fails', () => {
+  it('shows the plain error, keeps the panel usable, and does not put the unseen answer in the conversation', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const broken = {
+      answer: '表示できない答え',
+      get trace(): never {
+        throw new Error('render boom: secret detail');
+      },
+      unverified: [],
+      fromCache: false,
+      status: 'ok',
+      messages: [
+        { role: 'user', content: '壊れる表示' },
+        { role: 'assistant', content: [{ type: 'text', text: '表示できない答え' }] },
+      ],
+    } as unknown as AskResult;
+    vi.mocked(ask).mockResolvedValueOnce(broken);
+    const s = script(textResponse('次の答えです。'));
+    const m = mount({ fetchFn: s.fetchFn });
+    m.typeAndSend('壊れる表示');
+    await answersCount(m, 1);
+
+    expect(m.answers()[0]!.textContent).toContain(PANEL_TEXT.crashed);
+    expect(m.answers()[0]!.textContent).not.toContain('boom');
+    expect(m.section.textContent).not.toContain('表示できない答え');
+    expect(m.submit.disabled).toBe(false);
+    expect(m.textarea.readOnly).toBe(false);
+    expect(logged).toHaveBeenCalled();
+
+    m.typeAndSend('次の質問');
+    await answersCount(m, 2);
+    expect(s.body(0).messages).toEqual([{ role: 'user', content: '次の質問' }]); // the broken exchange is not in it
+  });
+});
+
+describe('wording', () => {
+  const forbidden = /残せない|予測する|予測します|残すべき|残さない|諦め|閉鎖|やめるべき|守るべき|切り捨て/;
+
+  it('no message the panel can show tells anyone what to keep or give up, or calls a 2050+ number a 予測', async () => {
+    for (const [name, text] of Object.entries(PANEL_TEXT)) {
+      expect(text, name).not.toMatch(forbidden);
+      expect(text.replace(/予測ではありません/g, ''), name).not.toContain('予測');
+      expect(text, name).not.toMatch(/[\u2460-\u2473]/);
+    }
+  });
+
+  it('nor does any state it renders: saved, unverified, failed, refused and applied', async () => {
+    const ctx = makeContext();
+    const s = script(
+      toolUseResponse(toolUse('a', 'get_series', { areaCode: '13' })),
+      textResponse('東京都は2100年に約2,500万人です。'),
+      textResponse('東京都は2100年に約2,600万人です。'),
+      toolUseResponse(toolUse('b', 'run_projection', { areaCode: '13', scenario: { cwrMult: 9 } })),
+      textResponse('計算できませんでした。'),
+      jsonResponse({ error: 'rate_limited', cached: true }, 429),
+    );
+    const m = mount({ fetchFn: s.fetchFn, cache: cacheOf(savedEntry(TOKYO_QUESTION, '保存済みの答えです。')) }, ctx);
+    await settle();
+    m.samples()[0]!.click(); // saved
+    await answersCount(m, 1);
+    m.typeAndSend('数字は？'); // unverified (twice)
+    await answersCount(m, 2);
+    m.typeAndSend('九倍なら？'); // out-of-range scenario
+    await answersCount(m, 3);
+    m.answers()[0]!.querySelector<HTMLButtonElement>('button[data-role="apply-scenario"]')!.click();
+    m.typeAndSend('もう一つ'); // unavailable
+    await answersCount(m, 4);
+    input2(m, 'あ'.repeat(300)); // the 200-character notice
+
+    const text = m.section.textContent!;
+    expect(text).toContain('範囲外');
+    expect(text).toContain(PANEL_TEXT.limitCut);
+    expect(text).not.toMatch(forbidden);
+    expect(text.replace(/予測ではありません/g, '')).not.toContain('予測');
+  });
+
+  function input2(m: Mounted, value: string): void {
+    m.textarea.value = value;
+    m.textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  }
 });
 
 describe('endpoint', () => {
