@@ -8,11 +8,22 @@ import './controlsPanel.css';
 import type { AppData } from '../data/loader';
 import { allocate, type AllocationInput, type AllocationResult, type FacilityFlip } from '../engine/allocation';
 import type { Area, Facility, Series } from '../engine/types';
-import { deriveTotals, yearIndex } from './derive';
+import { AllocationFormError, allocationErrorMessage, populationAt, targetPeople, type AllocationTarget, type PopulationAt } from './allocationCore';
+import { buildOverlay } from './allocationOverlay';
 import { formatPop } from './format';
 import { prefCodesOf, REGION_IDS, REGION_NAMES, type RegionId } from './regions';
 import { badgeFor } from './sources';
-import type { AppState, PanelContext } from './state';
+import type { AllocationOverlay, AppState, PanelContext } from './state';
+
+// Re-exported so the panel stays the one import for its form helpers (they live in allocationCore.ts).
+export { AllocationFormError, allocationErrorMessage, populationAt, targetPeople, type AllocationTarget, type PopulationAt };
+
+/** Button texts for drawing the allocation on the map. */
+export const MAP_BUTTON = { off: '地図に反映する', on: '地図に反映中' } as const;
+export const MAP_STATUS = {
+  on: '地図の色は、割り振りによる人口の変化です。施設名を押すと、目安をまたいだ町に印が付きます。',
+  cleared: '',
+} as const;
 
 // -----------------------------------------------------------------------------------------------------------------
 // Pure part.
@@ -30,22 +41,12 @@ export const EXAMPLE_COUNT = 3;
 export const DEFAULT_TARGET_PREF = '30';
 
 export interface AllocationForm {
-  target: { kind: 'pref' | 'area'; code: string };
+  target: AllocationTarget;
   /** Share of the target group's population to move, in percent: negative takes people out of the target. */
   percent: number;
   sourceMode: 'proportional' | 'regions';
   /** Used when `sourceMode` is 'regions'. */
   regionIds: readonly RegionId[];
-}
-
-/** A form that cannot be turned into an allocation. The message is for the user (Japanese). */
-export class AllocationFormError extends RangeError {
-  readonly userMessage: string;
-  constructor(userMessage: string) {
-    super(`allocation form: ${userMessage}`);
-    this.name = 'AllocationFormError';
-    this.userMessage = userMessage;
-  }
 }
 
 /** The engine's input for a form, given the target group's population in people (percent -> people). */
@@ -58,19 +59,6 @@ export function buildAllocationInput(form: AllocationForm, targetPeople: number)
     source = { mode: 'regions', prefCodes };
   }
   return { target: { ...form.target }, deltaPeople: (targetPeople * form.percent) / 100, source };
-}
-
-/** A message the user can read for anything the allocation can throw. Never shows an English engine message. */
-export function allocationErrorMessage(e: unknown): string {
-  if (e instanceof AllocationFormError) return e.userMessage;
-  if (e instanceof RangeError) {
-    const m = e.message;
-    if (m.includes('takes more than the target')) return 'そこまで減らせる人口がありません。';
-    if (m.includes("larger than the source")) return '人口を動かす元の地域に、それだけの人口がありません。';
-    if (m.includes('source group is empty')) return '人口を動かす元になる地域がありません。';
-    if (m.includes('no area matches target')) return '選んだ地域が見つかりません。';
-  }
-  return 'この条件では計算できませんでした。';
 }
 
 const countFormat = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 0 });
@@ -204,38 +192,6 @@ export function summarizeAllocation(
   return { year, rows, visible: rows.slice(0, cut), hidden: rows.slice(cut), nothingFlips: rows.length === 0 };
 }
 
-export interface PopulationAt {
-  /** Population of each of the full area list at one year, in the order of `areas`. */
-  popByArea: Map<string, number>;
-  areaPref: Map<string, string>;
-}
-
-const prefMapCache = new WeakMap<readonly Area[], Map<string, string>>();
-
-/** Every area's population in `year` under the series (Ruling 20: always the full list). */
-export function populationAt(data: Pick<AppData, 'areas' | 'groups'>, series: Map<string, Series>, year: number): PopulationAt {
-  const totals = deriveTotals(series, data.groups);
-  const i = yearIndex(totals.years, year);
-  if (i < 0) throw new RangeError(`populationAt: year ${year} is not in the series`);
-  let areaPref = prefMapCache.get(data.areas);
-  if (!areaPref) {
-    areaPref = new Map(data.areas.map((a) => [a.code, a.prefCode]));
-    prefMapCache.set(data.areas, areaPref);
-  }
-  const popByArea = new Map<string, number>();
-  for (const a of data.areas) popByArea.set(a.code, totals.area.get(a.code)?.[i] ?? Number.NaN);
-  return { popByArea, areaPref };
-}
-
-/** People in the target group (the prefecture, or the one town). */
-export function targetPeople(target: AllocationForm['target'], at: PopulationAt): number {
-  let sum = 0;
-  for (const [code, p] of at.popByArea) {
-    if (target.kind === 'area' ? code === target.code : at.areaPref.get(code) === target.code) sum += p;
-  }
-  return sum;
-}
-
 export interface Computed {
   input: AllocationInput;
   result: AllocationResult;
@@ -292,6 +248,10 @@ const TEMPLATE = `
       </fieldset>
     </div>
     <p class="alloc-year" id="alloc-year"></p>
+    <div class="actions alloc-map-actions">
+      <button type="button" class="btn alloc-map-toggle" id="alloc-map-toggle" aria-pressed="false">${MAP_BUTTON.off}</button>
+      <p class="note alloc-map-status" id="alloc-map-status" role="status"></p>
+    </div>
   </div>
   <p class="notice" id="alloc-error" role="alert" hidden></p>
   <div class="alloc-result" id="alloc-result">
@@ -317,10 +277,22 @@ function exampleLine(label: string, list: ExampleList): HTMLElement {
   return line;
 }
 
-function rowElement(r: FlipRow): HTMLTableRowElement {
+/** How a facility row is drawn: the name is a button that focuses that facility's towns on the map. */
+interface RowOptions {
+  focused: string | undefined;
+  onFocus(facilityId: string): void;
+}
+
+function rowElement(r: FlipRow, opts: RowOptions): HTMLTableRowElement {
   const tr = h('tr');
   const head = h('td');
-  head.append(h('span', 'alloc-name', r.name));
+  const nameBtn = h('button', 'alloc-name alloc-focus', r.name);
+  nameBtn.type = 'button';
+  nameBtn.dataset.facility = r.facilityId;
+  nameBtn.setAttribute('aria-pressed', String(opts.focused === r.facilityId));
+  nameBtn.setAttribute('aria-label', `${r.name}。目安をまたいだ町を地図に示す`);
+  nameBtn.addEventListener('click', () => opts.onFocus(r.facilityId));
+  head.append(nameBtn);
   if (r.gained.count > 0) head.append(exampleLine('人口の目安以上になる町', r.gained));
   if (r.lost.count > 0) head.append(exampleLine('人口の目安を下回る町', r.lost));
   const diff = h('td', r.diff < 0 ? 'num alloc-down' : 'num', signedCount(r.diff));
@@ -328,7 +300,7 @@ function rowElement(r: FlipRow): HTMLTableRowElement {
   return tr;
 }
 
-function tableElement(rows: FlipRow[], grouped: boolean, className: string): HTMLElement {
+function tableElement(rows: FlipRow[], grouped: boolean, className: string, rowOpts: RowOptions): HTMLElement {
   const wrap = h('div', 'table-wrap');
   const table = h('table', `data-table ${className}`);
   const thead = h('thead');
@@ -366,14 +338,14 @@ function tableElement(rows: FlipRow[], grouped: boolean, className: string): HTM
       gr.append(cell);
       tbody.append(gr);
     }
-    for (const r of g.rows) tbody.append(rowElement(r));
+    for (const r of g.rows) tbody.append(rowElement(r, rowOpts));
     table.append(tbody);
   }
   wrap.append(table);
   return wrap;
 }
 
-function detailElement(summary: AllocationSummary): HTMLElement {
+function detailElement(summary: AllocationSummary, rowOpts: RowOptions): HTMLElement {
   const section = h('div', 'panel-section');
   section.append(h('h3', 'panel-section-title', '施設の人口の目安をまたぐ町の数'));
   if (summary.nothingFlips) {
@@ -381,12 +353,12 @@ function detailElement(summary: AllocationSummary): HTMLElement {
     return section;
   }
   section.append(
-    h('p', 'note', '各施設について、人口の目安以上の町の数を、割り振る前と後で並べています。'),
-    tableElement(summary.visible, true, 'alloc-table-visible'),
+    h('p', 'note', '各施設について、人口の目安以上の町の数を、割り振る前と後で並べています。施設名を押すと、またいだ町を地図に示します。'),
+    tableElement(summary.visible, true, 'alloc-table-visible', rowOpts),
   );
   if (summary.hidden.length > 0) {
     const details = h('details', 'alloc-more');
-    details.append(h('summary', undefined, `その他の施設を、さらに${summary.hidden.length}件見る`), tableElement(summary.hidden, false, 'alloc-table-hidden'));
+    details.append(h('summary', undefined, `その他の施設を、さらに${summary.hidden.length}件見る`), tableElement(summary.hidden, false, 'alloc-table-hidden', rowOpts));
     section.append(details);
   }
   return section;
@@ -435,6 +407,15 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
   const errorEl = q<HTMLElement>('#alloc-error');
   const summaryEl = q<HTMLElement>('#alloc-summary');
   const detailEl = q<HTMLElement>('#alloc-detail');
+  const mapToggle = q<HTMLButtonElement>('#alloc-map-toggle');
+  const mapStatus = q<HTMLElement>('#alloc-map-status');
+
+  // The map overlay this panel owns: on while the toggle is pressed; redrawn on every recompute while on.
+  let mapActive = false;
+  let focusFacilityId: string | undefined;
+  let lastComputed: { c: Computed; form: AllocationForm } | undefined; // the result on screen and the form it came from
+  let ownOverlay: AllocationOverlay | undefined; // the object the store holds, to tell our overlay from another's
+  let pushing = false; // true while our own set({ allocation }) notifies, so the subscriber does not read it as external
 
   // The estimate marker next to the heading, present only while the chosen year is after 2050.
   const titleBadge = h('span', 'badge-estimate', badgeFor(2100).text);
@@ -483,6 +464,9 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
       options.push(o);
     };
     if (s.selectedArea !== undefined && areaByCode.has(s.selectedArea)) add(`area:${s.selectedArea}`, `選んだ町：${nameOf(s.selectedArea)}`);
+    // A town target kept while the map shows it, after the selection moved elsewhere.
+    const kept = targetValue.startsWith('area:') ? targetValue.slice('area:'.length) : undefined;
+    if (kept !== undefined && kept !== s.selectedArea && areaByCode.has(kept)) add(targetValue, `選んだ町：${nameOf(kept)}`);
     for (const code of [...data.prefNames.keys()].sort()) add(`pref:${code}`, prefName(code));
     targetSelect.replaceChildren(...options);
     if (!options.some((o) => o.value === targetValue)) targetValue = `pref:${pickPref(s)}`;
@@ -535,6 +519,58 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
     detailEl.replaceChildren();
   }
 
+  function paintMapToggle(): void {
+    mapToggle.setAttribute('aria-pressed', String(mapActive));
+    setText(mapToggle, mapActive ? MAP_BUTTON.on : MAP_BUTTON.off);
+    setText(mapStatus, mapActive ? MAP_STATUS.on : MAP_STATUS.cleared);
+  }
+
+  /** Draw (or redraw) the current result on the map. */
+  function pushOverlay(c: Computed, s: AppState, form: AllocationForm): void {
+    const label = `${targetName(form)} ${signedPercent(form.percent)}`;
+    if (focusFacilityId !== undefined && !c.summary.rows.some((r) => r.facilityId === focusFacilityId)) focusFacilityId = undefined;
+    const overlay = buildOverlay({
+      result: c.result,
+      before: populations(s).popByArea,
+      facilities: data.facilities,
+      year: s.year,
+      label,
+      focusFacilityId,
+    });
+    pushing = true;
+    try {
+      if (store.set({ allocation: overlay })) ownOverlay = store.get().allocation;
+    } finally {
+      pushing = false;
+    }
+  }
+
+  function clearOverlay(): void {
+    if (ownOverlay !== undefined && store.get().allocation === ownOverlay) store.set({ allocation: undefined });
+    ownOverlay = undefined;
+  }
+
+  /** The pressed state of the facility names, updated in place (keyboard focus and open disclosures stay). */
+  function paintFocus(): void {
+    for (const b of detailEl.querySelectorAll<HTMLButtonElement>('.alloc-focus')) {
+      b.setAttribute('aria-pressed', String(mapActive && b.dataset.facility === focusFacilityId));
+    }
+  }
+
+  const rowOpts: RowOptions = {
+    get focused() {
+      return mapActive ? focusFacilityId : undefined;
+    },
+    onFocus(facilityId) {
+      if (!alive || !lastComputed) return;
+      focusFacilityId = mapActive && focusFacilityId === facilityId ? undefined : facilityId;
+      mapActive = true;
+      paintMapToggle();
+      pushOverlay(lastComputed.c, store.get(), lastComputed.form);
+      paintFocus();
+    },
+  };
+
   function renderAll(): void {
     pending = undefined;
     const s = store.get();
@@ -549,6 +585,7 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
     paintPercent(targetPeople(form.target, at));
     try {
       const c = computeAllocation(data, s.series, s.year, form, at);
+      lastComputed = { c, form };
       if (!errorEl.hidden) errorEl.hidden = true;
       setText(errorEl, '');
       setText(
@@ -561,12 +598,35 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
           sourceNames: form.sourceMode === 'regions' ? form.regionIds.map((id) => REGION_NAMES[id]) : undefined,
         }),
       );
-      detailEl.replaceChildren(detailElement(c.summary));
+      if (mapActive) pushOverlay(c, s, form);
+      detailEl.replaceChildren(detailElement(c.summary, rowOpts));
     } catch (e) {
       if (!(e instanceof RangeError)) console.error('allocation failed', e);
+      lastComputed = undefined;
       showError(allocationErrorMessage(e));
+      if (mapActive) {
+        mapActive = false;
+        clearOverlay();
+        paintMapToggle();
+      }
     }
   }
+
+  mapToggle.addEventListener('click', () => {
+    if (!alive) return;
+    if (mapActive) {
+      mapActive = false;
+      clearOverlay();
+      paintMapToggle();
+      paintFocus(); // the rows lose their pressed state
+      return;
+    }
+    if (!lastComputed) return; // the form has an error: nothing to draw
+    mapActive = true;
+    paintMapToggle();
+    pushOverlay(lastComputed.c, store.get(), lastComputed.form);
+    paintFocus();
+  });
 
   targetSelect.addEventListener('change', () => {
     if (!alive) return;
@@ -587,16 +647,33 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
     });
   }
 
-  // The map drives the default: moving to another prefecture retargets; a selected town is offered as a choice.
   const unsubscribe = store.subscribe((s, prev) => {
+    // The overlay left the store without us: replaced by another one (the AI panel), or cleared from the map. The
+    // toggle follows. A scenario change alone clears it too, but then the series changed and renderAll below draws
+    // it again.
+    if (mapActive && !pushing && s.allocation !== prev.allocation && s.allocation !== ownOverlay) {
+      const replaced = s.allocation !== undefined;
+      const cleared = s.allocation === undefined && s.series === prev.series;
+      if (replaced || cleared) {
+        mapActive = false;
+        ownOverlay = undefined;
+        paintMapToggle();
+        paintFocus();
+      }
+    }
+    // The map drives the default: moving to another prefecture retargets; a selected town is offered as a choice.
+    // Not while this panel's allocation is on the map: then moving around the map (to see the rings and markers in
+    // other prefectures) must not change the allocation, so the target, the result and the overlay stay as they are.
     const selChanged = s.selectedPref !== prev.selectedPref || s.selectedArea !== prev.selectedArea;
     if (selChanged) {
-      if (s.selectedPref !== undefined && s.selectedPref !== prev.selectedPref) targetValue = `pref:${pickPref(s)}`;
-      else if (targetValue.startsWith('area:') && s.selectedArea !== undefined) targetValue = `area:${s.selectedArea}`;
-      else if (targetValue.startsWith('area:') && s.selectedArea === undefined) targetValue = `pref:${pickPref(prev)}`;
+      if (!mapActive) {
+        if (s.selectedPref !== undefined && s.selectedPref !== prev.selectedPref) targetValue = `pref:${pickPref(s)}`;
+        else if (targetValue.startsWith('area:') && s.selectedArea !== undefined) targetValue = `area:${s.selectedArea}`;
+        else if (targetValue.startsWith('area:') && s.selectedArea === undefined) targetValue = `pref:${pickPref(prev)}`;
+      }
       rebuildTargetOptions(s);
     }
-    if (selChanged || s.year !== prev.year || s.series !== prev.series) renderAll();
+    if (s.year !== prev.year || s.series !== prev.series || (selChanged && !mapActive)) renderAll();
   });
 
   rebuildTargetOptions(store.get());
@@ -605,6 +682,7 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
   const teardown = (): void => {
     if (!alive) return;
     alive = false;
+    if (mapActive) clearOverlay();
     unsubscribe();
     if (pending !== undefined) cancelAnimationFrame(pending);
     pending = undefined;

@@ -94,6 +94,47 @@ describe('createStore', () => {
     expect(errSpy).toHaveBeenCalled();
     errSpy.mockRestore();
   });
+
+  test('a set made inside a subscriber reaches later subscribers as one change from what they last saw', () => {
+    // The allocation panel redraws its overlay from inside its subscriber when the year changes; the shell, which
+    // subscribed later, must end on the newest state, not on the one the outer set started with.
+    const store = createStore(initial());
+    store.subscribe((s, prev) => {
+      if (s.year !== prev.year) store.set({ selectedPref: String(s.year) });
+    });
+    const seen: Array<[number, string | undefined, number, string | undefined]> = [];
+    store.subscribe((s, prev) => seen.push([s.year, s.selectedPref, prev.year, prev.selectedPref]));
+    store.set({ year: 2100 });
+    expect(seen).toEqual([[2100, '2100', 2050, undefined]]);
+    expect(store.get()).toMatchObject({ year: 2100, selectedPref: '2100' });
+  });
+
+  test('nested sets that cancel out are not delivered to a listener that had not seen them', () => {
+    // A selects 13; an earlier listener puts it back at once. B, last given the state before, would get a "change"
+    // with nothing changed.
+    const store = createStore(initial());
+    store.subscribe((s) => {
+      if (s.selectedPref === '13') store.set({ selectedPref: undefined });
+    });
+    const b = vi.fn();
+    store.subscribe(b);
+    expect(store.set({ selectedPref: '13' })).toBe(true);
+    expect(store.get().selectedPref).toBeUndefined();
+    expect(b).not.toHaveBeenCalled();
+    store.set({ year: 2100 }); // and B still hears the next real change, from the right previous state
+    expect(b).toHaveBeenCalledTimes(1);
+    expect(b.mock.calls[0]![1].year).toBe(2050);
+  });
+
+  test('a subscriber that unsubscribes another during a notification stops it at once', () => {
+    const store = createStore(initial());
+    const late = vi.fn();
+    let off: () => void = () => {};
+    store.subscribe(() => off());
+    off = store.subscribe(late);
+    store.set({ year: 2030 });
+    expect(late).not.toHaveBeenCalled();
+  });
 });
 
 describe('isValidYear', () => {

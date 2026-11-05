@@ -58,25 +58,28 @@ export function dataUrl(path: string, base: string = import.meta.env.BASE_URL): 
   return b + path.replace(/^\/+/, '');
 }
 
+/** Fetch and parse one JSON file. One timeout covers the whole exchange: headers AND body (a stalled body times out too). */
 async function fetchJson<T>(url: string, fetchImpl: typeof fetch, timeoutMs: number): Promise<T> {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
-  let res: Response;
+  const timeoutError = (e: unknown) => new DataLoadError(url, 'timeout', undefined, e, `${Math.round(timeoutMs / 1000)}秒たっても応答がありません`);
   try {
-    res = await fetchImpl(url, { signal: ac.signal });
-  } catch (e) {
-    clearTimeout(timer);
-    if (ac.signal.aborted) {
-      throw new DataLoadError(url, 'timeout', undefined, e, `${Math.round(timeoutMs / 1000)}秒たっても応答がありません`);
+    let res: Response;
+    try {
+      res = await fetchImpl(url, { signal: ac.signal });
+    } catch (e) {
+      if (ac.signal.aborted) throw timeoutError(e);
+      throw new DataLoadError(url, 'network', undefined, e);
     }
-    throw new DataLoadError(url, 'network', undefined, e);
-  }
-  clearTimeout(timer);
-  if (!res.ok) throw new DataLoadError(url, 'http', res.status);
-  try {
-    return (await res.json()) as T;
-  } catch (e) {
-    throw new DataLoadError(url, 'parse', res.status, e);
+    if (!res.ok) throw new DataLoadError(url, 'http', res.status);
+    try {
+      return (await res.json()) as T;
+    } catch (e) {
+      if (ac.signal.aborted) throw timeoutError(e);
+      throw new DataLoadError(url, 'parse', res.status, e);
+    }
+  } finally {
+    clearTimeout(timer);
   }
 }
 

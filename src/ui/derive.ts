@@ -54,6 +54,39 @@ export function yearIndex(years: number[], year: number): number {
   return years.indexOf(year);
 }
 
+export interface AllocatedTotals {
+  /** Prefecture code -> population after the allocation. */
+  prefAfter: Map<string, number>;
+  /** Prefecture code -> change caused by the allocation, (after - before) / before * 100 (0 for an empty prefecture). */
+  prefChange: Map<string, number>;
+  /** All areas together, after the allocation. */
+  japanAfter: number;
+}
+
+/**
+ * Totals at year index `idx` once an allocation's per-area change (in percent) is applied: each area's population
+ * times (1 + change / 100); an area without a change keeps its population. Areas without a number are skipped.
+ */
+export function allocatedTotals(totals: Totals, groups: Groups, idx: number, changePercent: Readonly<Record<string, number>>): AllocatedTotals {
+  const prefAfter = new Map<string, number>();
+  const prefChange = new Map<string, number>();
+  let japanAfter = 0;
+  for (const [pp, codes] of Object.entries(groups.prefs)) {
+    let before = 0;
+    let after = 0;
+    for (const c of codes) {
+      const p = totals.area.get(c)?.[idx];
+      if (p === undefined || !Number.isFinite(p)) continue;
+      before += p;
+      after += p * (1 + (changePercent[c] ?? 0) / 100);
+    }
+    prefAfter.set(pp, after);
+    prefChange.set(pp, before > 0 ? ((after - before) / before) * 100 : 0);
+    japanAfter += after;
+  }
+  return { prefAfter, prefChange, japanAfter };
+}
+
 /** Ratio of the value at `idx` to the 2020 value (index 0); NaN when 2020 is zero or missing. */
 export function ratioAt(row: Float64Array, idx: number): number {
   const base = row[0];

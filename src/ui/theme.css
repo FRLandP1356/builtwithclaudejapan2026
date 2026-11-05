@@ -33,8 +33,8 @@
   --series-official: var(--ink);
   --series-estimate: var(--accent);
   --series-reference: #8a8378;
-  --pyramid-m: #2b4c7e;
-  --pyramid-f: #9bb3d6;
+  --pyramid-m: #2b4c7e; /* 7.9:1 on the paper */
+  --pyramid-f: #6085b9; /* 3.5:1 on the paper, 3.2:1 on paper-2; lightness L* 55 against the male bar's 32 */
   --grid: var(--line);
 
   /* Type: mincho for headings and large numbers, gothic for everything else. No monospace. */
@@ -344,6 +344,21 @@ a {
   vertical-align: middle;
   white-space: nowrap;
 }
+/* Marks figures and colours that come from a reallocation drawn on the map. */
+.badge-alloc {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--accent-soft);
+  border-radius: 3px;
+  background: var(--accent-soft);
+  font-family: var(--font-body);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--accent);
+  vertical-align: middle;
+  white-space: nowrap;
+}
 .badge-official {
   display: inline-block;
   padding: 0 6px;
@@ -452,23 +467,44 @@ input[type='range'].range:focus-visible::-moz-range-thumb {
   outline-offset: var(--focus-offset);
 }
 
-/* Segmented choice (e.g. hold / fade): buttons, the selected one filled. */
+/* Segmented choice (e.g. hold / fade): buttons, the selected one filled. No overflow clipping: the focus ring
+   (2px outline, 2px offset) must stay visible on the first and last button; the corners are rounded per button. */
 .choice {
   display: inline-flex;
   border: 1px solid var(--line-2);
   border-radius: var(--radius);
-  overflow: hidden;
 }
 .choice button {
   min-height: 40px;
   padding: 0 var(--sp-3);
   border: 0;
+  border-radius: 0;
   background: var(--paper);
   color: var(--ink-2);
   cursor: pointer;
 }
+.choice button:first-child {
+  border-radius: calc(var(--radius) - 1px) 0 0 calc(var(--radius) - 1px);
+}
+.choice button:last-child {
+  border-radius: 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0;
+}
+.choice button:only-child {
+  border-radius: calc(var(--radius) - 1px);
+}
 .choice button + button {
   border-left: 1px solid var(--line-2);
+}
+/* Vertical stacks (controlsPanel.css .choice-stack): round the top and bottom instead. */
+.choice-stack button:first-child {
+  border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+}
+.choice-stack button:last-child {
+  border-radius: 0 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px);
+}
+.choice button:focus-visible {
+  position: relative;
+  z-index: 1; /* the outline is drawn over the neighbouring button's border, not under it */
 }
 .choice button[aria-pressed='true'] {
   background: var(--ink);

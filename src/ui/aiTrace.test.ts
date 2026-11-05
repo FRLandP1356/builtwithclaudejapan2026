@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TOOL_NAMES } from '../ai/toolDefs';
 import type { TraceItem } from '../ai/client';
 import {
+  allocationOffers,
   compactJson,
   describeScenario,
   makePlaceNames,
@@ -9,6 +10,7 @@ import {
   prettyJsonView,
   RESULT_DISPLAY_LIMIT,
   MAX_SCENARIO_OFFERS,
+  MAX_ALLOCATION_OFFERS,
   clipCodePoints,
   countCodePoints,
   scenarioOffers,
@@ -258,5 +260,25 @@ describe('traceUsesEstimate', () => {
   it('is false for official years only, or an empty trace', () => {
     expect(traceUsesEstimate([])).toBe(false);
     expect(traceUsesEstimate([item('get_series', {}, { rows: [{ year: 2050, basis: 'official' }, { year: 2020, basis: 'official' }] })])).toBe(false);
+  });
+});
+
+describe('allocationOffers', () => {
+  const wakayama = { target: { kind: 'pref', code: '30' }, deltaPercent: 10, year: 2100 };
+  it('lists the inputs of run_allocation calls that returned a result, in order, each once, at most three', () => {
+    expect(allocationOffers([])).toEqual([]);
+    expect(allocationOffers([item('run_projection', wakayama)])).toEqual([]);
+    const tokyo = { target: { kind: 'pref', code: '13' }, deltaPercent: -5, year: 2100 };
+    expect(allocationOffers([item('run_allocation', wakayama, { ok: 1 }), item('run_allocation', tokyo, { ok: 1 })])).toEqual([wakayama, tokyo]);
+    expect(allocationOffers([item('run_allocation', wakayama), item('run_allocation', { ...wakayama })])).toEqual([wakayama]);
+    const many = [1, 2, 3, 4, 5].map((deltaPercent) => item('run_allocation', { ...wakayama, deltaPercent }));
+    expect(allocationOffers(many).map((i) => (i as { deltaPercent: number }).deltaPercent)).toEqual([1, 2, 3]);
+    expect(MAX_ALLOCATION_OFFERS).toBe(3);
+  });
+
+  it('skips calls the tool refused (their result carries an error), since there is nothing to draw', () => {
+    const refused = item('run_allocation', { ...wakayama, deltaPercent: -200 }, { error: 'allocation_not_possible', message: 'x' });
+    expect(allocationOffers([refused])).toEqual([]);
+    expect(allocationOffers([refused, item('run_allocation', wakayama)])).toEqual([wakayama]);
   });
 });
