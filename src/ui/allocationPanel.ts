@@ -95,6 +95,24 @@ export function describeAllocation(d: DescribeInput): string {
   );
 }
 
+export interface AnnounceInput {
+  targetName: string;
+  percent: number;
+  /** Region names when people come from chosen regions; undefined for "the rest of the country". */
+  sourceNames: readonly string[] | undefined;
+}
+
+/**
+ * What a screen reader is told after the visitor changed the form. It says what the form now asks, not the year or the
+ * figures: those move with the year slider while this text stays put, so it has to stay true. The sentence with the
+ * figures is the visible summary just above it.
+ */
+export function announceAllocation(d: AnnounceInput): string {
+  if (d.percent === 0) return `割り振りの割合を0%にしました。${d.targetName}の人口は動きません。`;
+  const source = d.sourceNames ? `選んだ地域（${d.sourceNames.join('・')}）` : '全国のほかの地域';
+  return `割り振りを更新しました。${d.targetName}の人口を${Math.abs(d.percent)}%${d.percent > 0 ? '増やす' : '減らす'}場合です。人口を動かす元は、${source}です。`;
+}
+
 export interface ExampleList {
   /** How many towns crossed in this direction. */
   count: number;
@@ -255,13 +273,14 @@ const TEMPLATE = `
   </div>
   <p class="notice" id="alloc-error" role="alert" hidden></p>
   <div class="alloc-result" id="alloc-result">
-    <p class="alloc-summary" id="alloc-summary" role="status"></p>
+    <p class="alloc-summary" id="alloc-summary"></p>
+    <p class="sr-only" id="alloc-announce" role="status"></p>
     <div id="alloc-detail"></div>
   </div>
   <div class="alloc-notes">
     <p class="note">人口の差は全国で見ると小さいので、人口の目安をまたぐ町の数で示しています。</p>
     <p class="note">国土交通省の目安は三大都市圏を除く統計ですが、ここでは三大都市圏の町も同じ目安で数えています。</p>
-    <p class="note">「人口の目安」は、国土交通省の統計で、その施設がある確率が50%になる人口の大きさです。「目安以上」は、その大きさ以上の町のことです。</p>
+    <p class="note">「人口の目安」は、国土交通省の統計で、その施設がある確率が50%になる人口の大きさです。町の人口がその大きさより少ないことを「人口の目安を下回る」、割り振りでその大きさ以上になることを「人口の目安を下回らなくなる」と書いています。</p>
     <p class="note">実際の人口の動きの見通しではなく、「もし割り振ったら」の計算です。</p>
   </div>`;
 
@@ -293,7 +312,7 @@ function rowElement(r: FlipRow, opts: RowOptions): HTMLTableRowElement {
   nameBtn.setAttribute('aria-label', `${r.name}。目安をまたいだ町を地図に示す`);
   nameBtn.addEventListener('click', () => opts.onFocus(r.facilityId));
   head.append(nameBtn);
-  if (r.gained.count > 0) head.append(exampleLine('人口の目安以上になる町', r.gained));
+  if (r.gained.count > 0) head.append(exampleLine('人口の目安を下回らなくなる町', r.gained));
   if (r.lost.count > 0) head.append(exampleLine('人口の目安を下回る町', r.lost));
   const diff = h('td', r.diff < 0 ? 'num alloc-down' : 'num', signedCount(r.diff));
   tr.append(head, h('td', 'num', countFormat.format(r.before)), h('td', 'num', countFormat.format(r.after)), diff);
@@ -317,7 +336,7 @@ function tableElement(rows: FlipRow[], grouped: boolean, className: string, rowO
     }
     return cell;
   };
-  hr.append(th('施設'), th('前', 'num', '割り振る前の、人口の目安以上の町の数'), th('後', 'num', '割り振った後の、人口の目安以上の町の数'), th('差', 'num', '町の数の増減'));
+  hr.append(th('施設'), th('前', 'num', '割り振る前の、人口の目安を下回らない町の数'), th('後', 'num', '割り振った後の、人口の目安を下回らない町の数'), th('差', 'num', '町の数の増減'));
   thead.append(hr);
   table.append(thead);
 
@@ -353,7 +372,7 @@ function detailElement(summary: AllocationSummary, rowOpts: RowOptions): HTMLEle
     return section;
   }
   section.append(
-    h('p', 'note', '各施設について、人口の目安以上の町の数を、割り振る前と後で並べています。施設名を押すと、またいだ町を地図に示します。'),
+    h('p', 'note', '各施設について、人口の目安を下回らない町の数を、割り振る前と後で並べています。施設名を押すと、またいだ町を地図に示します。'),
     tableElement(summary.visible, true, 'alloc-table-visible', rowOpts),
   );
   if (summary.hidden.length > 0) {
@@ -406,6 +425,9 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
   const yearEl = q<HTMLElement>('#alloc-year');
   const errorEl = q<HTMLElement>('#alloc-error');
   const summaryEl = q<HTMLElement>('#alloc-summary');
+  // The only live region of the result. The visible summary is not one: it follows the year and every play tick, and
+  // a screen reader should hear about a change the visitor made to the form, not about each year step.
+  const announceEl = q<HTMLElement>('#alloc-announce');
   const detailEl = q<HTMLElement>('#alloc-detail');
   const mapToggle = q<HTMLButtonElement>('#alloc-map-toggle');
   const mapStatus = q<HTMLElement>('#alloc-map-status');
@@ -432,6 +454,7 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
   const regionIds = new Set<RegionId>(['kanto']);
   let pending: number | undefined;
   let alive = true;
+  let announcedFor: string | undefined; // the target the announcement was written for
 
   function pickPref(s: AppState): string {
     if (s.selectedPref !== undefined && data.prefNames.has(s.selectedPref)) return s.selectedPref;
@@ -450,7 +473,7 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
       if (!alive) return;
       if (box.checked) regionIds.add(id);
       else regionIds.delete(id);
-      renderAll();
+      renderAll('form');
     });
     label.append(box, h('span', undefined, REGION_NAMES[id]));
     regionsEl.append(label);
@@ -557,6 +580,36 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
     }
   }
 
+  /**
+   * Keyboard focus inside the result list, taken before the list is rebuilt: `inside` is true when something in it has
+   * focus, and `facilityId` names the facility when that is a facility-name button.
+   */
+  function focusInDetail(): { inside: boolean; facilityId: string | undefined } {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || !detailEl.contains(active)) return { inside: false, facilityId: undefined };
+    return { inside: true, facilityId: active.dataset.facility };
+  }
+
+  /**
+   * Puts focus back after the list was rebuilt (a year step, new assumptions, a changed form): on the same facility's
+   * button when it is still in the list (opening the collapsed group if that is where it now sits), else on the list's
+   * heading, so a keyboard user is not thrown back to the top of the page.
+   */
+  function restoreDetailFocus(before: { inside: boolean; facilityId: string | undefined }): void {
+    if (!before.inside) return;
+    const button = before.facilityId === undefined ? undefined : [...detailEl.querySelectorAll<HTMLButtonElement>('.alloc-focus')].find((b) => b.dataset.facility === before.facilityId);
+    if (button) {
+      const group = button.closest('details');
+      if (group && !group.open) group.open = true; // a button inside a closed group cannot take focus
+      button.focus({ preventScroll: true }); // the page stays where the visitor has it: a script's focus() would scroll it
+      return;
+    }
+    const heading = detailEl.querySelector<HTMLElement>('.panel-section-title');
+    if (!heading) return;
+    heading.tabIndex = -1; // a heading takes focus from a script, not from the Tab key
+    heading.focus({ preventScroll: true });
+  }
+
   const rowOpts: RowOptions = {
     get focused() {
       return mapActive ? focusFacilityId : undefined;
@@ -571,7 +624,10 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
     },
   };
 
-  function renderAll(): void {
+  /** Why the result is drawn: 'form' = the visitor changed this panel's form (announced); anything else (year, assumptions, map) is not. */
+  type RenderCause = 'form' | 'outside';
+
+  function renderAll(cause: RenderCause = 'outside'): void {
     pending = undefined;
     const s = store.get();
     paintYear(s);
@@ -581,6 +637,7 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
     percentInput.value = String(percent);
 
     const form = currentForm();
+    const sourceNames = form.sourceMode === 'regions' ? form.regionIds.map((id) => REGION_NAMES[id]) : undefined;
     const at = populations(s);
     paintPercent(targetPeople(form.target, at));
     try {
@@ -595,11 +652,21 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
           targetName: targetName(form),
           percent: form.percent,
           people: c.input.deltaPeople,
-          sourceNames: form.sourceMode === 'regions' ? form.regionIds.map((id) => REGION_NAMES[id]) : undefined,
+          sourceNames,
         }),
       );
+      if (cause === 'form') {
+        setText(announceEl, announceAllocation({ targetName: targetName(form), percent: form.percent, sourceNames }));
+        announcedFor = targetValue;
+      } else if (announcedFor !== targetValue) {
+        // The map retargeted the form (only the target can move without the visitor touching the form): the sentence
+        // is about another target. Emptying a live region is not announced; it only stops a stale sentence being read.
+        setText(announceEl, '');
+      }
       if (mapActive) pushOverlay(c, s, form);
+      const hadFocus = focusInDetail();
       detailEl.replaceChildren(detailElement(c.summary, rowOpts));
+      restoreDetailFocus(hadFocus);
     } catch (e) {
       if (!(e instanceof RangeError)) console.error('allocation failed', e);
       lastComputed = undefined;
@@ -631,19 +698,19 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
   targetSelect.addEventListener('change', () => {
     if (!alive) return;
     targetValue = targetSelect.value;
-    renderAll();
+    renderAll('form');
   });
   percentInput.addEventListener('input', () => {
     if (!alive) return;
     percent = Number(percentInput.value);
     paintPercent(targetPeople(currentForm().target, populations(store.get())));
-    if (pending === undefined) pending = requestAnimationFrame(renderAll);
+    if (pending === undefined) pending = requestAnimationFrame(() => renderAll('form'));
   });
   for (const b of sourceButtons) {
     b.addEventListener('click', () => {
       if (!alive) return;
       sourceMode = b.dataset.source === 'regions' ? 'regions' : 'proportional';
-      renderAll();
+      renderAll('form');
     });
   }
 

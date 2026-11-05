@@ -12,15 +12,15 @@
 // detached element (one Worker request, no listeners, nothing global). Mounting a second time into the same slot tears
 // the first mount down, so the interface is never doubled.
 import './aiPanel.css';
-import { ask } from '../ai/client';
+import { ask, MSG_NOT_AVAILABLE } from '../ai/client';
 import type { AskResult, Message, TraceItem } from '../ai/client';
-import { findCached, loadCachedAnswers, SAMPLE_QUESTIONS } from '../ai/cached';
+import { findCached, loadCachedAnswers, SAMPLE_QUESTIONS, verifiedSampleQuestions } from '../ai/cached';
 import type { CachedAnswers } from '../ai/cached';
 import type { EngineContext } from '../ai/tools';
 import { isScenarioError, sanitizeScenario, scenarioKey } from '../data/runner';
 import {
   allocationOffers,
-  clipCodePoints,
+  clipAtCaret,
   compactJson,
   countCodePoints,
   describeScenario,
@@ -29,6 +29,7 @@ import {
   prettyJsonView,
   scenarioOffers,
   toolLabel,
+  namesLaterYear,
   traceUsesEstimate,
 } from './aiTrace';
 import { overlayFromToolInput, toolScenario } from './allocationOverlay';
@@ -61,7 +62,11 @@ export const CACHE_WAIT_MS = 1500;
 
 /** Everything the panel says that is not an answer, in one place (a test scans it for words that must never appear). */
 export const PANEL_TEXT = {
-  intro: '日本語で質問すると、Claudeが計算の結果を引いて答えます。答えの数字は、計算の結果からだけ引いています。',
+  // What the app really does (src/ai/numberCheck.ts): the tools do the arithmetic; once an answer is in, its numbers are
+  // checked against this question's tool results, and the ones that cannot be found are flagged. It does not claim that
+  // every number comes from the results, and it quotes no label that is not on the screen. Kept to about three lines on a phone.
+  intro:
+    '日本語で質問すると、Claudeがこのアプリの計算を呼び出して答えます。答えの数字は、その質問で使った計算の結果と照らし合わせ、見つからない数字は知らせます。',
   after2050: '2050年までの数字は社人研の公式推計、2050年より後の数字は、このアプリの試算です（予測ではありません）。',
   waiting: '計算の結果を引いています…',
   blank: '質問を入力してください。',
@@ -196,6 +201,8 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     h('div', { class: 'actions' }, submitBtn, newBtn),
   );
 
+  const statusBox = h('div', { class: 'ai-status' }, statusText, cancelBtn);
+
   const root = h(
     'div',
     { class: 'ai-panel' },
@@ -203,7 +210,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     h('p', { class: 'note' }, PANEL_TEXT.after2050),
     h('div', { class: 'panel-section' }, h('h3', { class: 'panel-section-title' }, '質問の例'), samplesList),
     h('div', { class: 'panel-section' }, h('h3', { class: 'panel-section-title' }, '自分で質問する'), form),
-    h('div', { class: 'ai-status' }, statusText, cancelBtn),
+    statusBox,
     answersEl,
   );
   el.append(root);
@@ -256,7 +263,32 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     const lost =
       !active || active === document.body || active === cancelBtn || active === statusText || (root.contains(active) && (active as HTMLButtonElement).disabled === true);
     if (!lost) return;
-    (origin && origin.isConnected ? origin : textarea).focus();
+    // preventScroll: bringing the answer into view (below) is what moves the page, not the focus going back up to the button.
+    (origin && origin.isConnected ? origin : textarea).focus({ preventScroll: true });
+  }
+
+  /** The control that started the question being asked (the sample button, the submit button or the text field). */
+  let asker: HTMLElement | null = null;
+
+  /** Whether any part of the element is inside the window (an element with no box, as in a test DOM, counts as on screen). */
+  function isOnScreen(el: Element): boolean {
+    const box = el.getBoundingClientRect();
+    return box.bottom >= 0 && box.top <= window.innerHeight;
+  }
+
+  /**
+   * On a phone the answer area is hundreds of pixels below the sample question or the form, so the first tap would
+   * look like nothing happened. Scroll just enough to show `target` ('nearest': nothing moves if it is in view), and
+   * not smoothly for a visitor who asked for less motion. Focus is not touched.
+   */
+  function bringIntoView(target: Element): void {
+    if (typeof target.scrollIntoView !== 'function') return;
+    // Only while the visitor is still where they asked: the control they pressed, the waiting line or the target itself
+    // is on screen. One who scrolled away while waiting (to look at the map, say) is not pulled back.
+    const anchors = [asker, statusBox, target];
+    if (!anchors.some((el) => el !== null && isOnScreen(el))) return;
+    const calm = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    target.scrollIntoView({ block: 'nearest', behavior: calm ? 'auto' : 'smooth' });
   }
 
   /** The map is above the panels on a phone: bring it into view after a link has moved it. */
@@ -314,7 +346,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     if (targets.length === 0) return null;
     const box = h('div', { class: 'actions ai-links' });
     for (const target of targets) {
-      const button = h('button', { type: 'button', class: 'btn' }, `${target.label} を地図で開く`);
+      const button = h('button', { type: 'button', class: 'btn' }, `${target.label}を地図で開く`);
       button.addEventListener('click', () => {
         const done = ctx.store.set(target.kind === 'area' ? { selectedArea: target.code } : { selectedPref: target.code });
         if (done) revealMap();
@@ -355,29 +387,30 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
   }
 
   /**
-   * For each run_allocation call that returned a result (allocationOffers): a button that recomputes that allocation
-   * locally from the tool INPUT (never from the model's text or the tool result) and draws it on the map, moving the
-   * year slider to the allocation's year. A bad input is refused with a message (text only).
+   * What an allocation button needs to repaint its hint when the screen's assumptions change: its text without the
+   * hint, and the assumptions it would bring. Kept per button in a WeakMap and found again through the page, so a
+   * button whose answer was trimmed, cleared or replaced is let go with it: there is no list to prune.
    */
-  /** The allocation buttons on screen, with the scenario each would bring; their hint follows the screen's scenario. */
-  const allocationButtons: Array<{ button: HTMLButtonElement; text: string; scenario: Scenario | undefined }> = [];
+  const allocationOffer = new WeakMap<HTMLButtonElement, { text: string; scenario: Scenario | undefined }>();
   function paintAllocationButtons(): void {
     const current = scenarioKey(ctx.store.get().scenario);
-    for (let i = allocationButtons.length - 1; i >= 0; i--) {
-      const b = allocationButtons[i]!;
-      if (!root.contains(b.button)) {
-        allocationButtons.splice(i, 1); // the answer was trimmed or cleared
-        continue;
-      }
-      const differs = b.scenario !== undefined && scenarioKey(b.scenario) !== current;
-      const text = differs ? `${b.text}${PANEL_TEXT.allocationScenarioHint}` : b.text;
-      if (b.button.textContent !== text) b.button.textContent = text;
+    for (const button of root.querySelectorAll<HTMLButtonElement>('button[data-role="apply-allocation"]')) {
+      const offer = allocationOffer.get(button);
+      if (!offer) continue;
+      const differs = offer.scenario !== undefined && scenarioKey(offer.scenario) !== current;
+      const text = differs ? `${offer.text}${PANEL_TEXT.allocationScenarioHint}` : offer.text;
+      if (button.textContent !== text) button.textContent = text;
     }
   }
   const unsubscribeScenario = ctx.store.subscribe((s, prev) => {
     if (s.scenario !== prev.scenario) paintAllocationButtons();
   });
 
+  /**
+   * For each run_allocation call that returned a result (allocationOffers): a button that recomputes that allocation
+   * locally from the tool INPUT (never from the model's text or the tool result) and draws it on the map, moving the
+   * year slider to the allocation's year. A bad input is refused with a message (text only).
+   */
   function renderAllocationOffers(trace: TraceItem[]): HTMLElement | null {
     const inputs = allocationOffers(trace);
     if (inputs.length === 0) return null;
@@ -389,7 +422,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
       const scenario = typeof read === 'string' ? undefined : read;
       const differs = scenario !== undefined && scenarioKey(scenario) !== scenarioKey(ctx.store.get().scenario);
       const button = h('button', { type: 'button', class: 'btn', 'data-role': 'apply-allocation' }, differs ? `${text}${PANEL_TEXT.allocationScenarioHint}` : text);
-      allocationButtons.push({ button, text, scenario });
+      allocationOffer.set(button, { text, scenario });
       button.addEventListener('click', () => {
         const rebuilt = overlayFromToolInput(input, ctx.data, ctx.runner);
         if ('error' in rebuilt) {
@@ -413,24 +446,40 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     return box;
   }
 
-  function renderFailureSamples(): HTMLElement {
+  /**
+   * Buttons for the sample questions that have a verified saved answer, under a failure notice. While every saved
+   * answer is still a placeholder there is nothing to offer, so there is nothing here and nothing says there is.
+   */
+  function renderFailureSamples(): HTMLElement | null {
+    const questions = verifiedSampleQuestions(cache);
+    if (questions.length === 0) return null;
     const list = h('ul', { class: 'ai-samples' });
-    for (const question of SAMPLE_QUESTIONS) list.append(sampleButton(question));
+    for (const question of questions) list.append(sampleButton(question));
     return h('div', { class: 'ai-fail-samples' }, h('p', { class: 'note' }, PANEL_TEXT.trySaved), list);
   }
 
   function renderAnswer(question: string, result: AskResult): HTMLElement {
-    const article = h('article', { class: 'ai-answer' }, h('p', { class: 'ai-question' }, h('span', { class: 'sr-only' }, '質問：'), question));
     const failed = result.status === 'unavailable' || result.status === 'error';
+    // No Worker behind the endpoint: one plain sentence instead of a "try again" that cannot work (kept to one on the page by showResult).
+    const notAvailable = failed && result.reason === 'not_configured';
+    const article = h(
+      'article',
+      { class: 'ai-answer', 'data-role': notAvailable ? 'ai-unavailable' : undefined },
+      h('p', { class: 'ai-question' }, h('span', { class: 'sr-only' }, '質問：'), question),
+    );
 
     if (failed) {
-      article.append(h('p', { class: 'ai-fail' }, result.message ?? PANEL_TEXT.crashed));
+      article.append(h('p', { class: 'ai-fail' }, notAvailable ? (result.message ?? MSG_NOT_AVAILABLE) : (result.message ?? PANEL_TEXT.crashed)));
+      // A trace of 2051+ figures is shown behind 「使った道具と数字」: say that they are estimates, outside the raw JSON.
+      if (traceUsesEstimate(result.trace)) article.append(h('p', { class: 'note ai-estimate' }, `${ESTIMATE_NOTE}。`));
       if (result.trace.length > 0) article.append(renderTrace(result.trace));
-      article.append(renderFailureSamples());
+      const saved = renderFailureSamples();
+      if (saved) article.append(saved);
       return article;
     }
 
-    const usesEstimate = traceUsesEstimate(result.trace);
+    // 2051+ figures are always 試算: from the tool results, and from the answer's own words (it may name a year no tool result does)
+    const usesEstimate = traceUsesEstimate(result.trace) || namesLaterYear(result.answer);
     const head = h('div', { class: 'ai-answer-head' });
     if (result.fromCache) head.append(h('span', { class: 'tag', 'data-role': 'saved-badge' }, '保存済みの回答'));
     if (usesEstimate) head.append(h('span', { class: 'badge-estimate' }, ESTIMATE_BADGE));
@@ -450,13 +499,22 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
       );
     }
 
-    const basis = [
-      result.fromCache ? 'あらかじめ保存した回答です。数字は、そのとき引いた計算の結果から取っています。' : null,
-      !result.fromCache && result.trace.length > 0 ? '数字は、下の「使った道具と数字」にある計算の結果から引いています。' : null,
-      !result.fromCache && result.trace.length === 0 ? 'この答えでは、計算の結果は使っていません。' : null,
-      usesEstimate ? `${ESTIMATE_NOTE}。` : null,
-    ].filter((line): line is string => line !== null);
-    article.append(h('p', { class: 'note ai-basis' }, basis.join('')));
+    // An answer whose numbers could not be confirmed has no basis line, but the label for 2051+ figures stays.
+    if (result.status === 'unverified_numbers' && usesEstimate) article.append(h('p', { class: 'note ai-estimate' }, `${ESTIMATE_NOTE}。`));
+
+    // What the numbers rest on, said only for an answer whose numbers passed the check (status ok). For one that did
+    // not, the warning above says what could not be confirmed, and a line here would contradict it. The line says
+    // that the numbers are checked against the results, never that they are only taken from them.
+    if (result.status === 'ok') {
+      const basis: string[] = [];
+      if (result.fromCache) {
+        basis.push(result.trace.length > 0 ? 'あらかじめ保存した回答です。そのとき使った計算の結果は、下の「使った道具と数字」で見られます。' : 'あらかじめ保存した回答です。');
+      } else {
+        basis.push(result.trace.length > 0 ? '答えの数字は、下の「使った道具と数字」にある計算の結果と照らし合わせています。' : 'この答えでは、計算の結果は使っていません。');
+      }
+      if (usesEstimate) basis.push(`${ESTIMATE_NOTE}。`);
+      article.append(h('p', { class: 'note ai-basis' }, basis.join('')));
+    }
 
     if (result.status === 'ok' && result.message) article.append(h('p', { class: 'note ai-message' }, result.message));
     if (result.trimmed) article.append(h('p', { class: 'note ai-trimmed' }, PANEL_TEXT.trimmed));
@@ -474,11 +532,15 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
   }
 
   /** Shows a finished ask at the top of the list. The older failure notices lose their sample buttons (the newest keeps its own). */
-  function showResult(question: string, result: AskResult): void {
+  function showResult(question: string, result: AskResult): HTMLElement {
+    const article = renderAnswer(question, result); // drawn first: if it throws, the page is left as it was
     for (const old of answersEl.querySelectorAll('.ai-fail-samples')) old.remove();
-    answersEl.prepend(renderAnswer(question, result));
+    // The "not available" sentence is on the page once: the newest one replaces the one before it.
+    if (article.dataset.role === 'ai-unavailable') for (const old of answersEl.querySelectorAll('[data-role="ai-unavailable"]')) old.remove();
+    answersEl.prepend(article);
     // Bounded growth: the oldest answers leave the page, and their buttons and closures with them.
     while (answersEl.childElementCount > MAX_ANSWERS) answersEl.lastElementChild?.remove();
+    return article;
   }
 
   const errorResult = (): AskResult => ({ answer: '', trace: [], unverified: [], fromCache: false, status: 'error', message: PANEL_TEXT.crashed, messages: history });
@@ -511,6 +573,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
   function showWaiting(): void {
     statusText.textContent = PANEL_TEXT.waiting;
     cancelBtn.hidden = false;
+    bringIntoView(statusBox); // the waiting line and the stop button, which sit just above the answers
   }
 
   // ---- asking -----------------------------------------------------------------------------------------------
@@ -525,6 +588,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     }
 
     setBusy(true);
+    asker = trigger;
     const abort = new AbortController();
     controller = abort;
     let result: AskResult | undefined;
@@ -568,14 +632,15 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
 
     if (result) {
       let shown = result;
+      let drawn: HTMLElement | undefined;
       try {
-        showResult(question, result);
+        drawn = showResult(question, result);
       } catch (error) {
         // Drawing failed: say so plainly. The answer nobody saw is not put into the conversation.
         console.error('AI panel: could not draw the answer', error);
         shown = errorResult();
         try {
-          showResult(question, shown);
+          drawn = showResult(question, shown);
         } catch (again) {
           console.error('AI panel: could not draw the error either', again);
         }
@@ -589,9 +654,13 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
       if (shown.needsNewConversation) {
         newBtn.hidden = false;
         newBtn.classList.add('is-attention');
-        newBtn.focus();
+        newBtn.focus({ preventScroll: true });
+        if (drawn) bringIntoView(drawn);
         return;
       }
+      restoreFocus(trigger);
+      if (drawn) bringIntoView(drawn); // after the focus is back: the page ends up showing the answer, not the button
+      return;
     }
     restoreFocus(trigger);
   }
@@ -607,10 +676,11 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
   /** Keeps the first MAX_QUESTION_LENGTH code points and says so, quietly. Not while a conversion (IME) is in progress. */
   let pasteCut = false;
   function applyLimit(): void {
-    const { text, cut } = clipCodePoints(textarea.value, MAX_QUESTION_LENGTH);
+    // What was typed or pasted ends at the caret: that is what goes, and the caret stays where the typing was.
+    const { text, caret, cut } = clipAtCaret(textarea.value, textarea.selectionEnd, MAX_QUESTION_LENGTH);
     if (cut) {
       textarea.value = text;
-      textarea.setSelectionRange(text.length, text.length);
+      textarea.setSelectionRange(caret, caret);
     }
     updateCounter();
     showInputMessage(cut || pasteCut ? PANEL_TEXT.limitCut : '', false);

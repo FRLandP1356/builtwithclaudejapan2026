@@ -5,12 +5,15 @@ import {
   allocationOffers,
   compactJson,
   describeScenario,
+  MAX_VALUE_CHARS,
+  namesLaterYear,
   makePlaceNames,
   mapTargets,
   prettyJsonView,
   RESULT_DISPLAY_LIMIT,
   MAX_SCENARIO_OFFERS,
   MAX_ALLOCATION_OFFERS,
+  clipAtCaret,
   clipCodePoints,
   countCodePoints,
   scenarioOffers,
@@ -233,6 +236,79 @@ describe('describeScenario', () => {
   it('rounds only what is safe to round (four significant digits)', () => {
     expect(describeScenario({ ...base, cwrMult: 1.23456 })).toBe('子どもの数の倍率 1.235');
   });
+
+  describe('values from the model are short and safe to show', () => {
+    const hostile = (patch: Record<string, unknown>): string => describeScenario({ ...base, ...patch } as never);
+    const NOT_A_NUMBER = '（数ではない値）';
+
+    it('cuts a long value at 24 characters, the last being 「…」, and leaves a 24-character one whole', () => {
+      expect(MAX_VALUE_CHARS).toBe(24);
+      expect(hostile({ cwrMult: 'x'.repeat(24) })).toBe(`子どもの数の倍率 ${'x'.repeat(24)}`);
+      expect(hostile({ cwrMult: 'x'.repeat(25) })).toBe(`子どもの数の倍率 ${'x'.repeat(23)}…`);
+      expect(hostile({ migMode: 'あ'.repeat(500) })).toBe(`人口の移動 ${'あ'.repeat(23)}…`);
+      expect(hostile({ migScale: 'y'.repeat(100_000) })).toBe(`移動の強さ ${'y'.repeat(23)}…`);
+      expect(hostile({ infraStrength: 'z'.repeat(30) })).toBe(`施設の影響 ${'z'.repeat(23)}…`);
+    });
+
+    it('counts code points, so an emoji is never cut in half', () => {
+      const text = hostile({ cwrMult: '😀'.repeat(40) });
+      expect(text).toBe(`子どもの数の倍率 ${'😀'.repeat(23)}…`);
+      expect(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(text)).toBe(false);
+      expect(hostile({ cwrMult: '😀'.repeat(24) })).toBe(`子どもの数の倍率 ${'😀'.repeat(24)}`);
+    });
+
+    it('cuts an ordinary but very long number text too', () => {
+      expect(hostile({ migScale: 10n ** 60n })).toBe(`移動の強さ ${'1' + '0'.repeat(22)}…`);
+    });
+
+    it('never throws on an object, and never calls its toString', () => {
+      let called = 0;
+      const spy = {
+        toString() {
+          called++;
+          throw new Error('toString was called');
+        },
+        valueOf() {
+          called++;
+          throw new Error('valueOf was called');
+        },
+      };
+      for (const value of [Object.create(null), { toString: 1 }, spy, { a: 1 }, [], [1, 2, 3], () => 1, new Date(0)]) {
+        const text = hostile({ cwrMult: value, migMode: value, migScale: value, infraStrength: value });
+        expect(text).toBe(`子どもの数の倍率 ${NOT_A_NUMBER}、人口の移動 ${NOT_A_NUMBER}、移動の強さ ${NOT_A_NUMBER}、施設の影響 ${NOT_A_NUMBER}`);
+      }
+      expect(called).toBe(0);
+    });
+
+    it('never throws on a symbol, a huge array or a proxy that throws on every touch', () => {
+      const trap = new Proxy(
+        {},
+        new Proxy({}, { get: () => () => { throw new Error('touched'); } }),
+      );
+      const revoked = Proxy.revocable({}, {});
+      revoked.revoke();
+      const started = Date.now();
+      for (const value of [Symbol('s'), Symbol('d'.repeat(10_000)), new Array(2_000_000).fill(1), trap, revoked.proxy]) {
+        expect(hostile({ cwrMult: value })).toBe(`子どもの数の倍率 ${NOT_A_NUMBER}`);
+      }
+      expect(Date.now() - started).toBeLessThan(1000); // the 2-million-element array was not turned into text
+    });
+
+    it('shows null, undefined, booleans and non-finite numbers as short text', () => {
+      expect(hostile({ cwrMult: null })).toBe('子どもの数の倍率 null');
+      expect(hostile({ cwrMult: undefined })).toBe('子どもの数の倍率 undefined');
+      expect(hostile({ migScale: true })).toBe('移動の強さ true');
+      expect(hostile({ migScale: Number.NaN })).toBe('移動の強さ NaN');
+      expect(hostile({ infraStrength: Number.NEGATIVE_INFINITY })).toBe('施設の影響 -Infinity');
+      expect(hostile({ cwrMult: -Number.MAX_VALUE })).toBe('子どもの数の倍率 -1.7976931348623157e+308'); // exactly 24 characters
+    });
+
+    it('keeps the whole sentence bounded however hostile the four values are', () => {
+      const long = 'q'.repeat(10_000);
+      const text = hostile({ cwrMult: long, migMode: long, migScale: long, infraStrength: long });
+      expect(text.length).toBeLessThan(150);
+    });
+  });
 });
 
 describe('code points', () => {
@@ -247,6 +323,109 @@ describe('code points', () => {
     expect(clipCodePoints('あい', 2)).toEqual({ text: 'あい', cut: false });
     expect(clipCodePoints('😀😀😀', 2)).toEqual({ text: '😀😀', cut: true });
     expect(clipCodePoints('a𠮷b', 2)).toEqual({ text: 'a𠮷', cut: true });
+  });
+});
+
+describe('clipAtCaret', () => {
+  it('leaves text that fits alone, caret included', () => {
+    expect(clipAtCaret('あいう', 1, 3)).toEqual({ text: 'あいう', caret: 1, cut: false });
+    expect(clipAtCaret('', 0, 3)).toEqual({ text: '', caret: 0, cut: false });
+  });
+
+  it('typing at the end drops the typed characters, like cutting the end', () => {
+    expect(clipAtCaret('あいうえ', 4, 3)).toEqual({ text: 'あいう', caret: 3, cut: true });
+  });
+
+  it('typing in the middle drops the typed excess, not the end, and keeps the caret there', () => {
+    // 'あい' + typed 'X' + 'うえ', caret after the X
+    expect(clipAtCaret('あいXうえ', 3, 4)).toEqual({ text: 'あいうえ', caret: 2, cut: true });
+    // a paste of 3 into the middle with room for 1: the first of the pasted stays
+    expect(clipAtCaret('あいXYZうえ', 5, 5)).toEqual({ text: 'あいXうえ', caret: 3, cut: true });
+  });
+
+  it('typing at the very start drops what was typed', () => {
+    expect(clipAtCaret('Xあいう', 1, 3)).toEqual({ text: 'あいう', caret: 0, cut: true });
+  });
+
+  it('takes the rest from the end when fewer than the excess sit before the caret', () => {
+    expect(clipAtCaret('Xあいうえお', 1, 3)).toEqual({ text: 'あいう', caret: 0, cut: true });
+    expect(clipAtCaret('あいうえお', 0, 3)).toEqual({ text: 'あいう', caret: 0, cut: true });
+  });
+
+  it('counts code points and never cuts a pair in half; the caret is a UTF-16 offset', () => {
+    // 😀😀 + typed 𠮷 + 😀 with room for 3: the typed one (2 units) goes, the caret is after the first two (4 units)
+    expect(clipAtCaret('😀😀𠮷😀', 6, 3)).toEqual({ text: '😀😀😀', caret: 4, cut: true });
+    const clipped = clipAtCaret('😀😀𠮷😀', 6, 3).text;
+    expect(/[\ud800-\udbff](?![\udc00-\udfff])/.test(clipped)).toBe(false);
+  });
+
+  it('a caret outside the text is treated as the nearest end', () => {
+    expect(clipAtCaret('あいうえ', 99, 3)).toEqual({ text: 'あいう', caret: 3, cut: true });
+    expect(clipAtCaret('あいうえ', -1, 3)).toEqual({ text: 'あいう', caret: 0, cut: true });
+  });
+});
+
+describe('namesLaterYear', () => {
+  it.each([
+    '2051年には',
+    '2100年には、日本の人口は約5,432万人になります。',
+    '2060年と2100年を比べます。',
+    '2051-2100',
+    '2040〜2100年',
+    '2100/1/1',
+    '2100-12-31',
+    '西暦2075',
+    'In 2100, the population falls.',
+    '2100，日本の人口は減ります。',
+    '2020,2100の二つの年',
+    '2051、2060、2100',
+  ])('names a year after 2050: %s', (text) => {
+    expect(namesLaterYear(text)).toBe(true);
+  });
+
+  it.each([
+    ['2100年代', '2100年代 is a decade of the 2100s'],
+    ['2060年代', '2060年代'],
+    ['2050年代', '2050年代 is 2050 to 2059, and 2051 to 2059 are estimates'],
+    ['２１００年', 'full-width digits'],
+    ['２０５１年', 'full-width digits'],
+    ['2150年ごろ', 'beyond the app, with 年 after it'],
+    ['2999年', 'the largest year read as one'],
+    ['2100人', 'a count that looks like a year is labelled too: one extra label is the cost of never missing a year'],
+    ['2100.5万人', 'a decimal that starts like a year'],
+    ['2100%', 'a percent that looks like a year'],
+    ['約2100', 'a bare four-digit number in range'],
+    ['1,2100', 'a comma before four digits is not a thousands group, so it may be a list of years'],
+    ['2100,50', 'a comma with fewer than three digits after it is not a thousands group'],
+  ])('labels when in doubt: %s (%s)', (text) => {
+    expect(namesLaterYear(text)).toBe(true);
+  });
+
+  it.each([
+    ['2050年', '2050 is official'],
+    ['2020年と2050年', 'official years'],
+    ['2040年には、約5,432万人です。', 'before 2051'],
+    ['1900年から2025年', 'the past'],
+    ['12100人', 'the digits of a longer number'],
+    ['12,100人', 'a number with a thousands comma'],
+    ['2,100人', 'a number with a thousands comma'],
+    ['3.2100', 'the decimals of a number'],
+    ['2100,000人', 'a comma with three digits after it is a thousands group'],
+    ['2100，000人', 'the same with a full-width comma'],
+    ['２１００，０００人', 'the same, full-width digits too'],
+    ['１２１００', 'a longer full-width number'],
+    ['21000', 'five digits'],
+    ['2101', 'beyond 2100 and no 年: more likely a count'],
+    ['3000人', 'a count'],
+    ['', 'nothing'],
+    ['人口は減ります。', 'no digits'],
+  ])('does not name one: %s (%s)', (text) => {
+    expect(namesLaterYear(text)).toBe(false);
+  });
+
+  it('finds a later year anywhere in a text that also has earlier ones and longer numbers', () => {
+    expect(namesLaterYear('2020年は12,100人、2050年は12100人、2100年は9,000人です。')).toBe(true);
+    expect(namesLaterYear('2020年は12,100人、2050年は12100人です。')).toBe(false);
   });
 });
 

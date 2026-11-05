@@ -53,6 +53,14 @@ export function findCached(cache: CachedAnswers | null, question: string): Cache
   return null;
 }
 
+/**
+ * The sample questions that have a verified saved answer, in the order they are listed. While every saved answer is
+ * still a placeholder this is empty, and nothing may offer or mention saved questions.
+ */
+export function verifiedSampleQuestions(cache: CachedAnswers | null): string[] {
+  return SAMPLE_QUESTIONS.filter((question) => findCached(cache, question) !== null);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

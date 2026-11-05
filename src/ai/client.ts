@@ -10,13 +10,18 @@
 //      Still unchecked: the answer comes back with status 'unverified_numbers' and the numbers, for the UI to warn.
 //      Most upstream requests one ask can make: maxRounds + min(3, maxRounds) = 9 at the defaults.
 //   4. If the AI cannot be reached (limit, outage, network) the saved answer for the same question is used when there
-//      is one; otherwise status 'unavailable'. A user abort is never converted: ask() rejects with the AbortError.
+//      is one; otherwise status 'unavailable'. When nothing answers as the Worker at all (404 or 405, a 200 that is not
+//      the model's JSON, or, on a page opened from a file, no connection at the default address) the result is
+//      'unavailable' with reason 'not_configured': the AI is not part of this build, and trying again will not help.
+//      That is said only while this page has not had a real model message from that address: once it has, every later
+//      failure is 'try again later'. On an http(s) page a failed connection is the network breaking, never a sign
+//      that nothing is deployed. A user abort is never converted: ask() rejects with the AbortError.
 //   5. Before EVERY request the size is measured against the Worker's limits (with a margin). The oldest whole
 //      question-and-answer exchanges of `history` are dropped until it fits (result.trimmed); if even the current
 //      question and tool loop do not fit, nothing is sent (status 'unavailable', needsNewConversation).
 //
 // No DOM. The engine is reached only through EngineContext / runTool.
-import { findCached } from './cached';
+import { findCached, verifiedSampleQuestions } from './cached';
 import type { CachedAnswer, CachedAnswers } from './cached';
 import { checkNumbers } from './numberCheck';
 import { runTool } from './tools';
@@ -90,6 +95,11 @@ export interface AskResult {
   unverified: string[];
   fromCache: boolean;
   status: 'ok' | 'unverified_numbers' | 'unavailable' | 'error';
+  /**
+   * Present with status 'unavailable' when the AI is not there at all in this build (no Worker is deployed behind the
+   * endpoint), as opposed to being busy or down right now. The UI says so plainly and does not suggest trying again.
+   */
+  reason?: 'not_configured';
   /** A short Japanese note for the user, when there is something to say. */
   message?: string;
   /** The conversation to pass as `history` next time. After a failure it is the history as it was (trimmed, if it was). */
@@ -121,13 +131,21 @@ export const CLIENT_LIMITS = { maxMessages: 36, maxChars: 40_000, maxBytes: 56_0
 
 const TRUNCATION_MARKER = '…（結果が長すぎるため、ここから先は省略しました）';
 
+/** The AI is busy or down right now, and there are saved answers to look at meanwhile. */
 const MSG_UNAVAILABLE = 'いまはAIに接続できません。保存済みの質問を試してください。';
+/** The same, when there are no saved answers to offer (so none is mentioned). */
+const MSG_TRY_LATER = 'いまはAIに接続できません。時間をおいて、もう一度お試しください。';
+/** Nothing is deployed behind the endpoint: not a matter of waiting. Three facts: not available, why, what still works. */
+export const MSG_NOT_AVAILABLE =
+  'このバージョンでは、AIへの質問は使えません（AIの接続先がまだ用意されていません）。地図、数値、前提の調整、人口の割り振りはそのまま使えます。';
 const MSG_SAVED = 'いまはAIに接続できないため、保存済みの答えを表示しています。';
 const MSG_TOO_LONG = '質問が長すぎます。';
 const MSG_REJECTED = 'AIへの問い合わせでエラーが起きました。時間をおいて、もう一度お試しください。';
 const MSG_TOO_MANY_STEPS = 'この質問は、調べる手順が多すぎて答えを出せませんでした。質問を短くするか、分けてたずねてください。';
 const MSG_EMPTY = 'AIから答えが返ってきませんでした。もう一度お試しください。';
 const MSG_CUT_OFF = '答えが長くなりすぎて、途中で終わっている可能性があります。';
+/** The reply ran out of room before any text was written (nothing to show, so it is an error, not a cut-off answer). */
+const MSG_OUT_OF_ROOM = '答えが長くなりすぎて、書き終える前に止まりました。質問を短くするか、分けてたずねてください。';
 const MSG_REFUSED = 'この質問にはお答えできません。';
 const MSG_NEW_CONVERSATION = '会話が長くなりすぎました。新しい質問を始めてください。';
 const MSG_UNVERIFIED = '答えの中の一部の数字を、計算の結果と照らし合わせて確かめられませんでした。';
@@ -272,8 +290,11 @@ function rebuildBlocks(raw: unknown): Block[] {
 // One request to the Worker
 // ---------------------------------------------------------------------------------------------------------------
 
-/** Why a request did not give a usable response. 'unreachable' is the only kind a saved answer can stand in for. */
-type FailureKind = 'unreachable' | 'too_long' | 'rejected';
+/**
+ * Why a request did not give a usable response. A saved answer can stand in for 'unreachable' (busy or down right now)
+ * and 'not_configured' (nothing is deployed); the others are about the request itself.
+ */
+type FailureKind = 'unreachable' | 'not_configured' | 'too_long' | 'rejected';
 
 class RequestFailure extends Error {
   kind: FailureKind;
@@ -297,17 +318,52 @@ interface ModelTurn {
   stopReason: string;
 }
 
-function failureForStatus(status: number): RequestFailure {
+/**
+ * The addresses that have given this page a real model message. Such an address is there: whatever goes wrong with it
+ * afterwards (a dropped connection, a gateway error page, a 404 from a broken deploy) is "try again later", never
+ * "this version has no AI". Kept for the life of the page, as module state: it is a fact about this page's session.
+ */
+const answered = new Set<string>();
+
+/** Forgets what the page has seen (tests: each starts as a fresh page). */
+export function forgetAnsweredEndpoints(): void {
+  answered.clear();
+}
+
+/** Nothing there takes our request: 'not_configured', unless this page has already had an answer from this address. */
+function notThere(env: Env): RequestFailure {
+  return new RequestFailure(answered.has(env.endpoint) ? 'unreachable' : 'not_configured');
+}
+
+function failureForStatus(status: number, env: Env): RequestFailure {
   if (status === 413) return new RequestFailure('too_long');
+  // 404 and 405: the address answers, but nothing there takes a POST (a static host, a Worker that was never deployed).
+  if (status === 404 || status === 405) return notThere(env);
   // 429 (daily limit; the body says cached: true) and 5xx (502 upstream, 503 not configured / store down) are the
-  // AI being unavailable right now. Everything else (403 origin, 400 body, 404, 405) is a problem with the request.
+  // AI being unavailable right now. Everything else (403 origin, 400 body) is a problem with the request.
   if (status === 429 || status >= 500) return new RequestFailure('unreachable');
   return new RequestFailure('rejected');
 }
 
-/** An abort the caller asked for passes through untouched; anything else that broke the transport is 'unreachable'. */
-function transportFailure(error: unknown, signal: AbortSignal | undefined): unknown {
-  return signal?.aborted ? error : new RequestFailure('unreachable');
+/** A page opened from a file: its same-origin default address is file:///api/chat, where nothing can ever answer. */
+function isFilePage(): boolean {
+  return typeof location !== 'undefined' && location.protocol === 'file:';
+}
+
+/**
+ * An abort the caller asked for passes through untouched; anything else that broke the transport is 'unreachable':
+ * on an http(s) page a failed connection (offline, a lossy link, a reset) says nothing about whether a Worker is
+ * deployed, because a host with no Worker answers with a 404, a 405 or its index page. The one place where a failed
+ * connection does mean nothing is there is the default address of a page opened from a file.
+ */
+function transportFailure(error: unknown, env: Env): unknown {
+  if (env.signal?.aborted) return error;
+  return env.endpoint === DEFAULT_ENDPOINT && isFilePage() ? notThere(env) : new RequestFailure('unreachable');
+}
+
+/** JSON.parse and Response.json() throw a SyntaxError for text that is not JSON (checked by name: it may come from another realm). */
+function isSyntaxError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'SyntaxError';
 }
 
 async function callModel(messages: Message[], env: Env): Promise<ModelTurn> {
@@ -325,17 +381,23 @@ async function callModel(messages: Message[], env: Env): Promise<ModelTurn> {
   try {
     response = await env.fetchFn(env.endpoint, init);
   } catch (error) {
-    throw transportFailure(error, env.signal);
+    throw transportFailure(error, env);
   }
-  if (!response.ok) throw failureForStatus(response.status);
+  if (!response.ok) throw failureForStatus(response.status, env);
 
   let data: unknown;
   try {
     data = await response.json();
   } catch (error) {
-    throw transportFailure(error, env.signal);
+    env.signal?.throwIfAborted(); // a stop the visitor asked for is never turned into "not available"
+    // A page that is not JSON (a static host answering with its index.html) means no Worker is there. A body that was
+    // cut off on the way is a transport failure like any other.
+    throw isSyntaxError(error) ? notThere(env) : transportFailure(error, env);
   }
-  if (!isRecord(data) || !Array.isArray(data.content)) throw new RequestFailure('unreachable');
+  // A 200 that is JSON but not a model message is not our Worker either.
+  if (!isRecord(data) || !Array.isArray(data.content)) throw notThere(env);
+  // Only a body with a stop_reason is the Worker relaying a model message; any stub that answers {"content":[]} is not.
+  if (typeof data.stop_reason === 'string') answered.add(env.endpoint);
   return {
     content: rebuildBlocks(data.content),
     stopReason: typeof data.stop_reason === 'string' ? data.stop_reason : '',
@@ -361,7 +423,7 @@ interface Conversation {
 type PassOutcome =
   | { kind: 'answer'; text: string; note?: string }
   | { kind: 'too_many_steps'; text: string }
-  | { kind: 'empty'; refused: boolean };
+  | { kind: 'empty'; refused: boolean; outOfRoom: boolean };
 
 /** Even the current question and tool loop, with all the history dropped, do not fit in one request. */
 class ConversationTooLong extends Error {
@@ -431,10 +493,10 @@ async function runPass(conversation: Conversation, env: Env, maxRounds: number):
     }
 
     const refused = turn.stopReason === 'refusal';
-    if (text.trim() === '') return { kind: 'empty', refused };
+    const cutOff = turn.stopReason === 'max_tokens' || turn.stopReason === 'model_context_window_exceeded';
+    if (text.trim() === '') return { kind: 'empty', refused, outOfRoom: cutOff };
     // A tool_use here (the reply was cut off) has no result to go with it, so it is not kept.
     conversation.messages.push({ role: 'assistant', content: turn.content.filter((block) => !isToolUse(block)) });
-    const cutOff = turn.stopReason === 'max_tokens' || turn.stopReason === 'model_context_window_exceeded';
     return { kind: 'answer', text, ...(cutOff ? { note: MSG_CUT_OFF } : refused ? { note: MSG_REFUSED } : {}) };
   }
   return { kind: 'too_many_steps', text: earlierText.join('\n\n') };
@@ -483,14 +545,17 @@ function failureResult(
   };
 }
 
-function messageForFailure(kind: FailureKind): string {
+/** `cache` decides whether "try the saved questions" may be said: it is only true while some saved answer is verified. */
+function messageForFailure(kind: FailureKind, cache: CachedAnswers | null): string {
   switch (kind) {
     case 'too_long':
       return MSG_TOO_LONG;
     case 'rejected':
       return MSG_REJECTED;
+    case 'not_configured':
+      return MSG_NOT_AVAILABLE;
     default:
-      return MSG_UNAVAILABLE;
+      return verifiedSampleQuestions(cache).length > 0 ? MSG_UNAVAILABLE : MSG_TRY_LATER;
   }
 }
 
@@ -558,7 +623,7 @@ async function converse(question: string, cache: CachedAnswers | null, conversat
   try {
     const first = await runPass(conversation, env, env.maxRounds);
     if (first.kind === 'too_many_steps') return failureResult('error', MSG_TOO_MANY_STEPS, first.text, conversation);
-    if (first.kind === 'empty') return failureResult('error', first.refused ? MSG_REFUSED : MSG_EMPTY, '', conversation);
+    if (first.kind === 'empty') return failureResult('error', first.refused ? MSG_REFUSED : first.outOfRoom ? MSG_OUT_OF_ROOM : MSG_EMPTY, '', conversation);
 
     const firstUnverified = checkNumbers(first.text, conversation.seen).unverified;
     if (firstUnverified.length === 0) return okResult(first.text, first.note, conversation);
@@ -590,10 +655,12 @@ async function converse(question: string, cache: CachedAnswers | null, conversat
       return result;
     }
     if (!(error instanceof RequestFailure)) throw error; // a user abort, or a bug: not for us to hide
-    if (error.kind === 'unreachable') {
+    if (error.kind === 'unreachable' || error.kind === 'not_configured') {
       const saved = findCached(cache, question);
       if (saved) return savedAnswerResult(saved, currentHistory(conversation), question, MSG_SAVED);
     }
-    return failureResult('unavailable', messageForFailure(error.kind), '', conversation);
+    const failed = failureResult('unavailable', messageForFailure(error.kind, cache), '', conversation);
+    if (error.kind === 'not_configured') failed.reason = 'not_configured';
+    return failed;
   }
 }

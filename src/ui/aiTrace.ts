@@ -88,6 +88,29 @@ export function clipCodePoints(text: string, max: number): { text: string; cut: 
   return points.length > max ? { text: points.slice(0, max).join(''), cut: true } : { text, cut: false };
 }
 
+export interface CaretClip {
+  text: string;
+  /** Where the caret goes (a UTF-16 offset into `text`). */
+  caret: number;
+  cut: boolean;
+}
+
+/**
+ * `text` held to `max` code points when the visitor has just typed or pasted up to `caret`: the excess is taken from
+ * the text just before the caret (what was typed), not from the end of the question, and the caret stays where the
+ * typing was. If fewer than the excess sit before the caret, the rest is taken from the end. A pair is never cut in half.
+ */
+export function clipAtCaret(text: string, caret: number, max: number): CaretClip {
+  const points = Array.from(text);
+  if (points.length <= max) return { text, caret, cut: false };
+  const excess = points.length - max;
+  const before = countCodePoints(text.slice(0, Math.min(Math.max(caret, 0), text.length)));
+  const from = Math.max(0, before - excess);
+  points.splice(from, before - from);
+  points.length = Math.min(points.length, max); // anything the caret was too close to the start to absorb
+  return { text: points.join(''), caret: points.slice(0, from).join('').length, cut: true };
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Places named in the tool inputs
 // ---------------------------------------------------------------------------------------------------------------
@@ -198,25 +221,57 @@ export function scenarioOffers(trace: TraceItem[], max: number = MAX_SCENARIO_OF
   return out;
 }
 
+/** The longest a single value from the model is shown in a summary, in characters (the last one is 「…」 when it was cut). */
+export const MAX_VALUE_CHARS = 24;
+/** What stands in for a value that is not text or a number (an object, a list, a function): it is not read at all. */
+const NOT_A_NUMBER = '（数ではない値）';
+
+/** `text` as at most MAX_VALUE_CHARS code points, ending in 「…」 when it was cut. A pair is never cut in half. */
+function clipValue(text: string): string {
+  const points = Array.from(text);
+  return points.length <= MAX_VALUE_CHARS ? text : `${points.slice(0, MAX_VALUE_CHARS - 1).join('')}…`;
+}
+
+/**
+ * A value that came from the model, as short text that is safe to build a sentence from. Never throws: an object (or a
+ * list, a function, a symbol) is not turned into text at all, so a missing or hostile toString, a huge array or a proxy
+ * cannot get in the way; text and numbers longer than MAX_VALUE_CHARS are cut.
+ */
+function plain(value: unknown): string {
+  switch (typeof value) {
+    case 'string':
+      return clipValue(value);
+    case 'number':
+    case 'boolean':
+    case 'bigint':
+    case 'undefined':
+      return clipValue(String(value));
+    case 'object':
+      return value === null ? 'null' : NOT_A_NUMBER;
+    default:
+      return NOT_A_NUMBER;
+  }
+}
+
 /**
  * A number for the summary: four significant digits, unless rounding would change what it means, that is, make a
  * value that differs from the default read as the default, or an out-of-range value read as an allowed one. Then the
- * number is shown as it is. Anything that is not a finite number is shown as it is.
+ * number is shown as it is. Anything that is not a finite number is shown as plain() shows it.
  */
 function show(key: 'cwrMult' | 'migScale' | 'infraStrength', value: unknown): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return String(value);
+  if (typeof value !== 'number' || !Number.isFinite(value)) return plain(value);
   const rounded = Number(value.toPrecision(4));
-  if (rounded === value) return String(value);
+  if (rounded === value || !Number.isFinite(rounded)) return plain(value); // rounding a huge number can overflow
   const [low, high] = SCENARIO_LIMITS[key];
   const inRange = (x: number): boolean => x >= low && x <= high;
-  return rounded === DEFAULT_SCENARIO[key] || inRange(rounded) !== inRange(value) ? String(value) : String(rounded);
+  return plain(rounded === DEFAULT_SCENARIO[key] || inRange(rounded) !== inRange(value) ? value : rounded);
 }
 
-/** The scenario in plain words: only what differs from the default. */
+/** The scenario in plain words: only what differs from the default. A value from the model is shown at most MAX_VALUE_CHARS long. */
 export function describeScenario(s: Scenario): string {
   const parts: string[] = [];
   if (!Object.is(s.cwrMult, DEFAULT_SCENARIO.cwrMult)) parts.push(`子どもの数の倍率 ${show('cwrMult', s.cwrMult)}`);
-  if (!Object.is(s.migMode, DEFAULT_SCENARIO.migMode)) parts.push(s.migMode === 'fade' ? '人口の移動は少しずつ止まる' : `人口の移動 ${String(s.migMode)}`);
+  if (!Object.is(s.migMode, DEFAULT_SCENARIO.migMode)) parts.push(s.migMode === 'fade' ? '人口の移動は少しずつ止まる' : `人口の移動 ${plain(s.migMode)}`);
   if (!Object.is(s.migScale, DEFAULT_SCENARIO.migScale)) parts.push(`移動の強さ ${show('migScale', s.migScale)}`);
   if (!Object.is(s.infraStrength, DEFAULT_SCENARIO.infraStrength)) parts.push(`施設の影響 ${show('infraStrength', s.infraStrength)}`);
   return parts.length === 0 ? '標準の前提' : parts.join('、');
@@ -257,6 +312,36 @@ export function allocationOffers(trace: TraceItem[], max: number = MAX_ALLOCATIO
     out.push(traceItem.input);
   }
   return out;
+}
+
+/** The last year the app calculates (2100). A year after 2050 is an estimate; one after this is beyond the app, and still later than 2050. */
+const LAST_YEAR = 2100;
+/** The largest year number read as a year when it has 年 right after it (a four-digit number is otherwise far more likely a count). */
+const LAST_YEAR_WORD = 2999;
+
+/**
+ * True when the text names a year after 2050, so that what it says about it must carry the 試算 label even if no tool
+ * result did (an answer with no tool call, one whose results stop at 2050, a failed one). The rule is to label when in
+ * doubt and never to miss a real year:
+ * - a four-digit number 2051 to 2100 counts, with or without 年, in ASCII or full-width digits: 「2100年」, 「2051-2100」,
+ *   「2100年代」, 「2100/1/1」, and also 「2100人」 (a count that looks like a year is labelled too: the cost is one extra label);
+ * - 2101 to 2999 count when 年 follows (「2150年」); 2050 counts when 年代 follows (「2050年代」 is 2050 to 2059);
+ * - digits inside a longer number do not: 「12100」, 「2,100」, 「2100,000」, 「3.2100」 are not years. A comma after a year
+ *   (「In 2100, …」) or before one (「2020,2100」, a list) does not make it part of a number: only a comma with three digits
+ *   after it does.
+ * Years written in kanji (二千百年) or as a century (21世紀後半) are not read; the trace-based label still covers answers
+ * built from tool results.
+ */
+export function namesLaterYear(text: string): boolean {
+  const ascii = text.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
+  for (const m of ascii.matchAll(/(?<![\d.．])(\d{4})(?!\d|[,，]\d{3})(年代?)?/g)) {
+    const year = Number(m[1]);
+    const mark = m[2] ?? '';
+    if (year > OFFICIAL_END_YEAR && year <= LAST_YEAR) return true;
+    if (year > LAST_YEAR && year <= LAST_YEAR_WORD && mark !== '') return true;
+    if (year === OFFICIAL_END_YEAR && mark === '年代') return true;
+  }
+  return false;
 }
 
 /** True when a tool result is marked as this app's estimate (basis 'app_estimate') or reaches a year after 2050. */
