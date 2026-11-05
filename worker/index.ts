@@ -258,7 +258,8 @@ export async function handleRequest(
   try {
     allowed = await consumeQuota(env.RATE_KV, clientIp, limits, env.IP_HASH_SECRET);
   } catch {
-    // Fail closed: without the counters the spending cap cannot be enforced.
+    // Fail closed on a failed READ: without the counters the spending cap cannot be enforced. (A failed write is
+    // handled inside consumeQuota and does not end up here.)
     console.error('rate limit store unavailable');
     return jsonResponse({ error: 'service_unavailable' }, 503, origin);
   }

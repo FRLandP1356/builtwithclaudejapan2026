@@ -125,8 +125,12 @@ async function readCount(kv: KVNamespace, key: string): Promise<number> {
  * total let all 50 through). It limits ordinary, sequential use; the hard stop on spending is the spend limit of
  * the Anthropic workspace that owns the API key (see worker/README.md).
  *
- * To keep the damage small when KV misbehaves, the writes are sequential in a fixed order, total counter first:
- * if that write fails, the per-IP counter is not touched. Any storage error is thrown, and the caller fails closed.
+ * Reads fail closed: if KV cannot be read, the error is thrown and the caller answers 503, because without the
+ * counters nothing is enforced. Writes do not: KV allows about one write per second to the same key, so the hot
+ * `total:<date>` counter can be refused under concurrency, and a visitor who got past the checks must not be turned
+ * away because a counter could not be saved. A failed write is logged once (no key, no address) and the request is
+ * allowed. The two writes are independent and sequential (total first), so a failed total write still lets the
+ * per-IP counter be saved.
  */
 export async function consumeQuota(
   kv: KVNamespace,
@@ -142,7 +146,17 @@ export async function consumeQuota(
   const [ipCount, totalCount] = await Promise.all([readCount(kv, ipKey), readCount(kv, totalKey)]);
   if (ipCount >= limits.perIp || totalCount >= limits.total) return false;
 
-  await kv.put(totalKey, String(totalCount + 1), { expirationTtl: COUNTER_TTL_SECONDS });
-  await kv.put(ipKey, String(ipCount + 1), { expirationTtl: COUNTER_TTL_SECONDS });
+  let writeFailed = false;
+  for (const [key, count] of [
+    [totalKey, totalCount + 1],
+    [ipKey, ipCount + 1],
+  ] as const) {
+    try {
+      await kv.put(key, String(count), { expirationTtl: COUNTER_TTL_SECONDS });
+    } catch {
+      writeFailed = true;
+    }
+  }
+  if (writeFailed) console.warn('rate counter write failed');
   return true;
 }

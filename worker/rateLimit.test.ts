@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clientKey, consumeQuota, normalizeClientIp } from './rateLimit';
 
 const SECRET = 'unit-test-ip-hash-secret';
@@ -10,8 +10,10 @@ class RecordingKV {
   store = new Map<string, string>();
   events: string[] = [];
   failPutFor: ((key: string) => boolean) | null = null;
+  failGet = false;
 
   async get(key: string): Promise<string | null> {
+    if (this.failGet) throw new Error('kv get failed');
     return this.store.get(key) ?? null;
   }
 
@@ -30,6 +32,14 @@ class RecordingKV {
 }
 
 const asKV = (kv: RecordingKV) => kv as unknown as KVNamespace;
+
+let warn: ReturnType<typeof vi.spyOn>;
+beforeEach(() => {
+  warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 async function hmacHex16(secret: string, message: string): Promise<string> {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -105,19 +115,54 @@ describe('consumeQuota', () => {
     expect(kv.events).toEqual([`start:${keys[0]}`, `end:${keys[0]}`, `start:${keys[1]}`, `end:${keys[1]}`]);
   });
 
-  it('does not touch the IP counter when the total write fails', async () => {
+  it('still saves the IP counter, and allows the request, when the total write fails (one warning, no details)', async () => {
     const kv = new RecordingKV();
     kv.failPutFor = (key) => key.startsWith('total:');
-    await expect(consumeQuota(asKV(kv), '203.0.113.7', LIMITS, SECRET, NOW)).rejects.toThrow();
-    expect(kv.events.some((event) => event.includes('ip:'))).toBe(false);
-    expect([...kv.store.keys()]).toEqual([]);
+    expect(await consumeQuota(asKV(kv), '203.0.113.7', LIMITS, SECRET, NOW)).toBe(true);
+    expect([...kv.store.keys()]).toHaveLength(1);
+    expect([...kv.store.keys()][0]).toMatch(/^ip:2026-11-05:[0-9a-f]{32}$/);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith('rate counter write failed');
   });
 
-  it('rejects (and has charged the total only) when the IP write fails', async () => {
+  it('still saves the total counter, and allows the request, when the IP write fails', async () => {
     const kv = new RecordingKV();
     kv.failPutFor = (key) => key.startsWith('ip:');
-    await expect(consumeQuota(asKV(kv), '203.0.113.7', LIMITS, SECRET, NOW)).rejects.toThrow();
+    expect(await consumeQuota(asKV(kv), '203.0.113.7', LIMITS, SECRET, NOW)).toBe(true);
     expect([...kv.store.keys()]).toEqual(['total:2026-11-05']);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows the request and warns once, not twice, when both writes fail', async () => {
+    const kv = new RecordingKV();
+    kv.failPutFor = () => true;
+    expect(await consumeQuota(asKV(kv), '203.0.113.7', LIMITS, SECRET, NOW)).toBe(true);
+    expect(kv.store.size).toBe(0);
+    expect(warn).toHaveBeenCalledTimes(1);
+    // Nothing identifying in the log: not the address, not a key, not the error text.
+    expect(JSON.stringify(warn.mock.calls)).not.toMatch(/203\.0\.113\.7|total:|ip:|kv put failed|[0-9a-f]{32}/);
+  });
+
+  it('does not warn when the writes succeed', async () => {
+    const kv = new RecordingKV();
+    await consumeQuota(asKV(kv), '203.0.113.7', LIMITS, SECRET, NOW);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('still refuses (false) when a quota is used up, whether or not writes would fail', async () => {
+    const kv = new RecordingKV();
+    kv.failPutFor = () => true;
+    kv.store.set('total:2026-11-05', '100');
+    expect(await consumeQuota(asKV(kv), '203.0.113.7', LIMITS, SECRET, NOW)).toBe(false);
+    expect(kv.events).toEqual([]); // nothing was written, so there was nothing to fail
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('rejects, so the caller can fail closed, when a counter cannot be READ', async () => {
+    const kv = new RecordingKV();
+    kv.failGet = true;
+    await expect(consumeQuota(asKV(kv), '203.0.113.7', LIMITS, SECRET, NOW)).rejects.toThrow('kv get failed');
+    expect(kv.events).toEqual([]); // nothing was charged on the way out
   });
 
   it('hashes the IP with HMAC-SHA-256 keyed by the secret, truncated to 16 bytes', async () => {

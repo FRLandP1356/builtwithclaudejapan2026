@@ -12,12 +12,14 @@ class FakeKV {
   puts: Array<{ key: string; value: string; options?: { expirationTtl?: number } }> = [];
   gets: string[] = [];
   failing = false;
+  /** Makes only get() throw (put keeps working). */
+  failGet = false;
   /** Makes put() throw for the keys this returns true for. */
   failPutFor: ((key: string) => boolean) | null = null;
 
   async get(key: string): Promise<string | null> {
     this.gets.push(key);
-    if (this.failing) throw new Error('kv down');
+    if (this.failing || this.failGet) throw new Error('kv down');
     return this.store.get(key) ?? null;
   }
 
@@ -584,18 +586,46 @@ describe('rate limits', () => {
     expect(fetchFn).toHaveBeenCalledTimes(passed);
   });
 
-  it('writes the total counter first and the IP counter second, never charging the IP when the total write fails', async () => {
+  it('writes the total counter first and the IP counter second', async () => {
+    const env = makeEnv();
+    await handleRequest(chatRequest(validBody()), env, mockFetch());
+    expect(env.kv.puts.map((put) => put.key.split(':')[0])).toEqual(['total', 'ip']);
+  });
+
+  it('allows the request, with one detail-free warning, when the hot total counter cannot be written (KV: 1 write per second per key)', async () => {
     const env = makeEnv();
     env.kv.failPutFor = (key) => key.startsWith('total:');
     const fetchFn = mockFetch();
+    const res = await handleRequest(chatRequest(validBody(), { ip: '203.0.113.7' }), env, fetchFn);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(OK_BODY);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    // The per-IP counter was still saved.
+    expect(env.kv.puts.map((put) => put.key.split(':')[0])).toEqual(['ip']);
+    const warnings = vi.mocked(console.warn).mock.calls;
+    expect(warnings).toEqual([['rate counter write failed']]);
+    expect(JSON.stringify(warnings)).not.toContain('203.0.113.7');
+  });
+
+  it('allows the request when no counter can be written, and still counts nothing it could not save', async () => {
+    const env = makeEnv();
+    env.kv.failPutFor = () => true;
+    const fetchFn = mockFetch();
+    const res = await handleRequest(chatRequest(validBody()), env, fetchFn);
+    expect(res.status).toBe(200);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(console.warn).mock.calls.filter(([message]) => message === 'rate counter write failed')).toHaveLength(1);
+  });
+
+  it('fails closed (503) when a counter cannot be READ, even though writes would work: no upstream call', async () => {
+    const env = makeEnv();
+    env.kv.failGet = true;
+    const fetchFn = mockFetch();
     const res = await handleRequest(chatRequest(validBody()), env, fetchFn);
     expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: 'service_unavailable' });
     expect(fetchFn).not.toHaveBeenCalled();
-    expect(env.kv.puts.filter((put) => put.key.startsWith('ip:'))).toHaveLength(0);
-
-    const env2 = makeEnv();
-    await handleRequest(chatRequest(validBody()), env2, mockFetch());
-    expect(env2.kv.puts.map((put) => put.key.split(':')[0])).toEqual(['total', 'ip']);
+    expect(env.kv.puts).toHaveLength(0);
   });
 
   it('fails closed (503) when the counter store is unavailable', async () => {
