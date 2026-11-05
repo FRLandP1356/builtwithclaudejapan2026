@@ -138,7 +138,7 @@ export function seriesPoints(input: SeriesPointsInput): SeriesPoints {
   const officialPts: Point[] = [];
   const estimatePts: Point[] = [];
   const baselinePts: Point[] = [];
-  let differs = false;
+  let differs = false; // the reference line is data-based: it stays only while the numbers differ from the estimate
   years.forEach((y, i) => {
     if (y <= OFFICIAL_END_YEAR && official[y] !== undefined) officialPts.push({ year: y, value: official[y] });
     if (y >= OFFICIAL_END_YEAR) {
@@ -205,6 +205,8 @@ const TOP = 32;
 const BOTTOM = 46;
 const RIGHT = 74;
 const X_TICKS = [2020, 2040, 2060, 2080, 2100];
+/** The chart's frame in SVG units: the plot runs from `top` down to `height - bottom`, which is where the 0 gridline sits. */
+export const SERIES_VIEW = { width: W, height: H, top: TOP, bottom: BOTTOM } as const;
 const FIRST_YEAR = 2020;
 const LAST_YEAR = 2100;
 

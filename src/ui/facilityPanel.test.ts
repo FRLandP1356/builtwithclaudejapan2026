@@ -8,6 +8,7 @@ import { DEFAULT_SCENARIO, type Facility } from '../engine/types';
 import {
   evaluateFacilities,
   facilityNotes,
+  GUIDE_LEAD,
   guideText,
   INFRA_NOTE,
   METRO_NOTE,
@@ -154,6 +155,7 @@ describe('facilityNotes', () => {
 describe('fixed sentences', () => {
   test('are the agreed wording', () => {
     expect(PERMANENT_NOTE).toBe('国土交通省の表（2009〜2012年の統計、三大都市圏を除く）にもとづく人口の目安です。施設の閉鎖を予測するものではありません。');
+    expect(GUIDE_LEAD).toBe('人口の目安は、その施設がある自治体の割合が50%、80%になる人口規模です。');
     expect(METRO_NOTE).toBe('この町は三大都市圏にあるため、表の対象外です。参考として表示します。');
     expect(INFRA_NOTE).toBe('インフラ連動の過疎の加速（仮定）が有効です。施設が目安を下回ると転出が増える前提で計算しています。');
   });

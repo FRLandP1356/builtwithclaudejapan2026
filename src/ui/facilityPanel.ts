@@ -14,7 +14,7 @@ import { ESTIMATE_BADGE, ESTIMATE_NOTE } from './sources';
 export const PERMANENT_NOTE = '国土交通省の表（2009〜2012年の統計、三大都市圏を除く）にもとづく人口の目安です。施設の閉鎖を予測するものではありません。';
 export const METRO_NOTE = 'この町は三大都市圏にあるため、表の対象外です。参考として表示します。';
 export const INFRA_NOTE = 'インフラ連動の過疎の加速（仮定）が有効です。施設が目安を下回ると転出が増える前提で計算しています。';
-export const GUIDE_LEAD = '人口の目安は、その施設がある自治体が半分（50%）になる人口と、8割（80%）になる人口です。';
+export const GUIDE_LEAD = '人口の目安は、その施設がある自治体の割合が50%、80%になる人口規模です。';
 
 export interface StatusView {
   label: string;

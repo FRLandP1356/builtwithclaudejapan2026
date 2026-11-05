@@ -13,9 +13,6 @@
 .town-hint {
   margin-top: var(--sp-3);
 }
-.town .panel-section:first-of-type {
-  margin-top: var(--sp-4);
-}
 /* Always two by two: four tiles never wrap three and one in the wider column. */
 .town .kpi-row {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -171,7 +168,15 @@
   font-size: var(--fs-15);
   cursor: pointer;
 }
-/* The disclosure mark is drawn with borders (no arrow characters). */
+/* The disclosure mark is drawn with borders (no arrow characters); the native marker is switched off in every engine. */
+.chart-table > summary,
+.facility-others > summary {
+  list-style: none;
+}
+.chart-table > summary::-webkit-details-marker,
+.facility-others > summary::-webkit-details-marker {
+  display: none;
+}
 .chart-table > summary::before,
 .facility-others > summary::before {
   content: '';

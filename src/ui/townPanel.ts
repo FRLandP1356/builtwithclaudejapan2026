@@ -149,11 +149,15 @@ function rowFor(t: Totals, scope: TownScope): Float64Array | undefined {
 // The panel
 // ---------------------------------------------------------------------------------------------------------------
 
+const mounted = new WeakMap<HTMLElement, () => void>();
+
 /**
  * Fill `el` (the #panel-town section, which already holds its h2.panel-title) with the town panel and keep it in step
  * with the store. Returns the teardown: it unsubscribes and removes everything this function added.
  */
 export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
+  // A second mount into the same element replaces the first one (its subscription and DOM go first) instead of duplicating the UI.
+  mounted.get(el)?.();
   const { store, data, runner } = ctx;
   const areaByCode = new Map(data.areas.map((a) => [a.code, a] as const));
   const title = el.querySelector<HTMLElement>('.panel-title');
@@ -211,11 +215,13 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
   let officialRow: Record<number, number> = {};
   let seriesInput: Omit<SeriesPointsInput, 'year'> | undefined;
   const popCache = new Map<string, Pop>();
+  const axisCache = new Map<string, number>();
   let popCacheSeries: Map<string, Series> | undefined;
 
   function popAt(series: Map<string, Series>, sc: TownScope, year: number): Pop {
     if (popCacheSeries !== series) {
       popCache.clear();
+      axisCache.clear();
       popCacheSeries = series;
     }
     const key = `${sc.key}:${year}`;
@@ -228,6 +234,20 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
     const pop = slices.length === 1 ? slices[0][year] : sumSeries(slices)[year];
     popCache.set(key, pop);
     return pop;
+  }
+
+  /** Ruling 29: the pyramid axis is the largest single age-class value (either sex) over every year, for this place and series. */
+  function axisMaxFor(series: Map<string, Series>, sc: TownScope, years: readonly number[]): number {
+    popAt(series, sc, years[0]); // drops the caches first when the series changed
+    const hit = axisCache.get(sc.key);
+    if (hit !== undefined) return hit;
+    let max = 0;
+    for (const y of years) {
+      const p = popAt(series, sc, y);
+      max = Math.max(max, ...p.M, ...p.F);
+    }
+    axisCache.set(sc.key, max);
+    return max;
   }
 
   function officialTotals(codes: string[]): Record<number, number> {
@@ -291,11 +311,13 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
     basis.className = b.estimate ? 'badge-estimate' : 'badge-official';
     basis.textContent = b.text;
     pyramidHeading.set(`${s.year}年の年齢別の人口`, estimate);
-    pyramid.update({ pop, year: s.year, place: sc.name });
+    pyramid.update({ pop, year: s.year, place: sc.name, axisMax: axisMaxFor(s.series, sc, totals.years) });
 
     // The line chart: redraw when the place or the scenario changed, otherwise only move the marker.
     let redraw = false;
     if (selChanged || seriesChanged || !seriesInput) {
+      // The reference line is data-based: seriesPoints keeps it only if the default scenario's numbers differ from the
+      // current ones for this place, so a scenario that changes nothing here shows no second line.
       const baseRow = rowFor(deriveTotals(runner.run(DEFAULT_SCENARIO), data.groups), sc);
       seriesInput = { years: totals.years, official: officialRow, estimate: row, baseline: baseRow };
       redraw = true;
@@ -323,7 +345,8 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
     render(s, prev);
   });
 
-  return () => {
+  const teardown = () => {
+    if (mounted.get(el) === teardown) mounted.delete(el);
     unsubscribe();
     pyramid.destroy();
     chart.destroy();
@@ -334,4 +357,6 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
     }
     root.remove();
   };
+  mounted.set(el, teardown);
+  return teardown;
 }

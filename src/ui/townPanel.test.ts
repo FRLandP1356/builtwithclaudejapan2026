@@ -5,12 +5,14 @@ import { byCode, loadAllAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
 import { repoPath } from '../../test/helpers/paths';
 import type { AppData } from '../data/loader';
-import { createRunner } from '../data/runner';
+import { createRunner, type Runner } from '../data/runner';
 import { total } from '../engine/aggregate';
-import { DEFAULT_SCENARIO, type Groups } from '../engine/types';
+import { DEFAULT_SCENARIO, type Area, type Groups, type Scenario } from '../engine/types';
 import { deriveTotals } from './derive';
+import { evaluateFacilities, PERMANENT_NOTE, summaryLine } from './facilityPanel';
 import { formatPct, formatPop } from './format';
-import { PERMANENT_NOTE } from './facilityPanel';
+import { PYRAMID_HALF_WIDTH, pyramidScale } from './pyramid';
+import { formatAxisCount, SERIES_VIEW } from './seriesChart';
 import { createAppStore, type Store } from './state';
 import { ageShares, mountTownPanel } from './townPanel';
 
@@ -28,15 +30,20 @@ const tanabe = byCode(areas, '30206');
 
 let mounted: { section: HTMLElement; teardown: () => void } | undefined;
 
-function setup(initial: Parameters<typeof createAppStore>[2] = {}, wrap?: (s: Store) => Store) {
-  const baseStore = createAppStore(runner, data, initial);
+interface World {
+  data: AppData;
+  runner: Runner;
+}
+
+function setup(initial: Parameters<typeof createAppStore>[2] = {}, wrap?: (s: Store) => Store, world: World = { data, runner }) {
+  const baseStore = createAppStore(world.runner, world.data, initial);
   const store = wrap ? wrap(baseStore) : baseStore;
   const section = document.createElement('section');
   section.className = 'panel';
   section.id = 'panel-town';
   section.innerHTML = '<h2 class="panel-title" id="panel-town-title">町の詳細</h2>';
   document.body.append(section);
-  const teardown = mountTownPanel(section, { store, data, runner });
+  const teardown = mountTownPanel(section, { store, data: world.data, runner: world.runner });
   mounted = { section, teardown };
   const q = <T extends Element>(sel: string) => section.querySelector<T>(sel);
   const kpis = () => [...section.querySelectorAll('.kpi')].map((k) => k.textContent!.replace(/\s+/g, ' ').trim());
@@ -273,3 +280,358 @@ describe('mountTownPanel: teardown', () => {
     mounted = undefined;
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fix round 1: behaviours that no test used to pin down
+// ---------------------------------------------------------------------------------------------------------------
+
+const people = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 0 });
+const fmt = (n: number) => people.format(Math.round(n));
+
+/** Rows of the chart's data table: year -> [official, estimate, baseline?] cell texts. */
+function chartRows(section: HTMLElement): Map<number, string[]> {
+  const rows = new Map<number, string[]>();
+  for (const tr of section.querySelectorAll('.series-figure tbody tr')) {
+    const year = Number(tr.querySelector('th')!.textContent!.replace('年', ''));
+    rows.set(year, [...tr.querySelectorAll('td')].map((td) => td.textContent!));
+  }
+  return rows;
+}
+
+/** Cells of the pyramid's footer: [合計, 男, 女, 計]. */
+const pyramidFoot = (section: HTMLElement) => [...section.querySelectorAll('.pyramid-figure tfoot td')].map((td) => td.textContent!);
+const barWidths = (section: HTMLElement, sex: 'm' | 'f') => [...section.querySelectorAll(`path.pyr-bar.pyr-${sex}`)].map((p) => Number(p.getAttribute('data-w')));
+const tile = (section: HTMLElement, i: number) => section.querySelectorAll('.kpi')[i].querySelector('.kpi-value')!.textContent!;
+
+const sumOver = (list: Area[], f: (a: Area) => number) => list.reduce((s, a) => s + f(a), 0);
+
+describe('the official line, through the panel', () => {
+  test('a town: the 2020 census total and the official 2050 total, next to this app\'s estimate', () => {
+    const { section } = setup({ selectedArea: '30206' });
+    const rows = chartRows(section);
+    expect(rows.get(2020)![0]).toBe(fmt(total(tanabe.base)));
+    expect(rows.get(2020)![0]).toBe('69,870');
+    expect(rows.get(2050)![0]).toBe('42,309'); // official workbook value
+    expect(rows.get(2050)![1]).toBe('42,311'); // engine output (Ruling 15)
+    expect(rows.get(2025)![0]).toBe(fmt(tanabe.official[2025]));
+    expect(rows.get(2025)![1]).toBe('－'); // the estimate line starts at 2050
+    expect(rows.get(2100)![0]).toBe('－');
+  });
+
+  test('a prefecture sums every area of it, villages (no age assumptions) included', () => {
+    const tokyo = areas.filter((a) => a.prefCode === '13');
+    expect(tokyo.some((a) => a.assumptions === null)).toBe(true); // the villages are in the sum
+    const { section, store } = setup();
+    store.set({ selectedPref: '13' });
+    const rows = chartRows(section);
+    expect(rows.get(2050)![0]).toBe(fmt(sumOver(tokyo, (a) => a.official[2050])));
+    expect(rows.get(2050)![0]).toBe('14,399,144');
+    expect(rows.get(2020)![0]).toBe(fmt(sumOver(tokyo, (a) => total(a.base))));
+    expect(rows.get(2030)![0]).toBe(fmt(sumOver(tokyo, (a) => a.official[2030])));
+  });
+
+  test('Japan sums all 1,884 areas', () => {
+    const { section } = setup();
+    const rows = chartRows(section);
+    expect(areas).toHaveLength(1884);
+    expect(rows.get(2020)![0]).toBe(fmt(sumOver(areas, (a) => total(a.base))));
+    expect(rows.get(2020)![0]).toBe('126,146,099');
+    expect(rows.get(2050)![0]).toBe(fmt(sumOver(areas, (a) => a.official[2050])));
+    expect(rows.get(2050)![0]).toBe('104,686,386');
+  });
+
+  test('a group that lists a code the data does not have skips it instead of stopping or failing', () => {
+    const w = syntheticWorld();
+    const { section, store } = setup({ year: 2020 }, undefined, w);
+    store.set({ selectedPref: '99' }); // groups.prefs['99'] = ['99999' (unknown), '99001', '99002']
+    const rows = chartRows(section);
+    expect(rows.get(2020)![0]).toBe(fmt(499.6 + 2499.6));
+    expect(rows.get(2050)![0]).toBe(fmt(499.6 + 2499.6));
+    expect(tile(section, 0)).toBe('2,999人'); // formatPop(2999.2), the 2020 census total of the two towns
+    expect(pyramidFoot(section)[3]).toBe('2,999');
+  });
+});
+
+describe('key tiles carry the right shares', () => {
+  test('田辺市: 65+ and 0-14 shares in 2050 and 2100', () => {
+    const { section, store } = setup({ selectedArea: '30206', year: 2050 });
+    expect(tile(section, 2)).toBe('48.8%');
+    expect(tile(section, 3)).toBe('8.0%');
+    store.set({ year: 2100 });
+    expect(tile(section, 2)).toBe('51.6%');
+    expect(tile(section, 3)).toBe('7.2%');
+    const labels = [...section.querySelectorAll('.kpi-label')].map((e) => e.textContent);
+    expect(labels[2]).toBe('65歳以上の割合');
+    expect(labels[3]).toBe('0〜14歳の割合');
+  });
+
+  test('0-14 means the first three classes (0-4, 5-9, 10-14), 65+ means class 13 and above', () => {
+    const { section } = setup({ selectedArea: '30206', year: 2020 });
+    const p = tanabe.base;
+    const all = total(p);
+    const child = [0, 1, 2].reduce((s, i) => s + p.M[i] + p.F[i], 0);
+    const elderly = Array.from({ length: 7 }, (_, k) => k + 13).reduce((s, i) => s + p.M[i] + p.F[i], 0);
+    expect(tile(section, 3)).toBe(`${((child / all) * 100).toFixed(1)}%`);
+    expect(tile(section, 2)).toBe(`${((elderly / all) * 100).toFixed(1)}%`);
+    expect(tile(section, 3)).not.toBe(`${(([0, 1].reduce((s, i) => s + p.M[i] + p.F[i], 0) / all) * 100).toFixed(1)}%`);
+  });
+});
+
+describe('the facility panel is judged on the unrounded population', () => {
+  test('499.6 people are below a guide of 500 and 2,499.6 are at the edge of 2,500, not above it', () => {
+    const w = syntheticWorld();
+    const a = setup({ selectedArea: '99001', year: 2020 }, undefined, w);
+    expect(a.q('tr[data-facility-id="grocery"] .tag')!.textContent).toBe('人口の目安を下回る'); // 500 if rounded: ok
+    expect(a.q('.facility-summary')!.textContent).toBe(summaryLine(evaluateFacilities(499.6, w.data.facilities).belowCount, 48));
+    expect(evaluateFacilities(500, w.data.facilities).belowCount).not.toBe(evaluateFacilities(499.6, w.data.facilities).belowCount);
+    a.teardown();
+    mounted = undefined;
+    document.body.replaceChildren();
+
+    const b = setup({ selectedArea: '99002', year: 2020 }, undefined, w);
+    expect(b.q('tr[data-facility-id="stationery_books"] .tag')!.textContent).toBe('境目'); // 2,500 if rounded: ok
+  });
+});
+
+describe('DOM order of the facility panel', () => {
+  test('the essential table comes before the collapsed group, which comes before the permanent note', () => {
+    const { q } = setup({ selectedArea: '30206' });
+    const essential = q('.town-facilities > .table-wrap')!;
+    const others = q('.town-facilities > details.facility-others')!;
+    const note = q('.town-facilities > .facility-note')!;
+    expect(essential.compareDocumentPosition(others) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(others.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(essential.querySelectorAll('tr[data-facility-id]')).toHaveLength(8);
+    expect(others.contains(essential)).toBe(false);
+  });
+});
+
+describe('numbers follow a scenario change and come back', () => {
+  const alt: Scenario = { ...DEFAULT_SCENARIO, cwrMult: 1.2 };
+  const japan2100 = (s: Scenario) => {
+    const series = runner.run(s);
+    return [...series.values()].reduce((sum, ser) => sum + total(ser[2100]), 0);
+  };
+
+  test('Japan 2100: tile, pyramid and chart show the new total, then the old one again', () => {
+    const { section, store } = setup({ year: 2100 });
+    expect(pyramidFoot(section)[3]).toBe('63,279,524');
+    expect(tile(section, 0)).toBe('6,328万人');
+    expect(chartRows(section).get(2100)![1]).toBe('63,279,524');
+
+    store.set({ scenario: alt });
+    expect(fmt(japan2100(alt))).toBe('70,933,736');
+    expect(pyramidFoot(section)[3]).toBe('70,933,736');
+    expect(tile(section, 0)).toBe('7,093万人');
+    expect(chartRows(section).get(2100)![1]).toBe('70,933,736');
+    expect(chartRows(section).get(2100)![2]).toBe('63,279,524'); // the default-scenario column
+
+    store.set({ scenario: DEFAULT_SCENARIO });
+    expect(pyramidFoot(section)[3]).toBe(fmt(japan2100(DEFAULT_SCENARIO)));
+    expect(pyramidFoot(section)[3]).toBe('63,279,524');
+    expect(tile(section, 0)).toBe('6,328万人');
+  });
+
+  test('a town changes too, and its pyramid bars with it', () => {
+    const { section, store } = setup({ selectedArea: '30206', year: 2100 });
+    const before = barWidths(section, 'f');
+    store.set({ scenario: alt });
+    const after = barWidths(section, 'f');
+    expect(after).not.toEqual(before);
+    const p = runner.run(alt).get('30206')![2100];
+    expect(pyramidFoot(section)[3]).toBe(fmt(total(p)));
+  });
+});
+
+describe('pyramid, through the panel', () => {
+  test('rows and footer are the projected population of the selected year (田辺市 2050 = 42,311)', () => {
+    const { section } = setup({ selectedArea: '30206', year: 2050 });
+    const p = runner.run(DEFAULT_SCENARIO).get('30206')![2050];
+    const rows = [...section.querySelectorAll('.pyramid-figure tbody tr')].map((tr) => [...tr.querySelectorAll('th, td')].map((c) => c.textContent));
+    expect(rows).toHaveLength(20);
+    rows.forEach((r, i) => {
+      expect(r.slice(1)).toEqual([fmt(p.M[i]), fmt(p.F[i]), fmt(p.M[i] + p.F[i])]);
+    });
+    const male = p.M.reduce((s, v) => s + v, 0);
+    const female = p.F.reduce((s, v) => s + v, 0);
+    expect(pyramidFoot(section)).toEqual(['合計', fmt(male), fmt(female), fmt(male + female)]);
+    expect(pyramidFoot(section)[3]).toBe('42,311');
+    expect(male + female).toBeCloseTo(total(p), 6);
+  });
+});
+
+describe('the pyramid axis is fixed over all years (Ruling 29)', () => {
+  const series = runner.run(DEFAULT_SCENARIO);
+  const tanabeSeries = series.get('30206')!;
+  const YEARS = Array.from({ length: 17 }, (_, i) => 2020 + 5 * i);
+  const peakOf = (y: number) => Math.max(...tanabeSeries[y].M, ...tanabeSeries[y].F);
+  const axisMax = pyramidScale(Math.max(...YEARS.map(peakOf))).max;
+
+  test('every bar in every year is value / axis maximum of the half width, for both sexes', () => {
+    const { section, store } = setup({ selectedArea: '30206', year: 2020 });
+    for (const y of [2020, 2050, 2100]) {
+      store.set({ year: y });
+      const wm = barWidths(section, 'm');
+      const wf = barWidths(section, 'f');
+      for (let i = 0; i < 20; i++) {
+        expect(wm[i]).toBeCloseTo((tanabeSeries[y].M[i] / axisMax) * PYRAMID_HALF_WIDTH, 2);
+        expect(wf[i]).toBeCloseTo((tanabeSeries[y].F[i] / axisMax) * PYRAMID_HALF_WIDTH, 2);
+      }
+    }
+  });
+
+  test('stepping from 2020 to 2100 shrinks a bar exactly like its value (田辺市 2100 uses about a quarter of the width)', () => {
+    const { section, store } = setup({ selectedArea: '30206', year: 2020 });
+    const w2020 = barWidths(section, 'f');
+    const ticks2020 = [...section.querySelectorAll('.pyramid-svg .pyr-axis text')].map((t) => t.textContent);
+    store.set({ year: 2100 });
+    const w2100 = barWidths(section, 'f');
+    const ticks2100 = [...section.querySelectorAll('.pyramid-svg .pyr-axis text')].map((t) => t.textContent);
+    expect(ticks2100).toEqual(ticks2020);
+    for (const i of [4, 9, 14, 16]) {
+      expect(w2100[i] / w2020[i]).toBeCloseTo(tanabeSeries[2100].F[i] / tanabeSeries[2020].F[i], 3);
+    }
+    const widest2100 = Math.max(...w2100, ...barWidths(section, 'm'));
+    expect(widest2100 / PYRAMID_HALF_WIDTH).toBeGreaterThan(0.15);
+    expect(widest2100 / PYRAMID_HALF_WIDTH).toBeLessThan(0.35);
+  });
+
+  test('the axis comes from both sexes: the widest bar (a female one) fits inside the half', () => {
+    const { section, store } = setup({ selectedArea: '30206', year: 2020 });
+    const peakM = Math.max(...YEARS.flatMap((y) => tanabeSeries[y].M));
+    const peakF = Math.max(...YEARS.flatMap((y) => tanabeSeries[y].F));
+    expect(peakF).toBeGreaterThan(peakM); // the case where a male-only axis would overflow
+    for (const y of YEARS) {
+      store.set({ year: y });
+      for (const w of [...barWidths(section, 'm'), ...barWidths(section, 'f')]) expect(w).toBeLessThanOrEqual(PYRAMID_HALF_WIDTH + 1e-6);
+    }
+  });
+
+  test('a new scenario recomputes the axis of the same place (千代田区 grows, so its axis widens)', () => {
+    const alt: Scenario = { ...DEFAULT_SCENARIO, cwrMult: 1.4, migScale: 1.5 };
+    const peakOver = (s: Scenario) => Math.max(...YEARS.flatMap((y) => [...runner.run(s).get('13101')![y].M, ...runner.run(s).get('13101')![y].F]));
+    const axisDefault = pyramidScale(peakOver(DEFAULT_SCENARIO)).max;
+    const axisAlt = pyramidScale(peakOver(alt)).max;
+    expect(axisAlt).toBeGreaterThan(axisDefault); // 4,000 -> 7,500 people per age class
+    const { section, store } = setup({ selectedArea: '13101', year: 2100 });
+    const p = (s: Scenario) => runner.run(s).get('13101')![2100];
+    expect(barWidths(section, 'f')[14]).toBeCloseTo((p(DEFAULT_SCENARIO).F[14] / axisDefault) * PYRAMID_HALF_WIDTH, 2);
+    store.set({ scenario: alt });
+    expect(barWidths(section, 'f')[14]).toBeCloseTo((p(alt).F[14] / axisAlt) * PYRAMID_HALF_WIDTH, 2);
+    for (const w of [...barWidths(section, 'm'), ...barWidths(section, 'f')]) expect(w).toBeLessThanOrEqual(PYRAMID_HALF_WIDTH + 1e-6);
+    store.set({ scenario: DEFAULT_SCENARIO });
+    expect(barWidths(section, 'f')[14]).toBeCloseTo((p(DEFAULT_SCENARIO).F[14] / axisDefault) * PYRAMID_HALF_WIDTH, 2);
+  });
+
+  test('the axis is per place: a new selection gets its own', () => {
+    const { section, store } = setup({ selectedArea: '30206', year: 2020 });
+    const widest = () => Math.max(...barWidths(section, 'm'), ...barWidths(section, 'f'));
+    const w0 = widest();
+    store.set({ selectedArea: '30201' }); // 和歌山市
+    const axisWakayama = pyramidScale(Math.max(...YEARS.flatMap((y) => [...series.get('30201')![y].M, ...series.get('30201')![y].F]))).max;
+    const peak2020 = Math.max(...series.get('30201')![2020].M, ...series.get('30201')![2020].F);
+    expect(widest()).toBeCloseTo((peak2020 / axisWakayama) * PYRAMID_HALF_WIDTH, 2);
+    expect(widest()).not.toBeCloseTo(w0, 2);
+  });
+});
+
+describe('the line chart maps values from zero', () => {
+  test('the zero gridline is the bottom; points sit at value / maximum of the way up; the marker dot lies on the line', () => {
+    const { section, q, store } = setup({ selectedArea: '30206', year: 2050 });
+    const svg = q('.series-svg')!;
+    const grid = [...svg.querySelectorAll('line.chart-grid')].map((l) => Number(l.getAttribute('y1')));
+    const y0 = grid[0];
+    const yTop = grid[grid.length - 1];
+    expect([...svg.querySelectorAll('.chart-tick')][0].textContent).toBe('0');
+    // absolute frame: the 0 gridline is the bottom of the plot and the top gridline is its top
+    expect(y0).toBe(SERIES_VIEW.height - SERIES_VIEW.bottom);
+    expect(yTop).toBe(SERIES_VIEW.top);
+    expect(grid).toEqual([...grid].sort((a, b) => b - a)); // 0 at the bottom, ticks rise
+    const pts = (cls: string) => (svg.querySelector(`path.${cls}`)!.getAttribute('d')!.match(/-?\d+(\.\d+)?,-?\d+(\.\d+)?/g) ?? []).map((s) => s.split(',').map(Number));
+    const official = pts('line-official'); // 2020, 2025 ... 2050
+    const values = [total(tanabe.base), ...[2025, 2030, 2035, 2040, 2045, 2050].map((y) => tanabe.official[y as 2025])];
+    expect(official).toHaveLength(7);
+    const up = (y: number) => y0 - y;
+    values.forEach((v, i) => expect(up(official[i][1]) / up(official[0][1])).toBeCloseTo(v / values[0], 3));
+    expect(yTop).toBeLessThan(Math.min(...official.map((p) => p[1])));
+    // the top gridline is a clean number at or above the highest plotted value, and its label says so
+    const implied = (values[0] * (y0 - yTop)) / up(official[0][1]);
+    expect(implied).toBeGreaterThanOrEqual(Math.max(...values) - 1);
+    expect(implied).toBeLessThan(Math.max(...values) * 1.6);
+    const yLabels = [...svg.querySelectorAll('.chart-tick')].slice(0, grid.length).map((t) => t.textContent);
+    expect(yLabels[yLabels.length - 1]).toBe(formatAxisCount(Math.round(implied)));
+    // the marker dot is on the line at the selected year
+    const dot = svg.querySelector('circle.dot-marker')!;
+    expect(Number(dot.getAttribute('cy'))).toBeCloseTo(official[6][1], 1); // the path is printed to 0.1
+    store.set({ year: 2020 });
+    expect(Number(svg.querySelector('circle.dot-marker')!.getAttribute('cy'))).toBeCloseTo(official[0][1], 1);
+    void section;
+  });
+});
+
+describe('a second mount into the same element replaces the first', () => {
+  test('one subscription, one panel; the first teardown cannot harm the second mount', () => {
+    let live = 0;
+    const base = createAppStore(runner, data, { selectedArea: '30206' });
+    const counting: Store = {
+      get: base.get,
+      set: base.set,
+      subscribe(fn) {
+        live++;
+        const off = base.subscribe(fn);
+        let on = true;
+        return () => {
+          if (on) live--; // like the real store, unsubscribing twice is harmless
+          on = false;
+          off();
+        };
+      },
+    };
+    const section = document.createElement('section');
+    section.innerHTML = '<h2 class="panel-title">町の詳細</h2>';
+    document.body.append(section);
+    const first = mountTownPanel(section, { store: counting, data, runner });
+    expect(live).toBe(1);
+    const second = mountTownPanel(section, { store: counting, data, runner });
+    expect(live).toBe(1);
+    expect(section.querySelectorAll('.town')).toHaveLength(1);
+    expect(section.querySelectorAll('.series-svg')).toHaveLength(1);
+    base.set({ year: 2100 });
+    expect(section.querySelector('.kpi-label')!.textContent).toBe('2100年の人口');
+    first(); // a stale handle
+    expect(section.querySelectorAll('.town')).toHaveLength(1);
+    expect(live).toBe(1);
+    second();
+    expect(live).toBe(0);
+    expect(section.querySelector('.town')).toBeNull();
+  });
+});
+
+/**
+ * The real data plus a prefecture 99 with two made-up towns of exactly 499.6 and 2,499.6 people in 2020 (all men aged
+ * 40-44, so the 2020 population is the census base as is) and a group that also lists a code with no data. The
+ * made-up prefecture has no villages, so no real result changes.
+ */
+function syntheticWorld(): World {
+  const zeros = () => new Array<number>(20).fill(0);
+  const make = (code: string, name: string, people: number): Area => {
+    const M = zeros();
+    M[8] = people;
+    return {
+      ...tanabe,
+      code,
+      name,
+      prefCode: '99',
+      prefName: 'テスト県',
+      base: { M, F: zeros() },
+      official: { 2025: people, 2030: people, 2035: people, 2040: people, 2045: people, 2050: people },
+    };
+  };
+  const syn: AppData = {
+    ...data,
+    areas: [...areas, make('99001', 'テスト町', 499.6), make('99002', 'テスト村', 2499.6)],
+    groups: { cities: groups.cities, prefs: { ...groups.prefs, '99': ['99999', '99001', '99002'] } },
+    prefNames: new Map([...data.prefNames, ['99', 'テスト県']]),
+  };
+  return { data: syn, runner: createRunner(syn) };
+}

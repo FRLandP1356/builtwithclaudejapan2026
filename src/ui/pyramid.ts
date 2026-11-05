@@ -23,7 +23,7 @@ export function pyramidBars(p: Pop): PyramidRow[] {
   return AGE_LABELS.map((age, i) => ({ age, male: p.M[i], female: p.F[i] }));
 }
 
-/** The axis of one half: 0 up to a clean number at or above the larger of the two sexes in any age class. */
+/** The axis of one half: 0 up to a clean number at or above `maxPerClass`, the largest value of either sex in any age class. */
 export function pyramidScale(maxPerClass: number): NiceScale {
   return niceScale(maxPerClass, 3);
 }
@@ -35,6 +35,12 @@ export function pyramidScale(maxPerClass: number): NiceScale {
 export interface PyramidInput {
   pop: Pop;
   year: number;
+  /**
+   * The largest single age-class value (either sex) over ALL years for this place and scenario (Ruling 29). The axis is
+   * the same for every year so that stepping through the years makes the bars shrink or grow. It must be at least the
+   * largest value of `pop`; a smaller axis draws bars that run past the plot.
+   */
+  axisMax: number;
   /** Used in the accessible name: 「田辺市」. */
   place: string;
 }
@@ -54,6 +60,8 @@ const LABEL_ROWS = new Set([0, 4, 8, 12, 16, 19]); // age labels at 0, 20, 40, 6
 const PLOT_H = ROW * 20;
 const H = TOP + PLOT_H + 24;
 const LEFT = Math.ceil(Math.max(...AGE_LABELS.filter((_, i) => LABEL_ROWS.has(i)).map(textWidth))) + 12;
+/** Width of one half of the plot in SVG units: a bar that reaches the axis maximum is this long. */
+export const PYRAMID_HALF_WIDTH = (W - LEFT - RIGHT) / 2;
 
 const num = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 0 });
 
@@ -72,7 +80,7 @@ export function mountPyramid(host: HTMLElement): PyramidView {
   fig.className = 'chart-figure pyramid-figure';
   const svg = svgEl('svg', { class: 'chart pyramid-svg', viewBox: `0 0 ${W} ${H}`, role: 'img', focusable: 'false' });
 
-  const half = (W - LEFT - RIGHT) / 2;
+  const half = PYRAMID_HALF_WIDTH;
   const cx = LEFT + half; // centre line
   const mx = cx - GAP; // male bars end here and grow left
   const fx = cx + GAP; // female bars start here and grow right
@@ -104,7 +112,7 @@ export function mountPyramid(host: HTMLElement): PyramidView {
 
   const legend = document.createElement('p');
   legend.className = 'note pyramid-note';
-  legend.replaceChildren(...phraseNodes('横軸は各年齢の人数（人）です。目盛りは選んだ年に合わせて変わるので、人数ではなく年齢の形を見る図です。'));
+  legend.replaceChildren(...phraseNodes('横軸は各年齢の人数（人）で、2020〜2100年を通じて同じ幅です。年を動かすと、人数の増減に応じて棒の長さが変わります。'));
 
   const details = document.createElement('details');
   details.className = 'chart-table';
@@ -168,10 +176,9 @@ export function mountPyramid(host: HTMLElement): PyramidView {
   }
 
   return {
-    update({ pop, year, place }) {
+    update({ pop, year, place, axisMax }) {
       const bars = pyramidBars(pop);
-      const peak = Math.max(...bars.map((b) => Math.max(b.male, b.female)));
-      const scale = pyramidScale(peak);
+      const scale = pyramidScale(axisMax);
       if (scale.max !== lastMax) {
         drawAxis(scale);
         lastMax = scale.max;
@@ -180,8 +187,12 @@ export function mountPyramid(host: HTMLElement): PyramidView {
       let totalF = 0;
       bars.forEach((b, i) => {
         const r = rowEls[i];
-        r.m.setAttribute('d', barPath('m', mx, r.y, (b.male / scale.max) * half));
-        r.f.setAttribute('d', barPath('f', fx, r.y, (b.female / scale.max) * half));
+        const wm = (b.male / scale.max) * half;
+        const wf = (b.female / scale.max) * half;
+        r.m.setAttribute('d', barPath('m', mx, r.y, wm));
+        r.f.setAttribute('d', barPath('f', fx, r.y, wf));
+        r.m.setAttribute('data-w', wm.toFixed(3)); // the bar length in SVG units, also what the tests read
+        r.f.setAttribute('data-w', wf.toFixed(3));
         r.tip.textContent = `${b.age}：男 ${num.format(Math.round(b.male))}人、女 ${num.format(Math.round(b.female))}人`;
         cells[i].m.textContent = num.format(Math.round(b.male));
         cells[i].f.textContent = num.format(Math.round(b.female));
