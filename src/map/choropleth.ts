@@ -80,7 +80,6 @@ export interface Choropleth {
   setRings(gained: Iterable<string>, lost: Iterable<string>): void;
   /** Place count markers on areas (an empty list removes them). */
   setMarkers(markers: readonly MapMarker[]): void;
-  focusArea(code: string): void;
   /** The one area that can be reached with Tab (tabindex 0). */
   tabStop(): string | undefined;
   /** Drop the hover state and hide the tooltip (call when the map is hidden or replaced). */
@@ -645,9 +644,6 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
       }
       placeMarkers();
       gMarkers.replaceChildren(...markerNodes.map((m) => m.g));
-    },
-    focusArea(code) {
-      pathByCode.get(code)?.focus({ preventScroll: true });
     },
     tabStop: () => tabStop,
     clearHover,
