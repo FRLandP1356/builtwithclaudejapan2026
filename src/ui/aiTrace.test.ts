@@ -5,6 +5,7 @@ import {
   allocationOffers,
   compactJson,
   describeScenario,
+  MAX_VALUE_CHARS,
   makePlaceNames,
   mapTargets,
   prettyJsonView,
@@ -232,6 +233,79 @@ describe('describeScenario', () => {
 
   it('rounds only what is safe to round (four significant digits)', () => {
     expect(describeScenario({ ...base, cwrMult: 1.23456 })).toBe('子どもの数の倍率 1.235');
+  });
+
+  describe('values from the model are short and safe to show', () => {
+    const hostile = (patch: Record<string, unknown>): string => describeScenario({ ...base, ...patch } as never);
+    const NOT_A_NUMBER = '（数ではない値）';
+
+    it('cuts a long value at 24 characters, the last being 「…」, and leaves a 24-character one whole', () => {
+      expect(MAX_VALUE_CHARS).toBe(24);
+      expect(hostile({ cwrMult: 'x'.repeat(24) })).toBe(`子どもの数の倍率 ${'x'.repeat(24)}`);
+      expect(hostile({ cwrMult: 'x'.repeat(25) })).toBe(`子どもの数の倍率 ${'x'.repeat(23)}…`);
+      expect(hostile({ migMode: 'あ'.repeat(500) })).toBe(`人口の移動 ${'あ'.repeat(23)}…`);
+      expect(hostile({ migScale: 'y'.repeat(100_000) })).toBe(`移動の強さ ${'y'.repeat(23)}…`);
+      expect(hostile({ infraStrength: 'z'.repeat(30) })).toBe(`施設の影響 ${'z'.repeat(23)}…`);
+    });
+
+    it('counts code points, so an emoji is never cut in half', () => {
+      const text = hostile({ cwrMult: '😀'.repeat(40) });
+      expect(text).toBe(`子どもの数の倍率 ${'😀'.repeat(23)}…`);
+      expect(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(text)).toBe(false);
+      expect(hostile({ cwrMult: '😀'.repeat(24) })).toBe(`子どもの数の倍率 ${'😀'.repeat(24)}`);
+    });
+
+    it('cuts an ordinary but very long number text too', () => {
+      expect(hostile({ migScale: 10n ** 60n })).toBe(`移動の強さ ${'1' + '0'.repeat(22)}…`);
+    });
+
+    it('never throws on an object, and never calls its toString', () => {
+      let called = 0;
+      const spy = {
+        toString() {
+          called++;
+          throw new Error('toString was called');
+        },
+        valueOf() {
+          called++;
+          throw new Error('valueOf was called');
+        },
+      };
+      for (const value of [Object.create(null), { toString: 1 }, spy, { a: 1 }, [], [1, 2, 3], () => 1, new Date(0)]) {
+        const text = hostile({ cwrMult: value, migMode: value, migScale: value, infraStrength: value });
+        expect(text).toBe(`子どもの数の倍率 ${NOT_A_NUMBER}、人口の移動 ${NOT_A_NUMBER}、移動の強さ ${NOT_A_NUMBER}、施設の影響 ${NOT_A_NUMBER}`);
+      }
+      expect(called).toBe(0);
+    });
+
+    it('never throws on a symbol, a huge array or a proxy that throws on every touch', () => {
+      const trap = new Proxy(
+        {},
+        new Proxy({}, { get: () => () => { throw new Error('touched'); } }),
+      );
+      const revoked = Proxy.revocable({}, {});
+      revoked.revoke();
+      const started = Date.now();
+      for (const value of [Symbol('s'), Symbol('d'.repeat(10_000)), new Array(2_000_000).fill(1), trap, revoked.proxy]) {
+        expect(hostile({ cwrMult: value })).toBe(`子どもの数の倍率 ${NOT_A_NUMBER}`);
+      }
+      expect(Date.now() - started).toBeLessThan(1000); // the 2-million-element array was not turned into text
+    });
+
+    it('shows null, undefined, booleans and non-finite numbers as short text', () => {
+      expect(hostile({ cwrMult: null })).toBe('子どもの数の倍率 null');
+      expect(hostile({ cwrMult: undefined })).toBe('子どもの数の倍率 undefined');
+      expect(hostile({ migScale: true })).toBe('移動の強さ true');
+      expect(hostile({ migScale: Number.NaN })).toBe('移動の強さ NaN');
+      expect(hostile({ infraStrength: Number.NEGATIVE_INFINITY })).toBe('施設の影響 -Infinity');
+      expect(hostile({ cwrMult: -Number.MAX_VALUE })).toBe('子どもの数の倍率 -1.7976931348623157e+308'); // exactly 24 characters
+    });
+
+    it('keeps the whole sentence bounded however hostile the four values are', () => {
+      const long = 'q'.repeat(10_000);
+      const text = hostile({ cwrMult: long, migMode: long, migScale: long, infraStrength: long });
+      expect(text.length).toBeLessThan(150);
+    });
   });
 });
 

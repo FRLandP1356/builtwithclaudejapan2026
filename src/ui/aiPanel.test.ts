@@ -1097,6 +1097,22 @@ describe('links back to the map and to the assumptions', () => {
     expect(buttons.map((b) => b.textContent)).toEqual([`${twin.name}（${twin.prefName}）を地図で開く`]);
   });
 
+  it('an assumption with hostile values from the model is shown short and does not break the answer', async () => {
+    const hostile = { cwrMult: { toString: 1 }, migMode: 'あ'.repeat(300), migScale: [1, 2, 3], infraStrength: 'x'.repeat(500) };
+    const s = script(toolUseResponse(toolUse('a', 'run_projection', { areaCode: '13', scenario: hostile })), textResponse('計算できませんでした。'));
+    const m = mount({ fetchFn: s.fetchFn });
+    m.typeAndSend('どうなりますか？');
+    await answersCount(m, 1);
+
+    const answer = m.answers()[0]!;
+    expect(answer.querySelector('.ai-answer-text')!.textContent).toBe('計算できませんでした。'); // not the "could not draw it" notice
+    expect(answer.textContent).not.toContain(PANEL_TEXT.crashed);
+    const note = answer.querySelector('.ai-scenario .note')!.textContent!;
+    expect(note).toBe(`この答えの前提：子どもの数の倍率 （数ではない値）、人口の移動 ${'あ'.repeat(23)}…、移動の強さ （数ではない値）、施設の影響 ${'x'.repeat(23)}…`);
+    answer.querySelector<HTMLButtonElement>('button[data-role="apply-scenario"]')!.click();
+    expect(answer.querySelector('.ai-scenario-msg')!.textContent).toBe(PANEL_TEXT.scenarioRefused); // and it is refused, as before
+  });
+
   it('a prefecture code selects the prefecture and clears an area that is not in it', async () => {
     const ctx = makeContext();
     ctx.store.set({ selectedArea: '30206' });
@@ -1652,6 +1668,28 @@ describe('この割り振りを地図に反映する (run_allocation in the trac
     expect(msg.textContent).toContain('地図に反映できません');
     expect(msg.children).toHaveLength(0); // the model's text never becomes markup
     expect(m.section.querySelector('img')).toBeNull();
+  });
+
+  it('hostile assumptions in a saved allocation call: the answer is still drawn, and the button refuses in Japanese instead of throwing', async () => {
+    const ctx = makeContext();
+    const hostile = { target: { kind: 'pref', code: '30' }, deltaPercent: 10, year: 2100, scenario: { cwrMult: { toString: 1 }, migMode: 'x'.repeat(100) } };
+    const entry = savedEntry(TOKYO_QUESTION, '保存済みの答えです。', { trace: [{ tool: 'run_allocation', input: hostile, result: { year: 2100 } }] });
+    const m = mount({ cache: cacheOf(entry) }, ctx);
+    m.samples()[0]!.click();
+    await answersCount(m, 1);
+    const answer = m.answers()[0]!;
+    expect(answer.querySelector('.ai-answer-text')!.textContent).toBe('保存済みの答えです。'); // drawn, not the "could not draw" notice
+    expect(answer.textContent).not.toContain(PANEL_TEXT.crashed);
+    const button = answer.querySelector<HTMLButtonElement>('button[data-role="apply-allocation"]')!;
+    expect(button.textContent).toBe(PANEL_TEXT.allocationButton); // no "assumptions change too" hint for what cannot be read
+    const errors: unknown[] = [];
+    const record = (event: ErrorEvent): void => void errors.push(event.error);
+    window.addEventListener('error', record);
+    button.click();
+    window.removeEventListener('error', record);
+    expect(errors).toEqual([]);
+    expect(ctx.store.get().allocation).toBeUndefined();
+    expect(answer.querySelector('.ai-allocations .ai-scenario-msg')!.textContent).not.toBe('');
   });
 
   it('offers nothing when no run_allocation was used, and numbers each button when several were', async () => {
