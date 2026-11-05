@@ -93,6 +93,23 @@ class TestUnsafeFileNames(unittest.TestCase):
         self.assertEqual(outside.read_bytes(), b"precious")
         self.assertEqual(snapshot(self.tmp.name), before)
 
+    def test_symlink_to_a_prefix_sibling_directory_is_rejected(self):
+        # raw-evil starts with the text of raw: a startswith() check would wrongly accept it.
+        evil = self.base / "raw-evil"
+        evil.mkdir()
+        (evil / "target.bin").write_bytes(b"precious")
+        os.makedirs(self.raw)
+        os.symlink(evil / "target.bin", os.path.join(self.raw, "sib.bin"))
+        os.symlink(evil, os.path.join(self.raw, "sibdir"))
+        before = snapshot(self.tmp.name)
+        for name in ["sib.bin", "sibdir"]:
+            with self.subTest(name=name):
+                with self.assertRaises(fetch_sources.UnsafeFileName):
+                    fetch_sources.safe_dest(self.raw, name)
+                with self.assertRaises(fetch_sources.UnsafeFileName):
+                    fetch_sources.fetch_one(self.entry(name), self.raw, force=True)
+        self.assertEqual(snapshot(self.tmp.name), before)
+
     def test_a_normal_name_still_downloads(self):
         self.assertEqual(fetch_sources.fetch_one(self.entry("ok.bin"), self.raw), "unverified")
         self.assertEqual(pathlib.Path(self.raw, "ok.bin").read_bytes(), b"payload")
@@ -311,6 +328,17 @@ class TestSourcesJson(unittest.TestCase):
             self.assertTrue(s["url"].startswith("https://www.ipss.go.jp/"), s["url"])
             self.assertRegex(s["sha256"], r"^[0-9a-f]{64}$")
             self.assertIsInstance(s["bytes"], int)
+
+    def test_every_n03_zip_has_a_recorded_size_and_hash(self):
+        # size_limit() falls back to the 256 MiB ceiling for a missing or non-integer size, so keep them all recorded.
+        entries = fetch_sources.load_sources()["n03"]["sources"]
+        self.assertEqual(len(entries), 47)
+        for s in entries:
+            with self.subTest(file=s["file"]):
+                self.assertIs(type(s["bytes"]), int)
+                self.assertGreater(s["bytes"], 0)
+                self.assertRegex(s["sha256"], r"^[0-9a-f]{64}$")
+                self.assertTrue(s["url"].startswith("https://nlftp.mlit.go.jp/"), s["url"])
 
 
 if __name__ == "__main__":

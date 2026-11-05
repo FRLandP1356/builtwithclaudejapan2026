@@ -54,6 +54,17 @@ class TestSafeMemberPath(unittest.TestCase):
         with self.assertRaises(bg.UnsafeArchiveMember):
             bg.safe_member_path(self.dest, "link/evil.geojson")
 
+    def test_symlink_to_a_prefix_sibling_directory_cannot_lead_outside(self):
+        # extract-evil starts with the text of extract: a startswith() check would wrongly accept it.
+        evil = os.path.join(self.tmp.name, "extract-evil")
+        os.makedirs(evil)
+        os.makedirs(self.dest)
+        os.symlink(evil, os.path.join(self.dest, "link"))
+        with self.assertRaises(bg.UnsafeArchiveMember):
+            bg.safe_member_path(self.dest, "link/evil.geojson")
+        with self.assertRaises(bg.UnsafeArchiveMember):
+            bg.safe_member_path(self.dest, "link")
+
     def test_real_n03_names_pass_and_stay_inside(self):
         # Member names as they appear in the N03 zips: Windows backslashes, no leading separator.
         for name in ["N03-20210101_13_GML\\N03-21_13_210101.geojson", "N03_GML/N03.geojson", "dir/", "./a.txt", "a//b"]:
@@ -85,12 +96,33 @@ class TestReadN03FeaturesRejectsHostileArchives(unittest.TestCase):
         self.assertEqual(len(feats), 1)
 
     def test_zip_slip_members_reject_the_whole_archive(self):
+        before = snapshot(self.tmp.name)
         for evil in ["../evil.txt", "N03_GML/../../evil.txt", "/tmp/evil.txt", "..\\evil.txt", "C:\\evil.txt"]:
             with self.subTest(member=evil):
                 with self.assertRaises(bg.UnsafeArchiveMember):
                     self.read(make_zip([evil]))
-                self.assertFalse(os.path.exists(self.extract_dir), "nothing may be written")
-                self.assertFalse(os.path.exists(os.path.join(self.tmp.name, "evil.txt")))
+                self.assertEqual(snapshot(self.tmp.name), before, "nothing may be created, replaced or rewritten")
+
+    def test_names_are_checked_before_anything_is_read(self):
+        # With a hostile member present, neither the member count nor any zf.read() may come first.
+        with mock.patch.object(zipfile.ZipFile, "read", side_effect=AssertionError("archive read before the names were checked")):
+            with self.assertRaises(bg.UnsafeArchiveMember):
+                self.read(make_zip(["../evil.txt"]))
+        two_geojson = make_zip(["../evil.txt", "N03_GML/second.geojson"])
+        with self.assertRaises(bg.UnsafeArchiveMember):      # not "expected one .geojson member"
+            self.read(two_geojson)
+
+    def test_the_extract_dir_argument_is_honoured(self):
+        # "link" leads out of this extract_dir but means nothing under the default (WORK_DIR).
+        outside = os.path.join(self.tmp.name, "outside")
+        os.makedirs(outside)
+        os.makedirs(self.extract_dir)
+        os.symlink(outside, os.path.join(self.extract_dir, "link"))
+        self.assertEqual(len(bg.read_n03_features(make_zip(["link/payload.txt"]))), 1)
+        before = snapshot(self.tmp.name)
+        with self.assertRaises(bg.UnsafeArchiveMember):
+            bg.read_n03_features(make_zip(["link/payload.txt"]), extract_dir=self.extract_dir)
+        self.assertEqual(snapshot(self.tmp.name), before)
 
     def test_hostile_name_on_the_geojson_member_itself_is_rejected(self):
         with self.assertRaises(bg.UnsafeArchiveMember):
