@@ -99,6 +99,21 @@ describe('loadAll', () => {
     await p.catch((e: DataLoadError) => expect(e.message).toMatch(/応答がありません/));
   });
 
+  test('a body that stalls after the headers also fails after the timeout', async () => {
+    const stalledBody = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit) =>
+        ({
+          ok: true,
+          status: 200,
+          json: () =>
+            new Promise<never>((_, reject) => {
+              init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+            }),
+        }) as unknown as Response,
+    ) as unknown as typeof fetch;
+    await expect(loadAll({ fetch: stalledBody, base: '/', timeoutMs: 20 })).rejects.toMatchObject({ name: 'DataLoadError', reason: 'timeout' });
+  });
+
   test('requests are sent with an abort signal', async () => {
     const { fetchStub } = makeFetch();
     await loadAll({ fetch: fetchStub as unknown as typeof fetch, base: '/' });
