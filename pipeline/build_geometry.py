@@ -122,7 +122,7 @@ def record_hashes() -> None:
         "title": "Administrative Area Data (N03), 2021-01-01 edition",
         "license": (
             "Site terms for National Land Numerical Information (government standard terms, compatible with CC BY 4.0); "
-            "attribution required, state that the data was processed. See docs/sources.d/geometry.md."
+            "attribution required, state that the data was processed. See docs/sources.md."
         ),
         "landing_page": LANDING_PAGE,
         "terms_page": AGREEMENT_PAGE,
