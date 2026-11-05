@@ -6,6 +6,7 @@ import {
   compactJson,
   describeScenario,
   MAX_VALUE_CHARS,
+  namesLaterYear,
   makePlaceNames,
   mapTargets,
   prettyJsonView,
@@ -361,6 +362,70 @@ describe('clipAtCaret', () => {
   it('a caret outside the text is treated as the nearest end', () => {
     expect(clipAtCaret('あいうえ', 99, 3)).toEqual({ text: 'あいう', caret: 3, cut: true });
     expect(clipAtCaret('あいうえ', -1, 3)).toEqual({ text: 'あいう', caret: 0, cut: true });
+  });
+});
+
+describe('namesLaterYear', () => {
+  it.each([
+    '2051年には',
+    '2100年には、日本の人口は約5,432万人になります。',
+    '2060年と2100年を比べます。',
+    '2051-2100',
+    '2040〜2100年',
+    '2100/1/1',
+    '2100-12-31',
+    '西暦2075',
+    'In 2100, the population falls.',
+    '2100，日本の人口は減ります。',
+    '2020,2100の二つの年',
+    '2051、2060、2100',
+  ])('names a year after 2050: %s', (text) => {
+    expect(namesLaterYear(text)).toBe(true);
+  });
+
+  it.each([
+    ['2100年代', '2100年代 is a decade of the 2100s'],
+    ['2060年代', '2060年代'],
+    ['2050年代', '2050年代 is 2050 to 2059, and 2051 to 2059 are estimates'],
+    ['２１００年', 'full-width digits'],
+    ['２０５１年', 'full-width digits'],
+    ['2150年ごろ', 'beyond the app, with 年 after it'],
+    ['2999年', 'the largest year read as one'],
+    ['2100人', 'a count that looks like a year is labelled too: one extra label is the cost of never missing a year'],
+    ['2100.5万人', 'a decimal that starts like a year'],
+    ['2100%', 'a percent that looks like a year'],
+    ['約2100', 'a bare four-digit number in range'],
+    ['1,2100', 'a comma before four digits is not a thousands group, so it may be a list of years'],
+    ['2100,50', 'a comma with fewer than three digits after it is not a thousands group'],
+  ])('labels when in doubt: %s (%s)', (text) => {
+    expect(namesLaterYear(text)).toBe(true);
+  });
+
+  it.each([
+    ['2050年', '2050 is official'],
+    ['2020年と2050年', 'official years'],
+    ['2040年には、約5,432万人です。', 'before 2051'],
+    ['1900年から2025年', 'the past'],
+    ['12100人', 'the digits of a longer number'],
+    ['12,100人', 'a number with a thousands comma'],
+    ['2,100人', 'a number with a thousands comma'],
+    ['3.2100', 'the decimals of a number'],
+    ['2100,000人', 'a comma with three digits after it is a thousands group'],
+    ['2100，000人', 'the same with a full-width comma'],
+    ['２１００，０００人', 'the same, full-width digits too'],
+    ['１２１００', 'a longer full-width number'],
+    ['21000', 'five digits'],
+    ['2101', 'beyond 2100 and no 年: more likely a count'],
+    ['3000人', 'a count'],
+    ['', 'nothing'],
+    ['人口は減ります。', 'no digits'],
+  ])('does not name one: %s (%s)', (text) => {
+    expect(namesLaterYear(text)).toBe(false);
+  });
+
+  it('finds a later year anywhere in a text that also has earlier ones and longer numbers', () => {
+    expect(namesLaterYear('2020年は12,100人、2050年は12100人、2100年は9,000人です。')).toBe(true);
+    expect(namesLaterYear('2020年は12,100人、2050年は12100人です。')).toBe(false);
   });
 });
 

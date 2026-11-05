@@ -314,6 +314,36 @@ export function allocationOffers(trace: TraceItem[], max: number = MAX_ALLOCATIO
   return out;
 }
 
+/** The last year the app calculates (2100). A year after 2050 is an estimate; one after this is beyond the app, and still later than 2050. */
+const LAST_YEAR = 2100;
+/** The largest year number read as a year when it has 年 right after it (a four-digit number is otherwise far more likely a count). */
+const LAST_YEAR_WORD = 2999;
+
+/**
+ * True when the text names a year after 2050, so that what it says about it must carry the 試算 label even if no tool
+ * result did (an answer with no tool call, one whose results stop at 2050, a failed one). The rule is to label when in
+ * doubt and never to miss a real year:
+ * - a four-digit number 2051 to 2100 counts, with or without 年, in ASCII or full-width digits: 「2100年」, 「2051-2100」,
+ *   「2100年代」, 「2100/1/1」, and also 「2100人」 (a count that looks like a year is labelled too: the cost is one extra label);
+ * - 2101 to 2999 count when 年 follows (「2150年」); 2050 counts when 年代 follows (「2050年代」 is 2050 to 2059);
+ * - digits inside a longer number do not: 「12100」, 「2,100」, 「2100,000」, 「3.2100」 are not years. A comma after a year
+ *   (「In 2100, …」) or before one (「2020,2100」, a list) does not make it part of a number: only a comma with three digits
+ *   after it does.
+ * Years written in kanji (二千百年) or as a century (21世紀後半) are not read; the trace-based label still covers answers
+ * built from tool results.
+ */
+export function namesLaterYear(text: string): boolean {
+  const ascii = text.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
+  for (const m of ascii.matchAll(/(?<![\d.．])(\d{4})(?!\d|[,，]\d{3})(年代?)?/g)) {
+    const year = Number(m[1]);
+    const mark = m[2] ?? '';
+    if (year > OFFICIAL_END_YEAR && year <= LAST_YEAR) return true;
+    if (year > LAST_YEAR && year <= LAST_YEAR_WORD && mark !== '') return true;
+    if (year === OFFICIAL_END_YEAR && mark === '年代') return true;
+  }
+  return false;
+}
+
 /** True when a tool result is marked as this app's estimate (basis 'app_estimate') or reaches a year after 2050. */
 export function traceUsesEstimate(trace: TraceItem[]): boolean {
   let budget = MAX_WALK_NODES;

@@ -29,6 +29,7 @@ import {
   prettyJsonView,
   scenarioOffers,
   toolLabel,
+  namesLaterYear,
   traceUsesEstimate,
 } from './aiTrace';
 import { overlayFromToolInput, toolScenario } from './allocationOverlay';
@@ -456,13 +457,16 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
 
     if (failed) {
       article.append(h('p', { class: 'ai-fail' }, notAvailable ? (result.message ?? MSG_NOT_AVAILABLE) : (result.message ?? PANEL_TEXT.crashed)));
+      // A trace of 2051+ figures is shown behind 「使った道具と数字」: say that they are estimates, outside the raw JSON.
+      if (traceUsesEstimate(result.trace)) article.append(h('p', { class: 'note ai-estimate' }, `${ESTIMATE_NOTE}。`));
       if (result.trace.length > 0) article.append(renderTrace(result.trace));
       const saved = renderFailureSamples();
       if (saved) article.append(saved);
       return article;
     }
 
-    const usesEstimate = traceUsesEstimate(result.trace);
+    // 2051+ figures are always 試算: from the tool results, and from the answer's own words (it may name a year no tool result does)
+    const usesEstimate = traceUsesEstimate(result.trace) || namesLaterYear(result.answer);
     const head = h('div', { class: 'ai-answer-head' });
     if (result.fromCache) head.append(h('span', { class: 'tag', 'data-role': 'saved-badge' }, '保存済みの回答'));
     if (usesEstimate) head.append(h('span', { class: 'badge-estimate' }, ESTIMATE_BADGE));
@@ -481,6 +485,9 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
         ),
       );
     }
+
+    // An answer whose numbers could not be confirmed has no basis line, but the label for 2051+ figures stays.
+    if (result.status === 'unverified_numbers' && usesEstimate) article.append(h('p', { class: 'note ai-estimate' }, `${ESTIMATE_NOTE}。`));
 
     // What the numbers rest on, said only for an answer whose numbers passed the check (status ok). For one that did
     // not, the warning above says what could not be confirmed, and a line here would contradict it. The line says

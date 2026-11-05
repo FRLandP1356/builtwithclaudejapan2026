@@ -637,6 +637,113 @@ describe('keyboard and input rules', () => {
   });
 });
 
+describe('2051+ figures are always labelled 試算 (cards without an ok status, and answers that name a year no tool result does)', () => {
+  const FAKE = '2100年には、日本の人口は約5,432万人になります。';
+  const NOTE = '2050年より後は、このアプリの試算です（予測ではありません）。';
+  /** The labels outside the raw tool JSON: the badge in the head and the note under the answer. */
+  const labels = (a: HTMLElement) => ({
+    badge: a.querySelector('.ai-answer-head .badge-estimate')?.textContent ?? null,
+    note: a.querySelector('.ai-estimate')?.textContent ?? null,
+  });
+
+  it('an answer with unconfirmed numbers and no tool call: the badge and the note', async () => {
+    const m = mount({ fetchFn: script(textResponse(FAKE), textResponse(FAKE)).fetchFn });
+    m.typeAndSend('日本の2100年は？');
+    await answersCount(m, 1);
+    const card = m.answers()[0]!;
+    expect(card.querySelector('.ai-warning')).not.toBeNull();
+    expect(labels(card)).toEqual({ badge: '試算', note: NOTE });
+    expect(card.querySelector('.ai-basis')).toBeNull(); // the basis line is still ok-only
+  });
+
+  it('with a trace that stops at 2050: the answer names 2100, so it is labelled', async () => {
+    const s = script(toolUseResponse(toolUse('t1', 'get_series', { areaCode: '00', years: [2020, 2050] })), textResponse(FAKE), textResponse(FAKE));
+    const m = mount({ fetchFn: s.fetchFn });
+    m.typeAndSend('日本の2100年は？');
+    await answersCount(m, 1);
+    expect(labels(m.answers()[0]!)).toEqual({ badge: '試算', note: NOTE });
+  });
+
+  it('with a trace that reaches 2100: labelled once, in the head and in the note', async () => {
+    const s = script(toolUseResponse(toolUse('t1', 'get_series', { areaCode: '00' })), textResponse(FAKE), textResponse(FAKE));
+    const m = mount({ fetchFn: s.fetchFn });
+    m.typeAndSend('日本の2100年は？');
+    await answersCount(m, 1);
+    const card = m.answers()[0]!;
+    expect(labels(card)).toEqual({ badge: '試算', note: NOTE });
+    expect(card.querySelectorAll('.ai-estimate')).toHaveLength(1);
+    expect(card.querySelectorAll('.ai-answer-head .badge-estimate')).toHaveLength(1);
+  });
+
+  it('a failure card whose trace holds 2100 figures says they are estimates, outside the raw JSON', async () => {
+    const s = script(toolUseResponse(toolUse('t1', 'get_series', { areaCode: '00' })), new TypeError('Failed to fetch'));
+    const m = mount({ fetchFn: s.fetchFn });
+    m.typeAndSend('日本の2100年は？');
+    await answersCount(m, 1);
+    const card = m.answers()[0]!;
+    expect(card.querySelector('.ai-fail')).not.toBeNull();
+    expect(card.querySelector('.ai-estimate')!.textContent).toBe(NOTE);
+    // the note comes before the trace, which holds the figures
+    const kids = [...card.children];
+    expect(kids.indexOf(card.querySelector('.ai-estimate')!)).toBeLessThan(kids.indexOf(card.querySelector('.ai-trace')!));
+  });
+
+  it('a failure card whose trace stops at 2050, or has no trace, has no such note', async () => {
+    const a = mount({ fetchFn: script(toolUseResponse(toolUse('t1', 'get_series', { areaCode: '00', years: [2020, 2050] })), new TypeError('Failed to fetch')).fetchFn });
+    a.typeAndSend('日本の2050年は？');
+    await answersCount(a, 1);
+    expect(a.answers()[0]!.querySelector('.ai-fail')).not.toBeNull();
+    expect(a.answers()[0]!.querySelector('.ai-estimate')).toBeNull();
+    const slot = document.createElement('section');
+    document.body.append(slot);
+    const b = mount({ fetchFn: script(jsonResponse({ error: 'upstream_error' }, 502)).fetchFn }, makeContext(), slot);
+    b.typeAndSend('日本の2100年は？');
+    await answersCount(b, 1);
+    expect(b.answers()[0]!.querySelector('.ai-estimate')).toBeNull();
+  });
+
+  it('an unconfirmed figure for 2040 only: no 2051+ label', async () => {
+    const text = '2040年には、日本の人口は約5,432万人になります。';
+    const m = mount({ fetchFn: script(textResponse(text), textResponse(text)).fetchFn });
+    m.typeAndSend('日本の2040年は？');
+    await answersCount(m, 1);
+    expect(labels(m.answers()[0]!)).toEqual({ badge: null, note: null });
+  });
+
+  it('an ok answer with no tool call that names 2100 gets the badge and the note in its basis line', async () => {
+    const m = mount({ fetchFn: script(textResponse('2100年のことは、地図の年のつまみで見られます。')).fetchFn });
+    m.typeAndSend('2100年は？');
+    await answersCount(m, 1);
+    const card = m.answers()[0]!;
+    expect(card.querySelector('.ai-answer-head .badge-estimate')!.textContent).toBe('試算');
+    expect(card.querySelector('.ai-basis')!.textContent).toBe(`この答えでは、計算の結果は使っていません。${NOTE}`);
+    expect(card.querySelector('.ai-estimate')).toBeNull(); // the basis line already says it
+  });
+
+  it('a saved answer that names a later year is labelled as well', async () => {
+    const entry = savedEntry(TOKYO_QUESTION, '2100年には、東京都の人口は約1,190万人になります。', { trace: [] });
+    const m = mount({ cache: cacheOf(entry) });
+    await settle();
+    m.samples()[0]!.click();
+    await answersCount(m, 1);
+    expect(m.answers()[0]!.querySelector('.ai-answer-head .badge-estimate')!.textContent).toBe('試算');
+    expect(m.answers()[0]!.querySelector('.ai-basis')!.textContent).toContain(NOTE);
+  });
+
+  it.each([
+    ['2100年代の人口は少なくなります。', true],
+    ['2051-2100の間に減ります。', true],
+    ['In 2100, the figure is lower.', true],
+    ['12100人という数字は、年ではありません。', false],
+    ['12,100人という数字は、年ではありません。', false],
+  ])('a year inside a larger number or a range: %s', async (text, labelled) => {
+    const m = mount({ fetchFn: script(textResponse(text)).fetchFn });
+    m.typeAndSend('どうですか？');
+    await answersCount(m, 1);
+    expect(m.answers()[0]!.querySelector('.ai-answer-head .badge-estimate') !== null).toBe(labelled);
+  });
+});
+
 describe('the line about what the numbers rest on', () => {
   const OVERCLAIMS = ['引いています', '取っています', 'からだけ'];
 
