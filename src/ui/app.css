@@ -703,6 +703,11 @@
 .app-foot .src-approval {
   display: block;
 }
+/* A phrase longer than the line (社人研がこのアプリの内容を保証するものではありません) wraps at word boundaries in browsers that
+   know Japanese phrases (Chromium), not in the middle of 「ありません」. Others fall back to breaking anywhere in it. */
+.app-foot .src-text {
+  word-break: auto-phrase;
+}
 .app-foot .src-where,
 .app-foot .src-approval {
   margin-top: var(--sp-1);
