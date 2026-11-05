@@ -362,20 +362,27 @@ describe('the official line, through the panel', () => {
     expect(rows.get(2100)![0]).toBe('－');
   });
 
-  test('the table note\'s claim holds on the real data: the app\'s 2050 numbers differ from the published ones by a few people in a town, a few dozen in a prefecture', () => {
+  test('the table note\'s claim holds on the real data in every official year: the app\'s numbers differ from the published ones by a few people in a town, a few dozen in a prefecture', () => {
     const series = runner.run(DEFAULT_SCENARIO);
-    let worstTown = 0;
-    const prefDiff = new Map<string, number>();
-    for (const a of areas) {
-      const d = total(series.get(a.code)![2050]) - a.official[2050];
-      worstTown = Math.max(worstTown, Math.abs(d));
-      prefDiff.set(a.prefCode, (prefDiff.get(a.prefCode) ?? 0) + d);
+    const officialYears = [2025, 2030, 2035, 2040, 2045, 2050]; // 「2050年までの」 numbers
+    for (const year of officialYears) {
+      let worstTown = 0;
+      let country = 0;
+      const prefDiff = new Map<string, number>();
+      for (const a of areas) {
+        const d = total(series.get(a.code)![year]) - a.official[year];
+        worstTown = Math.max(worstTown, Math.abs(d));
+        country += d;
+        prefDiff.set(a.prefCode, (prefDiff.get(a.prefCode) ?? 0) + d);
+      }
+      const worstPref = Math.max(...[...prefDiff.values()].map(Math.abs));
+      expect(worstTown, `${year}: worst town`).toBeGreaterThan(1); // so the note is needed
+      expect(worstTown, `${year}: worst town`).toBeLessThan(10); // 数人: a single digit
+      expect(worstPref, `${year}: worst prefecture`).toBeGreaterThan(10);
+      expect(worstPref, `${year}: worst prefecture`).toBeLessThan(100); // 数十人: two digits
+      expect(Math.abs(country), `${year}: whole country`).toBeLessThan(100);
     }
-    const worstPref = Math.max(...[...prefDiff.values()].map(Math.abs));
-    expect(worstTown).toBeGreaterThan(1); // so the note is needed
-    expect(worstTown).toBeLessThan(10); // 数人: a single digit
-    expect(worstPref).toBeGreaterThan(10);
-    expect(worstPref).toBeLessThan(100); // 数十人: two digits
+    expect(TABLE_NOTE).toContain('2050年までの地図や町の数字は');
     expect(TABLE_NOTE).toContain('町では数人、都道府県では数十人ほど違うことがあります');
   });
 
