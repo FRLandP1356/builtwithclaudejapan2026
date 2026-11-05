@@ -8,6 +8,7 @@
 import { ages65, sumSeries, total } from '../engine/aggregate';
 import { DEFAULT_SCENARIO, type Area, type Pop, type Series } from '../engine/types';
 import type { AppData } from '../data/loader';
+import { allocationView, overlayCovers, placeNumbers } from './allocationView';
 import { deriveTotals, type Totals } from './derive';
 import { mountFacilityPanel } from './facilityPanel';
 import { formatPct, formatPop } from './format';
@@ -187,6 +188,11 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
   kpiSection.append(kpiRow);
   const basis = document.createElement('span');
   kpis[0].note.append(basis);
+  // While the map shows a reallocation for this year, one quiet line says that these tiles are before it.
+  const allocNote = document.createElement('p');
+  allocNote.className = 'note town-alloc-note';
+  allocNote.hidden = true;
+  kpiSection.append(allocNote);
 
   const pyramidSection = document.createElement('div');
   pyramidSection.className = 'panel-section town-pyramid';
@@ -339,10 +345,27 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
     }
   }
 
+  /** The note under the tiles while the map shows this place after a reallocation for the year shown. */
+  function renderAllocNote(s: AppState): void {
+    const a = s.allocation;
+    const sc = scope;
+    let text = '';
+    if (a && sc && a.year === s.year && overlayCovers(a, sc.areaCodes)) {
+      const totals = deriveTotals(s.series, data.groups);
+      const n = placeNumbers(totals, s.year, sc.level, sc.key, allocationView(a, totals, data.groups));
+      // Only when the map's number differs from the tiles' (the country's total never does).
+      if (n?.allocated && formatPop(n.pop) !== formatPop(n.popBefore)) text = `地図は割り振り後（${formatPop(n.pop)}）です。この欄の数字は割り振り前です。`;
+    }
+    if (allocNote.textContent !== text) allocNote.textContent = text;
+    allocNote.hidden = text === '';
+  }
+
   render(store.get(), undefined);
+  renderAllocNote(store.get());
   const unsubscribe = store.subscribe((s, prev) => {
-    if (s.year === prev.year && s.series === prev.series && s.selectedArea === prev.selectedArea && s.selectedPref === prev.selectedPref) return;
-    render(s, prev);
+    const same = s.year === prev.year && s.series === prev.series && s.selectedArea === prev.selectedArea && s.selectedPref === prev.selectedPref;
+    if (!same) render(s, prev);
+    if (!same || s.allocation !== prev.allocation) renderAllocNote(s);
   });
 
   const teardown = () => {

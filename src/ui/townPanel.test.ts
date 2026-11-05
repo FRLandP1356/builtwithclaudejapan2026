@@ -13,7 +13,7 @@ import { evaluateFacilities, PERMANENT_NOTE, summaryLine } from './facilityPanel
 import { formatPct, formatPop } from './format';
 import { PYRAMID_HALF_WIDTH, pyramidScale } from './pyramid';
 import { formatAxisCount, SERIES_VIEW } from './seriesChart';
-import { createAppStore, type Store } from './state';
+import { createAppStore, type AllocationOverlay, type Store } from './state';
 import { ageShares, mountTownPanel } from './townPanel';
 
 const areas = loadAllAreas();
@@ -566,6 +566,51 @@ describe('the line chart maps values from zero', () => {
     store.set({ year: 2020 });
     expect(Number(svg.querySelector('circle.dot-marker')!.getAttribute('cy'))).toBeCloseTo(official[0][1], 1);
     void section;
+  });
+});
+
+describe('while the map shows a reallocation, one quiet note says the tiles are before it', () => {
+  // 和歌山県 +10% in 2100: every Wakayama area at +10% (enough for the note; the change of the rest does not matter).
+  const wakayama = areas.filter((a) => a.prefCode === '30').map((a) => a.code);
+  const overlay = (year = 2100): AllocationOverlay => ({
+    year,
+    label: '和歌山県 +10%',
+    changePercent: Object.fromEntries(wakayama.map((c) => [c, 10])),
+    flips: [],
+  });
+  const note = (section: HTMLElement) => section.querySelector<HTMLElement>('.town-alloc-note')!;
+  const NOTE = (pop: string) => `地図は割り振り後（${pop}）です。この欄の数字は割り振り前です。`;
+
+  test('a prefecture and a town: the after-population from the series times 1.1, the tiles unchanged', () => {
+    const { store, section, kpis } = setup({ year: 2100, selectedPref: '30' });
+    const series = runner.run(DEFAULT_SCENARIO);
+    const before = wakayama.reduce((t, c) => t + total(series.get(c)![2100]), 0);
+    expect(note(section).hidden).toBe(true);
+    const tiles = kpis();
+    store.set({ allocation: overlay() });
+    expect(note(section).hidden).toBe(false);
+    expect(note(section).textContent).toBe(NOTE(formatPop(before * 1.1)));
+    expect(kpis()).toEqual(tiles); // the tiles stay before the allocation
+    expect(kpis()[0]).toContain(formatPop(before).replace(/(万人|人)$/, ''));
+    expect(note(section).getAttribute('role')).toBeNull(); // quiet: not a live region
+    store.set({ selectedArea: '30344' });
+    expect(note(section).textContent).toBe(NOTE(formatPop(total(series.get('30344')![2100]) * 1.1)));
+  });
+
+  test('gone for another year, for a place outside the overlay, and when the overlay is cleared', () => {
+    const { store, section } = setup({ year: 2100, selectedArea: '30344' });
+    store.set({ allocation: overlay() });
+    expect(note(section).hidden).toBe(false);
+    store.set({ year: 2080 }); // the map's allocation is for 2100
+    expect(note(section).hidden).toBe(true);
+    store.set({ year: 2100 });
+    expect(note(section).hidden).toBe(false);
+    store.set({ selectedArea: '13101' }); // not in this overlay
+    expect(note(section).hidden).toBe(true);
+    store.set({ selectedArea: '30344' });
+    store.set({ allocation: undefined });
+    expect(note(section).hidden).toBe(true);
+    expect(note(section).textContent).toBe('');
   });
 });
 

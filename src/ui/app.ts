@@ -208,7 +208,10 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   const numbersOf = (kind: PlaceKind, code: string): PlaceNumbers | undefined =>
     placeNumbers(totals, store.get().year, kind, code, allocViewFor(store.get().allocation));
   const isEstimate = () => badgeFor(store.get().year).estimate;
-  const popText = (n: PlaceNumbers) => formatPop(n.pop);
+  /** 「（割り振り前 471人）」 while the numbers include the allocation and it shows a different number, else ''. */
+  const beforeText = (n: PlaceNumbers) =>
+    n.allocated && formatPop(n.popBefore) !== formatPop(n.pop) ? `（割り振り前 ${formatPop(n.popBefore)}）` : '';
+  const popText = (n: PlaceNumbers) => `${formatPop(n.pop)}${beforeText(n)}`;
 
   /** Lines added to tooltips and labels while an allocation is drawn. */
   function allocLines(kind: PlaceKind, code: string): string[] {
@@ -409,7 +412,18 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     const badge = document.createElement('span');
     badge.className = badgeInfo.estimate ? 'badge-estimate' : 'badge-official';
     badge.textContent = badgeInfo.text;
-    const parts: Node[] = [document.createTextNode(`${s.year}年 `), b, document.createTextNode(`　2020年比 ${formatPct(n.ratio)}　`), badge];
+    // While the numbers include the allocation, the number without it stays in sight (the town panel shows that one).
+    const before = beforeText(n); // the country's total does not change: no second number there
+    // Phrases that must not break inside (「2020年 / 比」 at 390px): each is one nowrap span; lines break between them.
+    const keep = (...nodes: Array<Node | string>) => {
+      const span = document.createElement('span');
+      span.className = 'head-keep';
+      span.append(...nodes);
+      return span;
+    };
+    const parts: Node[] = [keep(`${s.year}年 `, b)];
+    if (before) parts.push(keep(before));
+    parts.push(document.createTextNode('　'), keep(`2020年比 ${formatPct(n.ratio)}`), document.createTextNode('　'), badge);
     if (n.allocated) {
       const alloc = document.createElement('span');
       alloc.className = 'badge-alloc';

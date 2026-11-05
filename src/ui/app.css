@@ -181,6 +181,9 @@
   color: var(--ink-2);
   font-size: var(--fs-15);
 }
+.map-headline-num .head-keep {
+  white-space: nowrap;
+}
 .map-headline-num b {
   color: var(--ink);
   font-weight: 600;

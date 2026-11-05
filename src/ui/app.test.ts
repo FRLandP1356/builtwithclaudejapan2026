@@ -92,14 +92,14 @@ describe('mountApp shell', () => {
 
   test('the headline badge follows the year: census at 2020, official to 2050, estimate after', async () => {
     const { root, store } = await mount();
-    const badge = () => root.querySelector('.map-headline-num span')!.textContent;
+    const badge = () => root.querySelector('.map-headline-num [class^="badge-"]')!.textContent;
     store.set({ year: 2020 });
     expect(badge()).toBe('実績（国勢調査）');
     store.set({ year: 2050 });
     expect(badge()).toBe('公式推計');
     store.set({ year: 2055 });
     expect(badge()).toBe('試算');
-    expect(root.querySelector('.map-headline-num span')!.className).toBe('badge-estimate');
+    expect(root.querySelector('.map-headline-num [class^="badge-"]')!.className).toBe('badge-estimate');
   });
 });
 
@@ -268,7 +268,9 @@ describe('Task 8 leftovers', () => {
     expect(overlay.hidden).toBe(false);
     expect(overlay.textContent).not.toContain('地図を読み込んでいます');
     expect(overlay.querySelector('button')?.textContent).toBe('もう一度読み込む');
-    expect(visibleHost()?.classList.contains('map-host-national')).toBe(true); // the broken host was removed
+    expect(visibleHost()?.classList.contains('map-host-national')).toBe(true);
+    expect(store.get().selectedPref).toBe('13');
+    expect([...overlay.parentElement!.querySelectorAll('.map-host')]).toHaveLength(1); // the half-built host was removed
     store.set({ selectedPref: '30' });
     await settle();
     expect(overlay.hidden).toBe(true);
@@ -383,6 +385,7 @@ describe('allocation overlay on the map', () => {
     store.set({ allocation: overlay() });
     const num = root.querySelector('.map-headline-num')!;
     expect(num.querySelector('b')!.textContent).toBe(formatPop(after));
+    expect(num.textContent).toContain(`${formatPop(after)}（割り振り前 ${formatPop(before2100)}）`); // both numbers in sight
     expect(num.textContent).toContain(`2020年比 ${formatPct(after / base2020)}`);
     expect(num.querySelector('.badge-estimate')!.textContent).toBe('試算');
     expect(num.querySelector('.badge-alloc')!.textContent).toBe(ALLOC_BADGE);
@@ -390,13 +393,14 @@ describe('allocation overlay on the map', () => {
     // An area: its own population times 1.1, in the label and in the tooltip, with the change line.
     const prefSvg = root.querySelector('.map-host:not([hidden]) svg')!;
     const tanabe = prefSvg.querySelector('path.area[data-code="30206"]')!;
+    const tanabeBefore = formatPop(total(series.get('30206')![2100]));
     const tanabeAfter = formatPop(total(series.get('30206')![2100]) * 1.1);
-    expect(tanabe.getAttribute('aria-label')).toContain(`2100年 ${tanabeAfter}`);
+    expect(tanabe.getAttribute('aria-label')).toContain(`2100年 ${tanabeAfter}（割り振り前 ${tanabeBefore}）`);
     expect(tanabe.getAttribute('aria-label')).toContain('（このアプリの試算）（割り振り後）');
     tanabe.dispatchEvent(new Event('pointerover', { bubbles: true }));
     const tip = root.querySelector<HTMLElement>('.map-host:not([hidden]) .map-tip')!;
     expect(tip.hidden).toBe(false);
-    expect(tip.textContent).toContain(`2100年 ${tanabeAfter}`);
+    expect(tip.textContent).toContain(`2100年 ${tanabeAfter}（割り振り前 ${tanabeBefore}）`);
     expect(tip.textContent).toContain('割り振りによる変化 +10.0%');
     expect(tip.querySelector('.badge-estimate')!.textContent).toBe('試算');
     expect(tip.querySelector('.badge-alloc')!.textContent).toBe(ALLOC_BADGE);
@@ -412,6 +416,7 @@ describe('allocation overlay on the map', () => {
     const codes = sample.filter((a) => a.prefCode === '30').map((a) => a.code);
     expect(root.querySelector('.map-headline-num b')!.textContent).toBe(formatPop(codes.reduce((t, c) => t + total(series.get(c)![2080]), 0)));
     expect(root.querySelector('.map-headline-num .badge-alloc')).toBeNull();
+    expect(root.querySelector('.map-headline-num')!.textContent).not.toContain('割り振り前');
     const tanabe = root.querySelector('.map-host:not([hidden]) svg path.area[data-code="30206"]')!;
     expect(tanabe.getAttribute('aria-label')).toContain('割り振りによる変化 +10.0%（2100年の計算）');
     expect(tanabe.getAttribute('aria-label')).not.toContain('（割り振り後）');
@@ -445,7 +450,7 @@ describe('allocation overlay on the map', () => {
     expect(wakayama.getAttribute('fill')).toBe(ratioFill);
     expect(root.querySelector('.legend')!.textContent).toContain('2020年の人口との比');
     expect(root.querySelector<HTMLElement>('.alloc-bar')!.hidden).toBe(true);
-    expect(root.querySelector('.map-headline-num span')!.textContent).toBe('試算');
+    expect(root.querySelector('.map-headline-num [class^="badge-"]')!.textContent).toBe('試算');
     expect(root.querySelector('.map-headline-num .badge-alloc')).toBeNull();
     expect(document.activeElement).toBe(root.querySelector('.map-headline-name')); // focus does not stay on a hidden button
 
