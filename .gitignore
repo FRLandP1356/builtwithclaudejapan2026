@@ -12,3 +12,12 @@ data/raw/
 __pycache__/
 coverage/
 .staging/
+
+# Guards: never commit secrets, source workbooks/archives or assistant config
+.env
+.env.*
+!.env.example
+CLAUDE.md
+*.xlsx
+*.zip
+worker/.dev.vars

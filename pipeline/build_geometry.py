@@ -32,12 +32,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import zipfile
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+from typing import IO, Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 from pipeline import check_codes, fetch_sources
 
@@ -105,13 +106,21 @@ def record_hashes() -> None:
     """Download what is missing, then write size and SHA256 of every zip into sources.json."""
     data = fetch_sources.load_sources()
     entries = default_entries()
+    failed = False
     for entry in entries:
-        dest = os.path.join(RAW_DIR, entry["file"])
-        if not os.path.exists(dest):
-            fetch_sources.download(entry["url"], dest)
-        entry["bytes"] = os.path.getsize(dest)
-        entry["sha256"] = fetch_sources.sha256_of(dest)
+        try:
+            dest = fetch_sources.safe_dest(RAW_DIR, entry["file"])
+            if not os.path.exists(dest):
+                fetch_sources.download(entry["url"], dest)
+            entry["bytes"] = os.path.getsize(dest)
+            entry["sha256"] = fetch_sources.sha256_of(dest)
+        except (fetch_sources.UnsafeFileName, fetch_sources.DownloadTooLarge, OSError) as exc:
+            print(f"FAILED      {entry['file']}: {exc}", file=sys.stderr)
+            failed = True
+            continue
         print(f"recorded    {entry['file']}  {entry['bytes']} bytes  {entry['sha256']}")
+    if failed:
+        raise SystemExit("could not record every N03 zip; sources.json was NOT updated (see above)")
     data[SOURCES_KEY] = {
         "note": (
             "Municipal boundaries for the map. Raw zips are NOT committed: pipeline/build_geometry.py downloads "
@@ -136,7 +145,7 @@ def fetch_all(entries: Iterable[Dict[str, Any]]) -> None:
     for entry in entries:
         try:
             status = fetch_sources.fetch_one(entry, raw_dir=RAW_DIR)
-        except (fetch_sources.HashMismatch, OSError) as exc:
+        except (fetch_sources.HashMismatch, fetch_sources.UnsafeFileName, fetch_sources.DownloadTooLarge, OSError) as exc:
             print(f"FAILED      {entry['file']}: {exc}", file=sys.stderr)
             failed = True
             continue
@@ -145,10 +154,44 @@ def fetch_all(entries: Iterable[Dict[str, Any]]) -> None:
         raise SystemExit("could not fetch every N03 zip (see above)")
 
 
-def read_n03_features(zip_path: str) -> List[dict]:
-    """The GeoJSON features of one N03 zip. Member names use Windows backslashes inside the zip."""
+class UnsafeArchiveMember(ValueError):
+    """A zip member name is absolute, climbs out with '..', or would land outside the extraction directory."""
+
+
+def safe_member_path(dest_dir: str, member: str) -> str:
+    """Where `member` would be written under dest_dir; raise UnsafeArchiveMember if that is not inside it.
+
+    Both '/' and '\\' count as separators (N03 zips use Windows-style names). Rejected: empty names,
+    NUL, absolute paths (leading separator or a drive letter), any '..' component, and any name whose
+    resolved path (symlinks followed) is outside dest_dir. Nothing is created or written here.
+    """
+    name = member.replace("\\", "/")
+    if not name or "\x00" in name:
+        raise UnsafeArchiveMember(f"unsafe archive member name {member!r}: empty or contains NUL")
+    if name.startswith("/") or re.match(r"^[A-Za-z]:", name):
+        raise UnsafeArchiveMember(f"unsafe archive member name {member!r}: absolute path")
+    parts = name.split("/")
+    if ".." in parts:
+        raise UnsafeArchiveMember(f"unsafe archive member name {member!r}: '..' component")
+    root = os.path.realpath(dest_dir)
+    target = os.path.realpath(os.path.join(root, *parts))
+    if os.path.commonpath([root, target]) != root:
+        raise UnsafeArchiveMember(f"unsafe archive member name {member!r}: resolves outside {root}")
+    return target
+
+
+def read_n03_features(zip_path: Union[str, IO[bytes]], extract_dir: str = WORK_DIR) -> List[dict]:
+    """The GeoJSON features of one N03 zip. Member names use Windows backslashes inside the zip.
+
+    The GeoJSON is read in memory and never written under its member name, but every member name is
+    still checked with safe_member_path against extract_dir before anything is read, so a hostile
+    archive (zip-slip) is rejected outright and a later extract() cannot inherit the problem.
+    """
     with zipfile.ZipFile(zip_path) as zf:
-        members = [n for n in zf.namelist() if n.lower().endswith(".geojson")]
+        names = zf.namelist()
+        for n in names:
+            safe_member_path(extract_dir, n)
+        members = [n for n in names if n.lower().endswith(".geojson")]
         if len(members) != 1:
             raise ValueError(f"{zip_path}: expected one .geojson member, found {members}")
         return json.loads(zf.read(members[0]))["features"]

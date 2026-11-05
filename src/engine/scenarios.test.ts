@@ -91,8 +91,8 @@ describe('national totals in 2100 (all 1,884 areas)', () => {
     expectWithin(nationalTotal(hold, 2100), 63_280_000, 0.01);
   });
 
-  it('fade_national_2100: migration fading out by 2100 reaches 58,510,000 (+-1%)', () => {
-    expectWithin(nationalTotal(fade, 2100), 58_510_000, 0.01);
+  it('fade_national_2100: migration fading out by 2100 reaches 58,516,111 (5,852万; +-0.01%)', () => {
+    expectWithin(nationalTotal(fade, 2100), 58_516_111, 0.0001);
   });
 
   it('cwr_1_2: child-woman ratio x1.2 reaches 70,930,000 and x0.8 reaches 56,340,000 (+-1%)', () => {
