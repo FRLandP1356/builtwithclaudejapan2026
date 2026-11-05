@@ -396,7 +396,8 @@ async function callModel(messages: Message[], env: Env): Promise<ModelTurn> {
   }
   // A 200 that is JSON but not a model message is not our Worker either.
   if (!isRecord(data) || !Array.isArray(data.content)) throw notThere(env);
-  answered.add(env.endpoint);
+  // Only a body with a stop_reason is the Worker relaying a model message; any stub that answers {"content":[]} is not.
+  if (typeof data.stop_reason === 'string') answered.add(env.endpoint);
   return {
     content: rebuildBlocks(data.content),
     stopReason: typeof data.stop_reason === 'string' ? data.stop_reason : '',

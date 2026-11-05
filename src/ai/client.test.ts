@@ -959,6 +959,16 @@ describe('an endpoint that is not there', () => {
       expect((await ask('q', ctx, { fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn })).reason).toBe('not_configured');
     });
 
+    it('a body with a content list but no stop_reason is not a model message: it is used, but the address is not remembered as answering', async () => {
+      const stub = (): Response => jsonResponse({ content: [{ type: 'text', text: 'はい。' }] });
+      expect((await ask('q', ctx, { fetchFn: script(stub()).fetchFn })).status).toBe('ok');
+      expect((await ask('q', ctx, { fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn })).reason).toBe('not_configured');
+      await ask('q', ctx, { fetchFn: script(jsonResponse({ content: [], stop_reason: 5 })).fetchFn });
+      expect((await ask('q', ctx, { fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn })).reason).toBe('not_configured');
+      await ask('q', ctx, { fetchFn: script(jsonResponse({ content: [], stop_reason: 'end_turn' })).fetchFn });
+      expect((await ask('q', ctx, { fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn })).reason).toBeUndefined();
+    });
+
     it('is remembered per address: an answer from one says nothing about another', async () => {
       await answerOnce(EXPLICIT);
       const elsewhere = await ask(TOKYO_QUESTION, ctx, { fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn });
