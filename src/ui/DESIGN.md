@@ -110,7 +110,7 @@
 | 輪 | `.ring-hover`（墨 1.5）`.ring-selected`（墨 2.25）`.ring-focus`（藍 2.5）`.ring-gain`（青 2.25・実線＝目安以上になった町）`.ring-loss`（赤錆 2.25・破線＝目安を下回った町）。どれも紙色の halo 付き。gain・loss の halo（`.ring-gain-halo` `.ring-loss-halo`）は 7.5 と太い：その町は割り振りの対象で、輪と同じ色相の濃い面の中にあることが多いので、紙色の帯で輪を浮かせる | 重ねて描くので隣の面に隠れない |
 | 印 | `.markers`（`aria-hidden`。数は面の `aria-label` とツールチップにある）`.marker`（`.marker-gain` `.marker-loss` `.marker-mixed`、`data-for`＝県コード）`.marker-dot` | 全国の地図で、焦点の施設について県ごとに目安をまたいだ町の数。県の中心に墨の点、その少し上に紙色の下地と 12px 太字の「+n −n」（小さい県の色を隠さない）。大きさは `choropleth.ts` 先頭の `MARKER_*` 定数（画面の px）で、地図の縮尺の逆数を掛けて、スマホ幅でも同じ大きさに保つ |
 | 離島 | `.map-inset` `.inset-bg` `.inset-frame` `.inset-label` `.hit` | 遠い島は別の縮尺の枠に |
-| 割り振りの行 | `.alloc-bar`（「地図に反映中の割り振り：」）`.alloc-bar-name`（「和歌山県 +10%」）`.alloc-bar-stale`（「この割り振りは◯年の計算です」）`.alloc-clear`（「割り振りを地図から消す」、40px。Esc でも消える。入力欄の中の Esc は欄のもの） | 地図の上、見出しの下。消えた時にこの行にフォーカスがあれば、見出しの地名へ移す |
+| 割り振りの行 | `.alloc-bar`（「地図に反映中の割り振り：」）`.alloc-bar-name`（「和歌山県 +10%」）`.alloc-bar-stale`（「この割り振りは◯年の計算です」）`.alloc-clear`（「割り振りを地図から消す」、40px。Esc でも消える：つまみ・チェックボックス・ボタンに焦点がある時も。文字を打つ欄（検索・質問の入力・選択欄・編集できる領域）の中の Esc は欄のもの、開いた dialog がある間と、ほかが処理した Esc も消さない） | 地図の上、見出しの下。消えた時にこの行にフォーカスがあれば、見出しの地名へ移す |
 | 地図の最初の跳び先 | `.skip-link`（`.map-stage` の最初の子。「地図をとばして、年の選択へ」。焦点が無い間は画面の外、焦点が来ると地図の左上に藍の枠のボタンとして出る（配置は変わらない）。押すと年のつまみに焦点を移す） | 地図の Tab 停止を飛ばす |
 | 凡例 | `.legend`（`data-mode="ratio" | "allocation"`）`.legend-title` `.legend-bar` `.legend-ticks` `.legend-tick` | 割り振り中は「割り振りによる人口の変化（%）」に切り替わる |
 

@@ -526,6 +526,105 @@ describe('allocation overlay on the map', () => {
     expect(store.get().allocation).toBeDefined();
   });
 
+  describe('Escape', () => {
+    const esc = (el: Element, init: KeyboardEventInit = {}) => {
+      const ev = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true, ...init });
+      el.dispatchEvent(ev);
+      return ev;
+    };
+
+    test('clears the overlay from a focused range slider and from a focused checkbox', async () => {
+      const { root, store } = await mount();
+      const range = root.querySelector<HTMLInputElement>('#year-range')!;
+      expect(range.type).toBe('range');
+      range.focus();
+      store.set({ year: 2100, allocation: overlay() });
+      esc(range);
+      expect(store.get().allocation).toBeUndefined();
+
+      const box = root.querySelector<HTMLInputElement>('#panel-allocation input[type="checkbox"]')!;
+      expect(box).not.toBeNull();
+      box.focus();
+      store.set({ allocation: overlay() });
+      esc(box);
+      expect(store.get().allocation).toBeUndefined();
+
+      const ctlRange = root.querySelector<HTMLInputElement>('#panel-controls input[type="range"]')!;
+      store.set({ allocation: overlay() });
+      esc(ctlRange);
+      expect(store.get().allocation).toBeUndefined();
+    });
+
+    test('also from a radio button, a plain button and the page itself', async () => {
+      const { root, store } = await mount();
+      store.set({ year: 2100 });
+      for (const type of ['radio', 'button', 'submit', 'reset', 'image', 'file', 'color']) {
+        const input = document.createElement('input');
+        input.type = type;
+        root.append(input);
+        store.set({ allocation: overlay() });
+        esc(input);
+        expect(store.get().allocation, `input type=${type}`).toBeUndefined();
+      }
+      store.set({ allocation: overlay() });
+      esc(root.querySelector('.back, .btn')!);
+      expect(store.get().allocation).toBeUndefined();
+      store.set({ allocation: overlay() });
+      esc(document.body);
+      expect(store.get().allocation).toBeUndefined();
+    });
+
+    test('is left to a text field, a search box, a textarea, a select and an editable region', async () => {
+      const { root, store } = await mount();
+      store.set({ year: 2100, allocation: overlay() });
+      const owners: HTMLElement[] = [root.querySelector<HTMLElement>('.search-input')!, root.querySelector<HTMLElement>('#panel-ai textarea')!];
+      for (const type of ['text', 'search', 'number', 'email', 'url', 'tel', 'password']) {
+        const input = document.createElement('input');
+        input.type = type;
+        owners.push(input);
+      }
+      owners.push(document.createElement('select'));
+      const editable = document.createElement('div');
+      Object.defineProperty(editable, 'isContentEditable', { value: true }); // jsdom does not compute it from the attribute
+      owners.push(editable);
+      for (const el of owners) {
+        root.append(el);
+        esc(el);
+        expect(store.get().allocation, el.outerHTML.slice(0, 40)).toBeDefined();
+      }
+    });
+
+    test('is left to an open dialog, and to anything that already handled the key', async () => {
+      const { root, store } = await mount();
+      store.set({ year: 2100, allocation: overlay() });
+      const range = root.querySelector<HTMLInputElement>('#year-range')!;
+      const handled = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+      range.addEventListener('keydown', (e) => e.preventDefault(), { once: true });
+      range.dispatchEvent(handled);
+      expect(store.get().allocation).toBeDefined();
+
+      const dialog = document.createElement('dialog');
+      dialog.setAttribute('open', '');
+      document.body.append(dialog);
+      esc(range);
+      expect(store.get().allocation).toBeDefined();
+      dialog.remove();
+      esc(range);
+      expect(store.get().allocation).toBeUndefined();
+    });
+
+    test('other keys do nothing, and Escape with no overlay is harmless', async () => {
+      const { root, store } = await mount();
+      const range = root.querySelector<HTMLInputElement>('#year-range')!;
+      store.set({ year: 2100, allocation: overlay() });
+      range.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      range.dispatchEvent(new KeyboardEvent('keydown', { key: 'Esc', bubbles: true }));
+      expect(store.get().allocation).toBeDefined();
+      store.set({ allocation: undefined });
+      expect(() => esc(range)).not.toThrow();
+    });
+  });
+
   test('a focused facility draws count markers on the national view and rings in the prefecture view', async () => {
     const { root, store } = await mount();
     store.set({ year: 2100 });

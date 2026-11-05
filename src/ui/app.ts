@@ -132,8 +132,22 @@ export async function mountApp(root: HTMLElement, options: AppOptions = {}): Pro
   }
 }
 
-function isFormField(el: EventTarget | null): boolean {
-  return el instanceof HTMLElement && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+/** Input types that take no typed text: Esc has no meaning in them, so it may clear the allocation from there. */
+const NON_TEXT_INPUT_TYPES: ReadonlySet<string> = new Set(['range', 'checkbox', 'radio', 'button', 'submit', 'reset', 'image', 'file', 'color']);
+
+/**
+ * Whether Esc, pressed with focus on `el`, already means something there: a text field (clearing it or closing its
+ * list), a select (closing its list) or an editable region. A range slider or a checkbox does not use Esc.
+ */
+function escapeBelongsToField(el: EventTarget | null): boolean {
+  if (!(el instanceof HTMLElement)) return false;
+  if (el.isContentEditable || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+  return el instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(el.type);
+}
+
+/** An open dialog closes itself on Esc (and keeps focus inside it), so the allocation stays. */
+function dialogIsOpen(doc: Document): boolean {
+  return doc.querySelector('dialog[open], [role="dialog"][aria-modal="true"]') !== null;
 }
 
 function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): AppHandle {
@@ -476,7 +490,8 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   root.ownerDocument.addEventListener(
     'keydown',
     (e) => {
-      if (e.key !== 'Escape' || e.defaultPrevented || isFormField(e.target) || !store.get().allocation) return;
+      if (e.key !== 'Escape' || e.defaultPrevented || !store.get().allocation) return;
+      if (escapeBelongsToField(e.target) || dialogIsOpen(root.ownerDocument)) return;
       store.set({ allocation: undefined });
     },
     { signal: ac.signal },
