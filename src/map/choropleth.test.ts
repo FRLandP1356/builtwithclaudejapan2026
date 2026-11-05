@@ -22,13 +22,14 @@ function gridTopology(cols: number, rows: number): Topology {
 let map: Choropleth | undefined;
 let picked: string[] = [];
 
-function mount(cols = 3, rows = 3): { host: HTMLElement; map: Choropleth } {
+function mount(cols = 3, rows = 3, inset?: string[]): { host: HTMLElement; map: Choropleth } {
   const host = document.createElement('div');
   document.body.append(host);
   picked = [];
   map = mountChoropleth(host, {
     topology: gridTopology(cols, rows),
     objectName: 'areas',
+    ...(inset ? { inset: { codes: inset, corner: 'top-left', size: [0.3, 0.3] } } : {}),
     label: 'テスト地図',
     ariaLabel: (_c, name) => name,
     tooltip: (_c, name) => ({ title: name, lines: [] }),
@@ -106,6 +107,43 @@ describe('one Tab stop for the whole map', () => {
     expect(hint.classList.contains('sr-only')).toBe(true);
     expect(hint.textContent).toContain('矢印キー');
     expect(hint.textContent).toContain('Home');
+  });
+});
+
+describe('an inset box is a separate group for the arrows', () => {
+  // 3x3 grid; g01 and g02 are drawn in a box in the top left corner (like Okinawa).
+  test('an arrow from the main map never lands in the inset, although the boxed areas lie right beside it', () => {
+    const { host } = mount(3, 3, ['g01', 'g02']);
+    expect(areas(host).map((a) => a.getAttribute('data-code'))).toEqual(['g00', 'g10', 'g11', 'g12', 'g20', 'g21', 'g22', 'g01', 'g02']);
+    areas(host)[0].focus(); // g00, which has the boxed g01 right of it on the grid
+    key(document.activeElement!, 'ArrowRight');
+    expect(focused()).not.toBe('g01');
+    for (const a of areas(host).slice(0, 7)) {
+      a.focus();
+      for (const k of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) {
+        key(document.activeElement!, k);
+        expect(['g01', 'g02'], `${k} from ${a.getAttribute('data-code')}`).not.toContain(focused());
+        a.focus();
+      }
+    }
+  });
+
+  test('from an inset area an arrow stays in the inset; PageDown, End and PageUp reach it from the main map and back', () => {
+    const { host } = mount(3, 3, ['g01', 'g02']);
+    areas(host)[7].focus(); // g01
+    key(document.activeElement!, 'ArrowRight');
+    expect(focused()).toBe('g02');
+    key(document.activeElement!, 'ArrowDown');
+    expect(focused()).toBe('g02'); // the main map below is no target
+    key(document.activeElement!, 'ArrowLeft');
+    expect(focused()).toBe('g01');
+    key(document.activeElement!, 'PageUp');
+    expect(focused()).toBe('g22'); // the last main area
+    key(document.activeElement!, 'PageDown');
+    expect(focused()).toBe('g01');
+    areas(host)[0].focus();
+    key(document.activeElement!, 'End');
+    expect(focused()).toBe('g02');
   });
 });
 

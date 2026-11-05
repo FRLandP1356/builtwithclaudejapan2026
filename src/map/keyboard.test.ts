@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { ARROW_DIRECTIONS, isNavigationKey, nearestInDirection, SIDEWAYS_WEIGHT, tabStopFor, targetForKey, type Anchor } from './keyboard';
 
-const at = (code: string, x: number, y: number): Anchor => ({ code, x, y });
+const at = (code: string, x: number, y: number, inset = false): Anchor => ({ code, x, y, ...(inset ? { inset } : {}) });
 
 // A 3x3 grid, 10 apart, y growing downwards like the screen:
 //   a b c
@@ -93,6 +93,30 @@ describe('nearestInDirection', () => {
       walked.push(cur);
     }
     expect(walked).toEqual(['r1', 'r2', 'r3', 'r4']);
+  });
+});
+
+describe('inset areas are a separate group for the arrows', () => {
+  // Main map: a, b (b right of a). Inset box drawn above them: x1 (above a), x2 (right of x1).
+  const layout = [at('a', 10, 50), at('b', 30, 50), at('x1', 10, 5, true), at('x2', 25, 5, true)];
+
+  test('from a main area an arrow never lands in an inset, however close it is on screen', () => {
+    expect(nearestInDirection(layout[0], 'up', layout)).toBeUndefined();
+    expect(nearestInDirection(layout[1], 'up', layout)).toBeUndefined();
+    expect(nearestInDirection(layout[0], 'right', layout)).toBe('b');
+  });
+
+  test('from an inset area an arrow moves among the inset areas only', () => {
+    expect(nearestInDirection(layout[2], 'down', layout)).toBeUndefined(); // the main map lies below, but is not a target
+    expect(nearestInDirection(layout[2], 'right', layout)).toBe('x2');
+    expect(nearestInDirection(layout[3], 'left', layout)).toBe('x1');
+  });
+
+  test('the inset stays reachable in Tab order: PageDown from the last main area, End, PageUp back', () => {
+    expect(targetForKey('PageDown', 'b', layout)).toBe('x1');
+    expect(targetForKey('End', 'a', layout)).toBe('x2');
+    expect(targetForKey('PageUp', 'x1', layout)).toBe('b');
+    expect(targetForKey('ArrowUp', 'a', layout)).toBeUndefined();
   });
 });
 

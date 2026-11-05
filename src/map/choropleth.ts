@@ -406,7 +406,7 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
 
   // Keyboard: one Tab stop for the whole map. `anchors` is in Tab (DOM) order, which Home and End follow.
   const codes = [...pathByCode.keys()];
-  const anchors: Anchor[] = codes.map((code) => ({ code, x: anchorByCode.get(code)![0], y: anchorByCode.get(code)![1] }));
+  const anchors: Anchor[] = codes.map((code) => ({ code, x: anchorByCode.get(code)![0], y: anchorByCode.get(code)![1], inset: insetCodes.has(code) }));
   let tabStop: string | undefined;
   let selectedCode: string | undefined;
   function setTabStop(code: string | undefined): void {

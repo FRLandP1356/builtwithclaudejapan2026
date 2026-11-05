@@ -9,6 +9,8 @@ export interface Anchor {
   code: string;
   x: number;
   y: number;
+  /** The area is drawn in an inset box (Okinawa, far islands), whose position says nothing about where it lies. */
+  inset?: boolean;
 }
 
 /** The arrow keys the map answers to. */
@@ -37,12 +39,15 @@ const EPS = 1e-9;
  * that direction (y grows downwards on screen), the one with the smallest `along² + (SIDEWAYS_WEIGHT · sideways)²`.
  * An exact tie goes to the candidate that comes first in `candidates` (the Tab order), so the result never depends on
  * floating-point luck. `undefined` at an edge: nothing lies in that direction. The area itself is never a candidate.
+ * An inset box is a separate group: from the main map an arrow never lands in an inset (ArrowUp from 北海道 must not
+ * reach 沖縄県 just because its box is drawn above), and from an inset area it moves among the inset's areas only.
+ * Those areas are reached with PageUp/PageDown, Home/End or the search box.
  */
 export function nearestInDirection(from: Anchor, direction: Direction, candidates: readonly Anchor[]): string | undefined {
   let best: string | undefined;
   let bestScore = Infinity;
   for (const c of candidates) {
-    if (c.code === from.code) continue;
+    if (c.code === from.code || Boolean(c.inset) !== Boolean(from.inset)) continue;
     const dx = c.x - from.x;
     const dy = c.y - from.y;
     const along = direction === 'right' ? dx : direction === 'left' ? -dx : direction === 'down' ? dy : -dy;

@@ -96,4 +96,22 @@ describe('real maps: every area can be reached from the keyboard', () => {
     expect(reach(paths, ARROWS).has(minami)).toBe(false);
     expect(reach(paths, WITH_PAGES).has(minami)).toBe(true);
   });
+
+  test('Okinawa is not an arrow target from the main map (ArrowUp from 北海道), yet End and PageUp reach it', () => {
+    const { paths } = mountReal('national', 'public/data/geo/japan.topo.json');
+    const get = (code: string) => paths.find((p) => p.getAttribute('data-code') === code)!;
+    for (const code of paths.map((p) => p.getAttribute('data-code')!).filter((c) => c !== '47')) {
+      for (const k of ARROWS) {
+        const from = get(code);
+        from.focus();
+        press(from, k);
+        expect(document.activeElement?.getAttribute('data-code'), `${k} from ${code}`).not.toBe('47');
+      }
+    }
+    get('01').focus();
+    press(document.activeElement!, 'End');
+    expect(document.activeElement?.getAttribute('data-code')).toBe('47');
+    press(document.activeElement!, 'PageUp');
+    expect(document.activeElement?.getAttribute('data-code')).toBe('46');
+  });
 });
