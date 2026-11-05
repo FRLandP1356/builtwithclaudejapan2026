@@ -197,7 +197,7 @@ afterEach(() => {
 
 describe('mount', () => {
   it('keeps the shell heading, adds the intro and the quiet line about 2050, and lists the five sample questions', () => {
-    const m = mount();
+    const m = mount({ endpoint: 'https://worker.example.test/api/chat' });
     expect(m.section.querySelectorAll('h2')).toHaveLength(1);
     expect(m.section.querySelector('h2')!.textContent).toBe('AIに質問');
     const text = m.section.textContent!;
@@ -207,6 +207,144 @@ describe('mount', () => {
     );
     expect(text).toContain('2050年より後の数字は、このアプリの試算です');
     expect(m.samples().map((b) => b.textContent)).toEqual(SAMPLE_QUESTIONS);
+  });
+
+  describe('the intro says the truth first: with no AI address named, nothing would answer', () => {
+    const NOT_AVAILABLE_TEXT =
+      'このバージョンでは、AIへの質問は使えません（AIの接続先がまだ用意されていません）。地図、数値、前提の調整、人口の割り振りはそのまま使えます。';
+    const WORKER = 'https://worker.example.test/api/chat';
+    const lead = (m: Mounted) => m.q('.panel-lead').textContent;
+    const PROMISE = ['日本語で質問すると', 'Claudeが', '呼び出して答えます', '照らし合わせ', '見つからない数字は知らせます'];
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('no address from the build and none from the caller: the plain sentence, and none of the promise', () => {
+      vi.stubEnv('VITE_CHAT_ENDPOINT', undefined);
+      const m = mount();
+      expect(lead(m)).toBe(NOT_AVAILABLE_TEXT);
+      expect(PANEL_TEXT.introUnavailable).toBe(NOT_AVAILABLE_TEXT);
+      for (const part of PROMISE) expect(m.section.textContent).not.toContain(part);
+      expect(m.q('.panel-lead').textContent).not.toContain('答えます');
+      // the three facts: not available now, why, what still works
+      expect(lead(m)).toContain('使えません');
+      expect(lead(m)).toContain('接続先がまだ用意されていません');
+      expect(lead(m)).toContain('地図、数値、前提の調整、人口の割り振りはそのまま使えます');
+    });
+
+    it('is the same sentence the card shows after a click, so the two cannot drift', async () => {
+      vi.stubEnv('VITE_CHAT_ENDPOINT', undefined);
+      const m = mount({ fetchFn: script(jsonResponse({ error: 'not_found' }, 404)).fetchFn, cache: allPending() });
+      m.samples()[0]!.click();
+      await answersCount(m, 1);
+      expect(m.answers()[0]!.querySelector('.ai-fail')!.textContent).toBe(lead(m));
+    });
+
+    it('an address from the caller, or from the build: the intro that describes a working AI', () => {
+      vi.stubEnv('VITE_CHAT_ENDPOINT', undefined);
+      const given = mount({ endpoint: WORKER });
+      expect(lead(given)).toBe(PANEL_TEXT.intro);
+      expect(lead(given)).not.toContain('使えません');
+
+      vi.stubEnv('VITE_CHAT_ENDPOINT', WORKER);
+      const slot = document.createElement('section');
+      document.body.append(slot);
+      const built = mount({}, makeContext(), slot);
+      expect(lead(built)).toBe(PANEL_TEXT.intro);
+    });
+
+    it('the same-origin default counts only when it is written down: VITE_CHAT_ENDPOINT=/api/chat is an address, a missing one is not', () => {
+      vi.stubEnv('VITE_CHAT_ENDPOINT', '/api/chat');
+      expect(lead(mount())).toBe(PANEL_TEXT.intro);
+      vi.stubEnv('VITE_CHAT_ENDPOINT', undefined);
+      const slot = document.createElement('section');
+      document.body.append(slot);
+      expect(lead(mount({}, makeContext(), slot))).toBe(NOT_AVAILABLE_TEXT);
+    });
+
+    it('an empty or blank variable names nothing', () => {
+      for (const value of ['', '   ']) {
+        vi.stubEnv('VITE_CHAT_ENDPOINT', value);
+        const slot = document.createElement('section');
+        document.body.append(slot);
+        expect(lead(mount({}, makeContext(), slot))).toBe(NOT_AVAILABLE_TEXT);
+      }
+    });
+
+    it('an endpoint option that is an empty string is still an address the caller named', () => {
+      vi.stubEnv('VITE_CHAT_ENDPOINT', undefined);
+      expect(lead(mount({ endpoint: '' }))).toBe(PANEL_TEXT.intro);
+    });
+
+    it('a build that named no address but whose same-origin Worker answers: the intro changes to the working one after the first real answer', async () => {
+      vi.stubEnv('VITE_CHAT_ENDPOINT', undefined);
+      const s = script(jsonResponse({ error: 'not_found' }, 404), textResponse('はい。'), textResponse('二つ目。'));
+      const m = mount({ fetchFn: s.fetchFn, cache: allPending() });
+      m.typeAndSend('一つ目');
+      await answersCount(m, 1);
+      expect(lead(m)).toBe(NOT_AVAILABLE_TEXT); // a 404 proves nothing is there
+      m.typeAndSend('二つ目');
+      await answersCount(m, 2);
+      expect(lead(m)).toBe(PANEL_TEXT.intro);
+    });
+
+    it('a saved answer does not change it (nothing was asked of the AI), and neither does a failure', async () => {
+      vi.stubEnv('VITE_CHAT_ENDPOINT', undefined);
+      const m = mount({ fetchFn: script(jsonResponse({ error: 'upstream_error' }, 502)).fetchFn, cache: cacheOf(savedEntry(TOKYO_QUESTION, '保存済みの答えです。')) });
+      await settle();
+      m.samples()[0]!.click(); // a saved answer, no request
+      await answersCount(m, 1);
+      expect(lead(m)).toBe(NOT_AVAILABLE_TEXT);
+      m.typeAndSend('別の質問');
+      await answersCount(m, 2);
+      expect(m.answers()[0]!.querySelector('.ai-fail')).not.toBeNull();
+      expect(lead(m)).toBe(NOT_AVAILABLE_TEXT);
+    });
+
+    it('an unconfirmed-numbers answer is still an answer from the AI', async () => {
+      vi.stubEnv('VITE_CHAT_ENDPOINT', undefined);
+      const text = '2040年には、約5,432万人です。';
+      const m = mount({ fetchFn: script(textResponse(text), textResponse(text)).fetchFn, cache: allPending() });
+      m.typeAndSend('どうですか');
+      await answersCount(m, 1);
+      expect(m.answers()[0]!.querySelector('.ai-warning')).not.toBeNull();
+      expect(lead(m)).toBe(PANEL_TEXT.intro);
+    });
+
+    it('with an address named, the intro never changes', async () => {
+      const m = mount({ endpoint: WORKER, fetchFn: script(jsonResponse({ error: 'upstream_error' }, 502), textResponse('はい。')).fetchFn, cache: allPending() });
+      m.typeAndSend('一つ目');
+      await answersCount(m, 1);
+      expect(lead(m)).toBe(PANEL_TEXT.intro);
+      m.typeAndSend('二つ目');
+      await answersCount(m, 2);
+      expect(lead(m)).toBe(PANEL_TEXT.intro);
+    });
+
+    it('the rest of the panel is the same in both states: the heading, the 2050 note, the five samples, the box', () => {
+      vi.stubEnv('VITE_CHAT_ENDPOINT', undefined);
+      const a = mount();
+      const slot = document.createElement('section');
+      slot.innerHTML = '<h2 class="panel-title">AIに質問</h2>';
+      document.body.append(slot);
+      const b = mount({ endpoint: WORKER }, makeContext(), slot);
+      for (const m of [a, b]) {
+        expect(m.section.querySelector('h2')!.textContent).toBe('AIに質問');
+        expect(m.q('.note').textContent).toContain('2050年より後の数字は、このアプリの試算です');
+        expect(m.samples().map((button) => button.textContent)).toEqual(SAMPLE_QUESTIONS);
+        expect(m.textarea).not.toBeNull();
+        expect(m.submit.disabled).toBe(false);
+      }
+    });
+
+    it('is not longer than the intro it replaces (3 lines on a phone)', () => {
+      expect(countCodePoints(PANEL_TEXT.introUnavailable)).toBeLessThanOrEqual(countCodePoints(PANEL_TEXT.intro));
+    });
+
+    it('follows the wording rules: no advice, nothing called a forecast', () => {
+      expect(PANEL_TEXT.introUnavailable).not.toMatch(/予測|残せない|残さない|閉鎖|すべき/);
+    });
   });
 
   it('has a labelled textarea limited to 200 characters with a visible counter, and a 質問する button', () => {
@@ -1232,7 +1370,7 @@ describe('when there is no AI behind the page (nothing is deployed)', () => {
       expect(m.answers()[0]!.querySelector('.ai-fail')!.textContent).toBe(TRY_LATER_TEXT);
     }
     expect(unavailableNotices(m)).toHaveLength(0);
-    expect(m.section.textContent).not.toContain('このバージョンでは');
+    expect(m.q('.ai-answers').textContent).not.toContain('このバージョンでは'); // the intro above may say it; no answer card does
   });
 
   it('the five sample buttons stay (they are the tour), and are usable again after the sentence', async () => {

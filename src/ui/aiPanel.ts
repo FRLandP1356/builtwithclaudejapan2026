@@ -67,6 +67,10 @@ export const PANEL_TEXT = {
   // every number comes from the results, and it quotes no label that is not on the screen. Kept to about three lines on a phone.
   intro:
     '日本語で質問すると、Claudeがこのアプリの計算を呼び出して答えます。答えの数字は、その質問で使った計算の結果と照らし合わせ、見つからない数字は知らせます。',
+  // The intro when the build names no AI address (VITE_CHAT_ENDPOINT unset, no endpoint option): nothing would answer, so
+  // the panel says so before it shows a box and sample questions. It is the card's own sentence (MSG_NOT_AVAILABLE), word
+  // for word, so the two cannot drift; the promise and the number check describe a working AI and are left out.
+  introUnavailable: MSG_NOT_AVAILABLE,
   after2050: '2050年までの数字は社人研の公式推計、2050年より後の数字は、このアプリの試算です（予測ではありません）。',
   waiting: '計算の結果を引いています…',
   blank: '質問を入力してください。',
@@ -90,10 +94,15 @@ export const PANEL_TEXT = {
 
 const DEFAULT_ENDPOINT = '/api/chat';
 
-/** The Worker's address: set at build time with VITE_CHAT_ENDPOINT (see docs/ai-endpoint.md), same-origin by default. */
-function configuredEndpoint(): string {
+/** The address named at build time with VITE_CHAT_ENDPOINT (see docs/ai-endpoint.md), or undefined when the build names none. */
+function buildEndpoint(): string | undefined {
   const value: unknown = import.meta.env.VITE_CHAT_ENDPOINT;
-  return typeof value === 'string' && value.trim() !== '' ? value.trim() : DEFAULT_ENDPOINT;
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
+}
+
+/** The Worker's address: the build's, else same-origin '/api/chat'. */
+function configuredEndpoint(): string {
+  return buildEndpoint() ?? DEFAULT_ENDPOINT;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -139,6 +148,9 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
   };
   const places = makePlaceNames(ctx.data.areas, ctx.data.prefNames);
   const endpoint = options.endpoint ?? configuredEndpoint();
+  // An address was named (by the build or by the caller): the intro describes a working AI. Without one the same-origin
+  // default is only a guess, and in this version nothing is there, so the intro says so first.
+  const endpointNamed = options.endpoint !== undefined || buildEndpoint() !== undefined;
 
   // Saved answers: loaded once, in the background. A question asked before they arrive waits for them, but only
   // for CACHE_WAIT_MS and never without showing the waiting status and the stop button (see waitForCache).
@@ -203,10 +215,12 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
 
   const statusBox = h('div', { class: 'ai-status' }, statusText, cancelBtn);
 
+  const lead = h('p', { class: 'panel-lead' }, endpointNamed ? PANEL_TEXT.intro : PANEL_TEXT.introUnavailable);
+
   const root = h(
     'div',
     { class: 'ai-panel' },
-    h('p', { class: 'panel-lead' }, PANEL_TEXT.intro),
+    lead,
     h('p', { class: 'note' }, PANEL_TEXT.after2050),
     h('div', { class: 'panel-section' }, h('h3', { class: 'panel-section-title' }, '質問の例'), samplesList),
     h('div', { class: 'panel-section' }, h('h3', { class: 'panel-section-title' }, '自分で質問する'), form),
@@ -646,6 +660,9 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
         }
       }
       history = shown.messages;
+      // The build named no address, yet the AI just answered (a Worker is routed on this origin): it is there, so the
+      // intro stops saying it is not. (When an address was named the intro already is this one.)
+      if (!shown.fromCache && (shown.status === 'ok' || shown.status === 'unverified_numbers')) lead.textContent = PANEL_TEXT.intro;
       if (from === 'typed' && (shown.status === 'ok' || shown.status === 'unverified_numbers')) {
         textarea.value = '';
         updateCounter();
