@@ -115,15 +115,6 @@ function h<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
-/** `fn()`, or `fallback` when it throws: values from the model are untrusted, and a failure to read one must not break the page. */
-function orElse<T>(fn: () => T, fallback: T): T {
-  try {
-    return fn();
-  } catch {
-    return fallback;
-  }
-}
-
 const registry = new WeakMap<HTMLElement, () => void>();
 let mountCount = 0;
 
@@ -347,8 +338,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
       labelled ? `この前提を画面に反映する（${summary}）` : 'この前提を画面に反映する',
     );
     button.addEventListener('click', () => {
-      // sanitizeScenario reads the values as text in its message and can throw on an exotic one (an object with no toString).
-      const checked = orElse(() => sanitizeScenario(offer), { error: 'unreadable' });
+      const checked = sanitizeScenario(offer);
       if (isScenarioError(checked)) {
         message.textContent = PANEL_TEXT.scenarioRefused; // Ruling 21: nothing out of range reaches the engine
         return;
@@ -400,16 +390,13 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     inputs.forEach((input, i) => {
       const message = h('p', { class: 'ai-scenario-msg', role: 'status', 'aria-live': 'polite' });
       const text = inputs.length > 1 ? `${PANEL_TEXT.allocationButton}（${i + 1}件目）` : PANEL_TEXT.allocationButton;
-      const read = orElse(
-        () => (typeof input === 'object' && input !== null && !Array.isArray(input) ? toolScenario((input as Record<string, unknown>).scenario) : 'unreadable'),
-        'unreadable' as const,
-      );
+      const read = typeof input === 'object' && input !== null && !Array.isArray(input) ? toolScenario((input as Record<string, unknown>).scenario) : 'unreadable';
       const scenario = typeof read === 'string' ? undefined : read;
       const differs = scenario !== undefined && scenarioKey(scenario) !== scenarioKey(ctx.store.get().scenario);
       const button = h('button', { type: 'button', class: 'btn', 'data-role': 'apply-allocation' }, differs ? `${text}${PANEL_TEXT.allocationScenarioHint}` : text);
       allocationOffer.set(button, { text, scenario });
       button.addEventListener('click', () => {
-        const rebuilt = orElse(() => overlayFromToolInput(input, ctx.data, ctx.runner), { error: PANEL_TEXT.allocationFailed });
+        const rebuilt = overlayFromToolInput(input, ctx.data, ctx.runner);
         if ('error' in rebuilt) {
           message.textContent = rebuilt.error;
           return;
