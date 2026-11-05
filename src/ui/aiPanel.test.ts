@@ -305,7 +305,7 @@ describe('sample questions', () => {
     expect(article.querySelector('.ai-warning')).toBeNull();
     expect(article.querySelector('.badge-estimate')!.textContent).toBe('試算');
     expect(article.querySelector('.ai-basis')!.textContent).toBe(
-      '数字は、下の「使った道具と数字」にある計算の結果から引いています。2050年より後は、このアプリの試算です（予測ではありません）。',
+      '答えの数字は、下の「使った道具と数字」にある計算の結果と照らし合わせています。2050年より後は、このアプリの試算です（予測ではありません）。',
     );
 
     const items = [...article.querySelectorAll('.ai-trace-item')];
@@ -635,6 +635,54 @@ describe('keyboard and input rules', () => {
     m.submit.click();
     await answersCount(m, 1);
     expect(s.mock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the line about what the numbers rest on', () => {
+  const OVERCLAIMS = ['引いています', '取っています', 'からだけ'];
+
+  it('an answer whose numbers could not be confirmed prints no such line at all, only the warning', async () => {
+    const s = script(
+      toolUseResponse(toolUse('toolu_01', 'find_area', { query: '東京' })),
+      textResponse('東京都は2100年に約9,876万人です。'),
+      textResponse('東京都は2100年に約9,876万人です。'),
+    );
+    const m = mount({ fetchFn: s.fetchFn });
+    m.typeAndSend('東京は？');
+    await answersCount(m, 1);
+    const article = m.answers()[0]!;
+    expect(article.querySelector('.ai-warning')!.textContent).toContain('確かめられませんでした：9,876万');
+    expect(article.querySelector('.ai-trace')).not.toBeNull(); // there is a trace: the old line was printed for it
+    expect(article.querySelector('.ai-basis')).toBeNull();
+    for (const word of [...OVERCLAIMS, '照らし合わせています']) expect(article.textContent).not.toContain(word);
+  });
+
+  it('an answer whose numbers passed says they were checked against the results, not that they came from them', async () => {
+    const s = script(toolUseResponse(toolUse('toolu_01', 'get_series', { areaCode: '13' })), textResponse(GOOD_TOKYO_ANSWER));
+    const m = mount({ fetchFn: s.fetchFn });
+    m.samples()[0]!.click();
+    await answersCount(m, 1);
+    const line = m.answers()[0]!.querySelector('.ai-basis')!.textContent!;
+    expect(line).toContain('答えの数字は、下の「使った道具と数字」にある計算の結果と照らし合わせています。');
+    for (const word of OVERCLAIMS) expect(line).not.toContain(word);
+  });
+
+  it('a saved answer points at the results it used, without claiming where its numbers came from', async () => {
+    const m = mount({ cache: cacheOf(savedEntry(TOKYO_QUESTION, '保存済みの答えです。')) });
+    m.samples()[0]!.click();
+    await answersCount(m, 1);
+    const line = m.answers()[0]!.querySelector('.ai-basis')!.textContent!;
+    expect(line).toBe('あらかじめ保存した回答です。そのとき使った計算の結果は、下の「使った道具と数字」で見られます。');
+    for (const word of OVERCLAIMS) expect(line).not.toContain(word);
+
+    const bare = mount({ cache: cacheOf(savedEntry(TOKYO_QUESTION, '保存済みの答えです。', { trace: [] })) }, makeContext(), (() => {
+      const slot = document.createElement('section');
+      document.body.append(slot);
+      return slot;
+    })());
+    bare.samples()[0]!.click();
+    await answersCount(bare, 1);
+    expect(bare.answers()[0]!.querySelector('.ai-basis')!.textContent).toBe('あらかじめ保存した回答です。');
   });
 });
 

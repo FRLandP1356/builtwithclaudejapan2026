@@ -468,13 +468,19 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
       );
     }
 
-    const basis = [
-      result.fromCache ? 'あらかじめ保存した回答です。数字は、そのとき引いた計算の結果から取っています。' : null,
-      !result.fromCache && result.trace.length > 0 ? '数字は、下の「使った道具と数字」にある計算の結果から引いています。' : null,
-      !result.fromCache && result.trace.length === 0 ? 'この答えでは、計算の結果は使っていません。' : null,
-      usesEstimate ? `${ESTIMATE_NOTE}。` : null,
-    ].filter((line): line is string => line !== null);
-    article.append(h('p', { class: 'note ai-basis' }, basis.join('')));
+    // What the numbers rest on, said only for an answer whose numbers passed the check (status ok). For one that did
+    // not, the warning above says what could not be confirmed, and a line here would contradict it. The line says
+    // that the numbers are checked against the results, never that they are only taken from them.
+    if (result.status === 'ok') {
+      const basis: string[] = [];
+      if (result.fromCache) {
+        basis.push(result.trace.length > 0 ? 'あらかじめ保存した回答です。そのとき使った計算の結果は、下の「使った道具と数字」で見られます。' : 'あらかじめ保存した回答です。');
+      } else {
+        basis.push(result.trace.length > 0 ? '答えの数字は、下の「使った道具と数字」にある計算の結果と照らし合わせています。' : 'この答えでは、計算の結果は使っていません。');
+      }
+      if (usesEstimate) basis.push(`${ESTIMATE_NOTE}。`);
+      article.append(h('p', { class: 'note ai-basis' }, basis.join('')));
+    }
 
     if (result.status === 'ok' && result.message) article.append(h('p', { class: 'note ai-message' }, result.message));
     if (result.trimmed) article.append(h('p', { class: 'note ai-trimmed' }, PANEL_TEXT.trimmed));
