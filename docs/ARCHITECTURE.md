@@ -1,6 +1,6 @@
 # 構成
 
-ブラウザの中で動く静的なページ（Vite、TypeScript、D3）と、AI の質問だけが使う小さな中継（Cloudflare Worker）でできている。人口の計算はすべてブラウザの中の計算エンジンが行い、AI もその同じエンジンを道具として呼ぶ。
+ブラウザの中で動く静的なページ（Vite、TypeScript、D3）と、AI の質問だけが使う小さな中継（Cloudflare Worker）でできている。人口の計算はすべてブラウザの中の計算エンジンが行い、AI もその同じエンジンを道具として呼ぶ。この版では中継を公開していないので、AI の質問は動かない（README の「限界と未完了」）。
 
 ## データの流れ
 
@@ -31,10 +31,10 @@ src/ai/tools.ts（8つの道具。同じ engine を呼ぶ）◀── src/ai/cli
 | `pipeline` | 出典のファイルを取得し（SHA256 で照合）、`public/data` を作る Python（標準ライブラリだけ）。`check_codes.py` が社人研の地域と境界のコードを突き合わせる |
 | `src/engine` | `step`（1期の計算）、`project`（地域ごと・全地域）、`scenarios`（出生率・移動の前提）、`infra`（インフラ連動の仮定）、`facilities`（施設の判定）、`allocation`（人口の割り振り）、`aggregate`（合計）。DOM もネットワークも使わない純粋な関数 |
 | `src/data` | `loader`（データの読み込み、失敗の分類）、`runner`（検証したシナリオだけを全地域に適用して覚える） |
-| `src/map` | 日本・県の地図、色（2020年比の対数）、凡例 |
-| `src/ui` | 骨組み `app.ts`、共有の状態 `state.ts`、パネル 4つ（町の詳細、前提、割り振り、AI）。見た目の決まりは `DESIGN.md` と `theme.css` |
+| `src/map` | 日本・県の地図、色（2020年比の対数。割り振りを表示する時は人口の変化）、凡例、キーボードの操作（`keyboard.ts`。地図ごとに Tab の停止位置は1つで、矢印・PageUp/PageDown・Home/End で移る） |
+| `src/ui` | 骨組み `app.ts`（地図へのスキップリンク、Esc で割り振りを消す）、共有の状態 `state.ts`（選択、年、前提、割り振りの地図表示 `allocation`）、パネル 4つ（町の詳細、前提、割り振り、AI）。割り振りを地図に出す部分は `allocationOverlay.ts`・`allocationView.ts`・`allocationCore.ts`。見た目の決まりは `DESIGN.md` と `theme.css` |
 | `src/ai` | `toolDefs`（道具の定義。データだけ）、`tools`（道具の実装）、`numberCheck`（答えの数字の検査）、`client`（Worker とのやり取りと道具のループ）、`cached`（保存済みの答え） |
-| `worker` | `index`（`POST /api/chat`）、`validate`（本文の検査と作り直し）、`rateLimit`（1日の回数）、`systemPrompt` |
+| `worker` | `index`（`POST /api/chat`。上流への要求の本体とヘッダーは定数と検査済みの `messages` と道具の定義だけから作る）、`validate`（本文の検査と作り直し）、`rateLimit`（IP ごとの1日の回数と、16個のキーに分けた全体の1日の回数。短時間の連続の制限 `IP_LIMITER` は `index` が呼ぶ）、`systemPrompt` |
 
 ## 守っている4つの約束
 
@@ -49,6 +49,6 @@ src/ai/tools.ts（8つの道具。同じ engine を呼ぶ）◀── src/ai/cli
 - **変異テスト**：テストが本当に失敗しうるかを、コードをわざと壊して確かめた（例：割り振りで対象を元から外さない、期間の境目を1つずらす、数字の許容幅を広げる）。壊しても通ってしまうテストは、レビューで差し戻した。
 - **画面と Worker のあいだの契約テスト**：画面が作るすべての要求を、Worker の本物の検査関数 `worker/validate.ts` に通して受理されることを確かめる。Worker が送る道具の定義は画面側の実装と同じファイルから来るので食い違わない。そのうえで、定義にあるすべての道具に実装と画面での呼び名があることをテストで確かめる。
 - **独立の数字**：テストの期待値は、テスト対象とは別の経路で出した数字（Python の試作、基準実装 `test/helpers/referenceProjection.ts`、台帳に残した値）に置く。
-- 実機の確認：390px 幅と1512px 幅のブラウザで、横スクロールが出ないことと、数字が画面と計算で一致することを確かめた。
+- 実機の確認：390px 幅と広い画面（1512px）のブラウザで、横スクロールが出ないことと、数字が画面と計算で一致することを、最後の全体レビューと修正の波の各流れで確かめた（どの版で確かめたかは README の「限界と未完了」）。
 
 テストは `npm test`（Vitest）と `npm run test:py`（データ作り）。件数は README にある。
