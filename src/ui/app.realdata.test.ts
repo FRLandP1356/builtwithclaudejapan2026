@@ -65,7 +65,7 @@ describe('和歌山県 +10% in 2100 on the real maps', () => {
     const svg = root.querySelector('.map-host-national svg')!;
     const marker = svg.querySelector('.marker[data-for="30"]')!;
     expect(marker.textContent).toBe('+1');
-    expect(label(svg, '30')).toMatch(/飲食料品小売業：目安を上回る町 \+1(、|$)/);
+    expect(label(svg, '30')).toMatch(/飲食料品小売業：目安以上になる町 \+1(、|$)/);
     expect(label(svg, '30')).not.toContain('−0');
 
     handle.store.set({ selectedPref: '30' });
@@ -73,7 +73,7 @@ describe('和歌山県 +10% in 2100 on the real maps', () => {
     const pref = root.querySelector('.map-host:not([hidden]):not(.map-host-national) svg')!;
     expect(pref.querySelector('.ring-gain')!.getAttribute('d')).toBe(pref.querySelector('path.area[data-code="30344"]')!.getAttribute('d'));
     expect(label(pref, '30344')).toContain('高野町');
-    expect(label(pref, '30344')).toContain('飲食料品小売業が目安を上回る（増えた）');
+    expect(label(pref, '30344')).toContain('飲食料品小売業が目安以上になる（増えた）');
     expect(label(pref, '30344')).toContain('割り振りによる変化 +10.0%');
     // headline and town panel agree: both numbers in the headline, the after-number in the panel's note
     const series = handle.store.get().series;

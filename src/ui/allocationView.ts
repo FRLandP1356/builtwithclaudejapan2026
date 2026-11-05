@@ -110,12 +110,14 @@ export function overlayCovers(overlay: AllocationOverlay, areaCodes: readonly st
 }
 
 /**
- * 「目安を上回る町 +1、下回る町 −1」: only the sides that have towns. A side with none is left out, so no "−0" is printed
- * (「目安を上回る町 +1」 / 「目安を下回る町 −2」); `undefined` when neither side has any.
+ * 「目安以上になる町 +1、下回る町 −1」: only the sides that have towns. A side with none is left out, so no "−0" is printed
+ * (「目安以上になる町 +1」 / 「目安を下回る町 −2」); `undefined` when neither side has any.
+ * 「以上」, not 「上回る」: the engine counts a town as at the guide from pop >= p50 (facilityStatus: not below), so a town that
+ * lands exactly on the guide has reached it; 「下回る」 (pop < p50) is exact for the other side.
  */
 export function crossingCounts(c: { gained: number; lost: number }): string | undefined {
-  if (c.gained > 0 && c.lost > 0) return `目安を上回る町 +${c.gained}、下回る町 −${c.lost}`;
-  if (c.gained > 0) return `目安を上回る町 +${c.gained}`;
+  if (c.gained > 0 && c.lost > 0) return `目安以上になる町 +${c.gained}、下回る町 −${c.lost}`;
+  if (c.gained > 0) return `目安以上になる町 +${c.gained}`;
   if (c.lost > 0) return `目安を下回る町 −${c.lost}`;
   return undefined;
 }
@@ -131,7 +133,7 @@ export function allocationLines(v: AllocationView, kind: PlaceKind, code: string
         const counts = crossingCounts(c);
         if (counts) lines.push(`${v.focus.name}：${counts}`);
       }
-    } else if (v.gained.has(code)) lines.push(`${v.focus.name}が目安を上回る（増えた）`);
+    } else if (v.gained.has(code)) lines.push(`${v.focus.name}が目安以上になる（増えた）`);
     else if (v.lost.has(code)) lines.push(`${v.focus.name}が目安を下回る（減った）`);
   }
   return lines;
