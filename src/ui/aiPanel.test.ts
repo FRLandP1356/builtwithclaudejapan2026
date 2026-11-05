@@ -196,7 +196,10 @@ describe('mount', () => {
     expect(m.section.querySelectorAll('h2')).toHaveLength(1);
     expect(m.section.querySelector('h2')!.textContent).toBe('AIに質問');
     const text = m.section.textContent!;
-    expect(text).toContain('日本語で質問すると、Claudeが計算の結果を引いて答えます。答えの数字は、計算の結果からだけ引いています。');
+    expect(text).toContain(PANEL_TEXT.intro);
+    expect(PANEL_TEXT.intro).toBe(
+      '日本語で質問すると、Claudeがこのアプリの計算を呼び出し、その結果を使って答えます。計算を行うのはこのアプリです。答えが返ってきたら、答えの中の人数や割合などの数字を、その質問で使った計算の結果と照らし合わせます。結果の中に見つからない数字は、「確かめられなかった数字」として知らせます。',
+    );
     expect(text).toContain('2050年より後の数字は、このアプリの試算です');
     expect(m.samples().map((b) => b.textContent)).toEqual(SAMPLE_QUESTIONS);
   });
@@ -598,6 +601,38 @@ const pendingEntry = (i: number): CachedAnswer => savedEntry(SAMPLE_QUESTIONS[i]
 const allPending = (): CachedAnswers => cacheOf(...SAMPLE_QUESTIONS.map((_, i) => pendingEntry(i)));
 const unavailableNotices = (m: Mounted): HTMLElement[] => m.qa('.ai-answers [data-role="ai-unavailable"]');
 const countOf = (text: string, part: string): number => text.split(part).length - 1;
+
+describe('the intro does not overclaim', () => {
+  it('says what is checked, not that every number comes from the calculation', () => {
+    const intro = PANEL_TEXT.intro;
+    expect(intro).not.toContain('からだけ');
+    expect(intro).not.toContain('だけ引いて');
+    expect(intro).toContain('照らし合わせ'); // a check after the answer arrives
+    expect(intro).toContain('見つからない数字'); // what the check finds
+    expect(intro).toContain('知らせます'); // and says so
+    expect(intro.indexOf('答えが返ってきたら')).toBeGreaterThan(intro.indexOf('計算を行うのはこのアプリ')); // the order of events
+  });
+
+  it('is true of the panel: a number the calculation never returned is flagged, one it returned is not', async () => {
+    const flagged = script(
+      toolUseResponse(toolUse('toolu_01', 'get_series', { areaCode: '13' })),
+      textResponse('東京都は2100年に約2,500万人です。'),
+      textResponse('東京都は2100年に約2,600万人です。'),
+    );
+    const bad = mount({ fetchFn: flagged.fetchFn });
+    bad.samples()[0]!.click();
+    await answersCount(bad, 1);
+    expect(bad.answers()[0]!.querySelector('.ai-warning')).not.toBeNull();
+    expect(bad.answers()[0]!.querySelector('.ai-warning')!.textContent).toContain('確かめられませんでした');
+
+    const slot = document.createElement('section');
+    document.body.append(slot);
+    const good = mount({ fetchFn: script(toolUseResponse(toolUse('toolu_01', 'get_series', { areaCode: '13' })), textResponse(GOOD_TOKYO_ANSWER)).fetchFn }, makeContext(), slot);
+    good.samples()[0]!.click();
+    await answersCount(good, 1);
+    expect(good.answers()[0]!.querySelector('.ai-warning')).toBeNull();
+  });
+});
 
 describe('when the AI cannot be reached', () => {
   it('429 with cached:true and no verified saved answer: try again later, and no saved questions are offered or mentioned', async () => {
