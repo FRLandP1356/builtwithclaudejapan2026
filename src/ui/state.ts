@@ -26,6 +26,10 @@ export interface AppState {
   selectedArea?: string;
 }
 
+/**
+ * `state` is the newest state; `prev` is the state this listener was last given. They differ by one patch, or by
+ * two when a listener that ran earlier made its own `set` during the notification (then both arrive as one change).
+ */
 export type Listener = (state: AppState, prev: AppState) => void;
 
 export interface Store {
@@ -75,7 +79,9 @@ function changed(a: AppState, b: AppState): boolean {
 /** A plain store with an optional derive hook. The app uses createAppStore, which adds the rules above. */
 export function createStore(initial: AppState, options: StoreOptions = {}): Store {
   let state: AppState = { ...initial };
-  const listeners = new Set<Listener>();
+  // Each listener's `prev` is the last state it was given. A set made inside a listener notifies everyone at once;
+  // the outer loop then skips listeners that already saw the newest state, so nobody ends on a stale one.
+  const seen = new Map<Listener, AppState>();
 
   return {
     get: () => state,
@@ -89,9 +95,13 @@ export function createStore(initial: AppState, options: StoreOptions = {}): Stor
       }
       if (!changed(prev, next)) return false;
       state = next;
-      for (const fn of [...listeners]) {
+      for (const fn of [...seen.keys()]) {
+        const last = seen.get(fn);
+        if (last === undefined || last === state) continue; // unsubscribed meanwhile, or already up to date
+        const now = state;
+        seen.set(fn, now);
         try {
-          fn(next, prev);
+          fn(now, last);
         } catch (e) {
           console.error('store subscriber failed', e);
         }
@@ -99,9 +109,9 @@ export function createStore(initial: AppState, options: StoreOptions = {}): Stor
       return true;
     },
     subscribe(fn) {
-      listeners.add(fn);
+      seen.set(fn, state);
       return () => {
-        listeners.delete(fn);
+        seen.delete(fn);
       };
     },
   };
