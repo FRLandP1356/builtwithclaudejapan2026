@@ -128,10 +128,10 @@
 
 出典の書き方：
 
-- 国立社会保障・人口問題研究所「日本の地域別将来推計人口（令和5年推計）」（https://www.ipss.go.jp/pp-shicyoson/j/shicyoson23/t-page.asp）を加工して作成。社人研がこのアプリの内容を保証するものではありません。
+- 国立社会保障・人口問題研究所「日本の地域別将来推計人口（令和5年推計）」（https://www.ipss.go.jp/pp-shicyoson/j/shicyoson23/t-page.asp）（2026年11月5日取得）を加工して作成。社人研がこのアプリの内容を保証するものではありません。
 - 国土交通省「国土数値情報（行政区域データ）」（2021年版）（https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2021.html）（2026年11月5日取得）を加工して作成（簡略化と、社人研の地域に合わせた結合）。国が作成した地図ではありません。測量法に基づく国土地理院長承認（複製）R2JHf 450
   - 最後の1行は、元のデータのページにある表示です。加工して公開するデータに必要かどうかは、国土交通省に確認する（未了）ので、確認が済むまで念のため載せています。
-- 国土交通省国土政策局「サービス施設の立地する確率が50％及び80％となる自治体の人口規模（三大都市圏を除く）」（都市圏参考資料、https://www.mlit.go.jp/common/001042019.pdf）の図の数値を転記し、施設ごとの人口の目安として加工して作成。
+- 国土交通省国土政策局「サービス施設の立地する確率が50％及び80％となる自治体の人口規模（三大都市圏を除く）」（都市圏参考資料、https://www.mlit.go.jp/common/001042019.pdf）（2026年11月5日取得）の図の数値を転記し、施設ごとの人口の目安として加工して作成。
 
 社人研の元の Excel と、国立環境研究所（NIES）のデータは、このリポジトリに入れていません（NIES のデータは、このアプリでは使っていません）。社人研の Excel は `python3 -m pipeline.fetch_sources` が公式の URL から取得し、`pipeline/sources.json` に記録した SHA256 で照合します。
 
@@ -144,11 +144,15 @@ npm ci              # 依存関係を入れる
 npm run dev         # 開発用サーバー（http://localhost:5173）
 npm test            # テスト（Vitest）
 npm run typecheck   # 型の検査（画面側と Worker 側）
-npm run build       # 公開用のファイルを dist/ に作る
-npm run test:py     # データ作りのテスト（先に python3 -m pipeline.fetch_sources が必要）
+npm run build       # 公開用のファイルを dist/ に作る（ソースマップは作らない）
+npm run test:py     # データ作りのテスト（python3 -m unittest と同じ。先に python3 -m pipeline.fetch_sources が必要）
 ```
 
-2026-11-05 時点の `build` ブランチ（コミット b2c3dfa）で、`npm test` は36ファイル784件がすべて通り、`npm run typecheck` と `npm run build` も成功します。`npm run test:py` は84件が通ります。
+`build` ブランチのコミット fa21f09（2026-11-06）で確かめた結果です。
+
+- `npm test`：50ファイル1241件がすべて通る
+- `npm run typecheck`（画面側と Worker 側）と `npm run build`：エラーも警告もなし。`dist/` にソースマップ（`.map`）はできない
+- `python3 -m unittest`：`data/raw`（`python3 -m pipeline.fetch_sources` で取得）がある時は122件がすべて通る。無い時は101件が動き、データを要する4つのテストの塊が「ファイルが無い」というエラーで止まる
 
 データの作り直し（`public/data` には作った結果を入れてあるので、普段は要りません）：
 

@@ -128,10 +128,10 @@ Exact wording, retrieval dates, processing and open items are in [docs/sources.m
 
 Credit lines:
 
-- National Institute of Population and Social Security Research, 「日本の地域別将来推計人口（令和5年推計）」 (https://www.ipss.go.jp/pp-shicyoson/j/shicyoson23/t-page.asp), processed for this work. IPSS does not guarantee the content of this app.
+- National Institute of Population and Social Security Research, 「日本の地域別将来推計人口（令和5年推計）」 (https://www.ipss.go.jp/pp-shicyoson/j/shicyoson23/t-page.asp), retrieved 5 November 2026, processed for this work. IPSS does not guarantee the content of this app.
 - Ministry of Land, Infrastructure, Transport and Tourism, 「国土数値情報（行政区域データ）」 2021 edition (https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2021.html), retrieved 5 November 2026, processed for this work (simplified and merged to match IPSS areas). This is not a map made by the government. 測量法に基づく国土地理院長承認（複製）R2JHf 450
   - The last line is the notice shown on the source data page. Whether it must accompany derived data is to be confirmed with MLIT (not yet done), so it is included for now.
-- MLIT National Spatial Planning Bureau, 「サービス施設の立地する確率が50％及び80％となる自治体の人口規模（三大都市圏を除く）」 (urban-area reference material, https://www.mlit.go.jp/common/001042019.pdf), values transcribed from the chart and processed into per-facility population guidelines.
+- MLIT National Spatial Planning Bureau, 「サービス施設の立地する確率が50％及び80％となる自治体の人口規模（三大都市圏を除く）」 (urban-area reference material, https://www.mlit.go.jp/common/001042019.pdf), retrieved 5 November 2026, values transcribed from the chart and processed into per-facility population guidelines.
 
 The original IPSS Excel files and any data from the National Institute for Environmental Studies (NIES) are not in this repository (the app does not use NIES data). `python3 -m pipeline.fetch_sources` downloads the IPSS files from their official URLs and checks the SHA256 recorded in `pipeline/sources.json`.
 
@@ -144,11 +144,15 @@ npm ci              # install dependencies
 npm run dev         # dev server (http://localhost:5173)
 npm test            # tests (Vitest)
 npm run typecheck   # type check (app and Worker)
-npm run build       # build the site into dist/
-npm run test:py     # data pipeline tests (run python3 -m pipeline.fetch_sources first)
+npm run build       # build the site into dist/ (no source maps)
+npm run test:py     # data pipeline tests (same as python3 -m unittest; run python3 -m pipeline.fetch_sources first)
 ```
 
-On the `build` branch as of 2026-11-05 (commit b2c3dfa), `npm test` passes 784 tests in 36 files, `npm run typecheck` and `npm run build` succeed, and `npm run test:py` passes 84 tests.
+Checked on the `build` branch at commit fa21f09 (2026-11-06):
+
+- `npm test`: 1241 tests in 50 files, all pass
+- `npm run typecheck` (app and Worker) and `npm run build`: no errors or warnings; no source map (`.map`) is written to `dist/`
+- `python3 -m unittest`: with `data/raw` present (fetch it with `python3 -m pipeline.fetch_sources`) all 122 tests pass; without it 101 tests run and the 4 test classes that need the data stop with a "file is missing" error
 
 Rebuilding the data (the results are committed in `public/data`, so this is normally unnecessary):
 
