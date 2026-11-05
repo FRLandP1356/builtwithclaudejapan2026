@@ -429,9 +429,11 @@
   margin-top: 6px;
   border-radius: 2px;
 }
+/* Tall enough for the labels that drop a row (the 1.5倍以上 end label: a 26px tick line, its gap and a 21px text line),
+   so nothing hangs out of the box into the year block below, and the row-2 label sits clear of 「同じ」 above it. */
 .legend-ticks {
   position: relative;
-  height: 42px;
+  height: 52px;
   font-size: var(--fs-12);
   color: var(--ink-2);
 }
@@ -465,7 +467,7 @@
   margin-right: 0;
 }
 .legend-tick[data-row='2']::before {
-  height: 22px;
+  height: 26px;
 }
 
 /* Legend and year block: stacked on mobile, side by side from 1024px. */
