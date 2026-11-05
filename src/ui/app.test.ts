@@ -467,6 +467,61 @@ describe('allocation overlay on the map', () => {
     expect(tip.querySelector('.badge-alloc')!.textContent).toBe(ALLOC_BADGE);
   });
 
+  test('up to 2050 an allocation is no longer the official figure: 割り振り後 with its basis replaces 公式推計', async () => {
+    const { root, store } = await mount();
+    const num = () => root.querySelector('.map-headline-num')!;
+    store.set({ year: 2050 });
+    expect(num().querySelector('.badge-official')!.textContent).toBe('公式推計');
+    expect(num().querySelector('.badge-alloc')).toBeNull();
+    expect(num().querySelector('.head-basis')).toBeNull();
+
+    store.set({ allocation: overlay({ year: 2050 }) });
+    expect(num().querySelector('.badge-official')).toBeNull();
+    expect(num().querySelector('.badge-estimate')).toBeNull();
+    expect(num().querySelector('.badge-alloc')!.textContent).toBe(ALLOC_BADGE);
+    expect(num().querySelector('.head-basis')!.textContent).toBe('公式推計をもとにこのアプリが計算');
+    expect(num().textContent).not.toContain('公式推計 割り振り後');
+
+    store.set({ year: 2055 }); // the overlay is for 2050: at 2055 the numbers are not allocated, and 2055 is an estimate
+    expect(num().querySelector('.badge-estimate')!.textContent).toBe('試算');
+    expect(num().querySelector('.badge-alloc')).toBeNull();
+
+    store.set({ year: 2050 });
+    expect(num().querySelector('.badge-official')).toBeNull();
+    store.set({ allocation: undefined });
+    expect(num().querySelector('.badge-official')!.textContent).toBe('公式推計');
+    expect(num().querySelector('.head-basis')).toBeNull();
+  });
+
+  test('after 2050 the headline keeps 試算 and adds 割り振り後, with no basis note', async () => {
+    const { root, store } = await mount();
+    store.set({ year: 2100, allocation: overlay() });
+    const num = root.querySelector('.map-headline-num')!;
+    expect(num.querySelector('.badge-estimate')!.textContent).toBe('試算');
+    expect(num.querySelector('.badge-alloc')!.textContent).toBe(ALLOC_BADGE);
+    expect(num.querySelector('.head-basis')).toBeNull();
+    expect(num.querySelector('.badge-official')).toBeNull();
+  });
+
+  test('an allocation shown for another year up to 2050 leaves the official mark alone', async () => {
+    const { root, store } = await mount();
+    store.set({ year: 2100, allocation: overlay() });
+    store.set({ year: 2040 });
+    const num = root.querySelector('.map-headline-num')!;
+    expect(num.querySelector('.badge-official')!.textContent).toBe('公式推計');
+    expect(num.querySelector('.badge-alloc')).toBeNull();
+    expect(num.querySelector('.head-basis')).toBeNull();
+  });
+
+  test('the 2020 census year with an allocation says it is based on the census', async () => {
+    const { root, store } = await mount();
+    store.set({ year: 2020, allocation: overlay({ year: 2020 }) });
+    const num = root.querySelector('.map-headline-num')!;
+    expect(num.querySelector('.badge-official')).toBeNull();
+    expect(num.querySelector('.head-basis')!.textContent).toBe('国勢調査をもとにこのアプリが計算');
+    expect(num.textContent).not.toContain('実績（国勢調査）');
+  });
+
   test('an allocation for another year leaves the numbers as they are and drops the 割り振り後 mark', async () => {
     const { root, store } = await mount();
     store.set({ year: 2100, selectedPref: '30' });

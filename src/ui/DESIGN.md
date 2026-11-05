@@ -8,7 +8,7 @@
 - 紙色の地、墨の文字、藍のアクセント 1 色。地図の赤錆（減少）と青（増加）はデータの色で、UI の装飾には使わない。
 - 見出しと大きな数字は明朝、それ以外はゴシック。等幅は使わない。英語の大文字の小見出し、カード型の影の連なり、グラデーションの帯は使わない。
 - 目立たせるのは地図と年のつまみだけ。年を動かすと地図の色が 2020 年比で移ろう、これが記憶に残る瞬間。ほかは静かに。
-- 「試算」は破線で示す。年のトラックの 2050 年より後は破線、試算の印 `.badge-estimate` も破線。「割り振り後」は藍の薄い面 `.badge-alloc`。試算の印の隣に足し、置き換えない（2050 年より後は割り振り中も「試算」が出る）。
+- 「試算」は破線で示す。年のトラックの 2050 年より後は破線、試算の印 `.badge-estimate` も破線。「割り振り後」は藍の薄い面 `.badge-alloc`。2050 年より後は試算の印の隣に足し、置き換えない（割り振り中も「試算」が出る）。2050 年まではこの印が公式推計・実績の印に代わる（割り振り後の数字は公式の値ではないため）。
 - 勧めない。文言は事実の提示だけ（「残せない」でなく「人口の目安を下回る」）。
 
 ## トークン（`theme.css` の `:root`）
@@ -55,7 +55,7 @@
 | 主要な数字 | `<div class="kpi-row"><div class="kpi"><div class="kpi-label">2100年の人口</div><div class="kpi-value">1.2<span class="kpi-unit">万人</span></div><div class="kpi-note">2020年比 −83.0%</div></div>…</div>` |
 | 表 | `<div class="table-wrap"><table class="data-table"><thead><tr><th>施設</th><th class="num">目安</th></tr></thead><tbody><tr><td>…</td><td class="num">5,000人</td></tr></tbody></table></div>`。数字は `.num`（右揃え・等幅数字） |
 | 施設の状態 | `<span class="tag tag-ok">人口の目安を上回る</span>` / `<span class="tag tag-edge">境目</span>` / `<span class="tag tag-below">人口の目安を下回る</span>` |
-| 試算・公式・実績・割り振りの印 | `<span class="badge-estimate">試算</span>` / `<span class="badge-official">公式推計</span>`（2020 年は「実績（国勢調査）」、`badgeFor(year)` が選ぶ）/ `<span class="badge-alloc">割り振り後</span>`（数字が割り振りを含む時だけ、試算・公式の印の後ろに足す） |
+| 試算・公式・実績・割り振りの印 | `<span class="badge-estimate">試算</span>` / `<span class="badge-official">公式推計</span>`（2020 年は「実績（国勢調査）」、`badgeFor(year)` が選ぶ）/ `<span class="badge-alloc">割り振り後</span>`（数字が割り振りを含む時だけ。2050 年より後は試算の印の後ろに足す。2050 年まではこれが公式・実績の印に代わる） |
 | 注記 | `<p class="note">…</p>`、`<div class="notice">…</div>`、仮定の注意は `<div class="notice notice-estimate">…</div>`（破線） |
 | ボタン | `<button class="btn">…</button>`、主ボタン `.btn.btn-primary`（1 画面に 1 つ）、静かな導線 `.btn.btn-quiet`、正方形 `.btn.btn-icon`。文言は動詞（「計算し直す」「元に戻す」）。押した状態を持つボタンは `aria-pressed` |
 | 並んだボタン | `<div class="actions">…</div>` |
@@ -116,12 +116,12 @@
 
 キーボード：地図は Tab 停止が 1 つだけ（`tabindex` が 0 の地域は選択中の地域、無ければ最初の地域。ほかは -1）。地図の中は矢印キーで、その向きにある中心点のいちばん近い地域へ移る（`src/map/keyboard.ts` の `nearestInDirection`：その向きに厳密にある地域だけ、横のずれは 2 倍に数える、同点は Tab 順で先のもの、端では動かない）。Home・End は Tab 順の最初と最後。Enter・Space は選ぶ。Alt・Ctrl・Cmd・Shift つきのキーはブラウザに任せる。焦点を持った地域が Tab 停止になる（選択が変わった時だけ選択中の地域に戻す）。町は検索欄からも選べる。
 
-目印だけの class（css の規則が無く、テストやスクリプトが要素を探すためのもの）：`.ai-allocations` `.ai-basis` `.ai-cancel` `.ai-form` `.ai-links` `.ai-message` `.ai-trace` `.ai-trace-result` `.ai-trimmed` `.alloc-clear` `.alloc-map-actions` `.alloc-map-status` `.alloc-map-toggle` `.alloc-table-hidden` `.alloc-table-visible` `.map-inset`。見た目は一緒に付く共通の class（`.btn`・`.note`・`.data-table` など）が決める。`.marker-mixed`（増えた町と減った町の両方がある県）は独自の色を持たず、印の文字は墨のまま。
+目印だけの class（css の規則が無く、テストやスクリプトが要素を探すためのもの）：`.ai-allocations` `.ai-basis` `.ai-cancel` `.ai-form` `.ai-links` `.ai-message` `.ai-trace` `.ai-trace-result` `.ai-trimmed` `.alloc-clear` `.alloc-map-actions` `.alloc-map-status` `.alloc-map-toggle` `.alloc-table-hidden` `.alloc-table-visible` `.head-basis` `.map-inset`。見た目は一緒に付く共通の class（`.btn`・`.note`・`.data-table` など）が決める。`.marker-mixed`（増えた町と減った町の両方がある県）は独自の色を持たず、印の文字は墨のまま。
 
 ## 数字と文言
 
 - 人口は `formatPop()`（`src/ui/format.ts`）：8,340人 / 4.2万人 / 1,190万人 / 1億2,615万人。増減は `formatPct()`：−31.5% / +2.5%（マイナスは U+2212）。割り振りの変化は `formatDeltaPct()`：+10.0% / −0.04% / ±0%。
-- 割り振りが地図にある間、見出し・ツールチップ・面の `aria-label`・場所の読み上げは、割り振りの年と表示中の年が同じなら割り振り後の人口と 2020 年比を出し、割り振り前の人口も並べ（「28.8万人（割り振り前 26.2万人）」）、「割り振り後」の印（読み上げは「（割り振り後）」）を付ける。解釈：「割り振り後」の印は試算・公式の印の後ろに足すもので、置き換えない（2050 年より後は必ず「試算」を出す、という全体の決まりのため）。年が違えば数字はそのまま、印も付けない。ツールチップと `aria-label` には「割り振りによる変化 +10.0%」（年が違えば「（2100年の計算）」を添える）と、焦点の施設があれば「◯◯が目安を上回る（増えた）」「◯◯が目安を下回る（減った）」、全国の地図では「◯◯：目安を上回る町 +n、下回る町 −n」を足す（町が無い側は書かない：「目安を上回る町 +1」だけ、「目安を下回る町 −2」だけ。「−0」「+0」は出さない）。県の変化は `allocatedTotals()`（`src/ui/derive.ts`）で県の合計から計算する。これらの数字と文言は `src/ui/allocationView.ts`（DOM なしの関数：`allocationView`・`placeNumbers`・`allocationLines`・`countMarkers`）にあり、シェルと町の詳細の注記が同じものを使う。
+- 割り振りが地図にある間、見出し・ツールチップ・面の `aria-label`・場所の読み上げは、割り振りの年と表示中の年が同じなら割り振り後の人口と 2020 年比を出し、割り振り前の人口も並べ（「28.8万人（割り振り前 26.2万人）」）、「割り振り後」の印（読み上げは「（割り振り後）」）を付ける。解釈：2050 年より後は「試算」を必ず出す、という全体の決まりのため、「割り振り後」の印は「試算」の後ろに足す（置き換えない）。2050 年まで（2020 年を含む）は、割り振り後の数字はもう公式推計（2020 年は国勢調査）の値ではないので、見出しは「公式推計」「実績（国勢調査）」の印を外し、「割り振り後」の印に「公式推計をもとにこのアプリが計算」（2020 年は「国勢調査をもとにこのアプリが計算」）を添える（`allocatedBasisNote()`、`.head-basis`）。ツールチップにはもともと「公式推計」の印が無い。年が違えば数字はそのまま、印も付けない。ツールチップと `aria-label` には「割り振りによる変化 +10.0%」（年が違えば「（2100年の計算）」を添える）と、焦点の施設があれば「◯◯が目安を上回る（増えた）」「◯◯が目安を下回る（減った）」、全国の地図では「◯◯：目安を上回る町 +n、下回る町 −n」を足す（町が無い側は書かない：「目安を上回る町 +1」だけ、「目安を下回る町 −2」だけ。「−0」「+0」は出さない）。県の変化は `allocatedTotals()`（`src/ui/derive.ts`）で県の合計から計算する。これらの数字と文言は `src/ui/allocationView.ts`（DOM なしの関数：`allocationView`・`placeNumbers`・`allocationLines`・`countMarkers`）にあり、シェルと町の詳細の注記が同じものを使う。
 - 色の幅（`allocationScale`）は最大の変化を画面と同じ小数 1 桁に丸めてから 5・10・20・30・50・100 と比べる。計算の誤差（10.000000000000018）や人数の丸め（10.0001）で +10% の割り振りが ±20 にならない。
 - 2050 年より後の数字には必ず試算の印を付け、「予測」と書かない。文言の正本は `src/ui/sources.ts`（`ESTIMATE_NOTE`・`OFFICIAL_NOTE`・`badgeFor`・出典）。
 - 「残せない」でなく「人口の目安を下回る」。残す・残さないを勧める言葉は書かない。

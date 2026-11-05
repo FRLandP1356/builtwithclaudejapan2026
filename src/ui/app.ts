@@ -18,7 +18,7 @@ import { formatPct, formatPop } from './format';
 import { breadcrumbs, buildSearchIndex, goUp, levelOf, pickArea, pickPref, prefOfArea, type Selection } from './nav';
 import { mountSearch } from './search';
 import { mountAIPanel } from './aiPanel';
-import { APP_LEAD, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, SOURCES } from './sources';
+import { allocatedBasisNote, APP_LEAD, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, SOURCES } from './sources';
 import { createAppStore, DEFAULT_YEAR, type AllocationOverlay, type AppState, type PanelContext, type Store } from './state';
 import { mountTownPanel } from './townPanel';
 import { mountYearSlider } from './yearSlider';
@@ -415,7 +415,10 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     return { name: '日本', kind: 'japan', code: '' };
   }
 
-  /** Name, year, population, ratio and marks: the 試算/公式 mark always, 割り振り後 when the numbers include it. */
+  /**
+   * Name, year, population, ratio and marks: the 試算 / 公式推計 / 実績 mark, plus 割り振り後 when the numbers include an
+   * allocation; up to 2050 that replaces the 公式推計 / 実績 mark with a note that it is this app's own calculation.
+   */
   function renderHeadline(s: AppState): void {
     const place = placeOf(s);
     headName.textContent = place.name;
@@ -427,9 +430,6 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     const b = document.createElement('b');
     b.textContent = formatPop(n.pop);
     const badgeInfo = badgeFor(s.year);
-    const badge = document.createElement('span');
-    badge.className = badgeInfo.estimate ? 'badge-estimate' : 'badge-official';
-    badge.textContent = badgeInfo.text;
     // While the numbers include the allocation, the number without it stays in sight (the town panel shows that one).
     const before = beforeText(n); // the country's total does not change: no second number there
     // Phrases that must not break inside (「2020年 / 比」 at 390px): each is one nowrap span; lines break between them.
@@ -441,12 +441,27 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     };
     const parts: Node[] = [keep(`${s.year}年 `, b)];
     if (before) parts.push(keep(before));
-    parts.push(document.createTextNode('　'), keep(`2020年比 ${formatPct(n.ratio)}`), document.createTextNode('　'), badge);
+    parts.push(document.createTextNode('　'), keep(`2020年比 ${formatPct(n.ratio)}`), document.createTextNode('　'));
+    // An allocation up to 2050 makes the figure this app's own calculation: the 公式推計 / 実績 mark would be wrong, so
+    // 割り振り後 comes with a note on what it is based on instead. After 2050 the 試算 mark stays and 割り振り後 follows.
+    const basisNote = n.allocated ? allocatedBasisNote(s.year) : undefined;
+    if (!basisNote) {
+      const badge = document.createElement('span');
+      badge.className = badgeInfo.estimate ? 'badge-estimate' : 'badge-official';
+      badge.textContent = badgeInfo.text;
+      parts.push(badge);
+    }
     if (n.allocated) {
       const alloc = document.createElement('span');
       alloc.className = 'badge-alloc';
       alloc.textContent = ALLOC_BADGE;
-      parts.push(document.createTextNode(' '), alloc);
+      if (!basisNote) parts.push(document.createTextNode(' '));
+      parts.push(alloc);
+      if (basisNote) {
+        const note = keep(basisNote);
+        note.classList.add('head-basis');
+        parts.push(document.createTextNode(' '), note);
+      }
     }
     headNum.replaceChildren(...parts);
   }

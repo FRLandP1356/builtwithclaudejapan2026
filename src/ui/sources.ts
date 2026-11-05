@@ -27,6 +27,16 @@ export function badgeFor(year: number): { text: string; estimate: boolean } {
   return { text: OFFICIAL_BADGE, estimate: false };
 }
 
+/**
+ * Said next to 割り振り後 while an allocation is drawn for a year up to 2050: the number is no longer the official
+ * figure (the 公式推計 mark would be wrong), it is this app's own calculation on top of it. After 2050 the 試算 mark
+ * already says so, so there is no note.
+ */
+export function allocatedBasisNote(year: number): string | undefined {
+  if (year > OFFICIAL_END_YEAR) return undefined;
+  return year <= BASE_YEAR ? '国勢調査をもとにこのアプリが計算' : '公式推計をもとにこのアプリが計算';
+}
+
 export interface SourceLine {
   label: string;
   text: string;
