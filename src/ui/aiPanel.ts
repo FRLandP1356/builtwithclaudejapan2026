@@ -31,7 +31,7 @@ import {
   toolLabel,
   traceUsesEstimate,
 } from './aiTrace';
-import { overlayFromToolInput } from './allocationOverlay';
+import { overlayFromToolInput, toolScenario } from './allocationOverlay';
 import { ESTIMATE_BADGE, ESTIMATE_NOTE } from './sources';
 import type { PanelContext } from './state';
 import type { Scenario } from '../engine/types';
@@ -80,6 +80,7 @@ export const PANEL_TEXT = {
   allocationApplied: '地図に反映しました。地図の色は、割り振りによる人口の変化を示します。',
   allocationFailed: 'この割り振りを地図に反映できませんでした。',
   allocationScenario: 'この割り振りの前提も画面に反映しました',
+  allocationScenarioHint: '（前提も画面に合わせます）',
 } as const;
 
 const DEFAULT_ENDPOINT = '/api/chat';
@@ -358,17 +359,37 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
    * locally from the tool INPUT (never from the model's text or the tool result) and draws it on the map, moving the
    * year slider to the allocation's year. A bad input is refused with a message (text only).
    */
+  /** The allocation buttons on screen, with the scenario each would bring; their hint follows the screen's scenario. */
+  const allocationButtons: Array<{ button: HTMLButtonElement; text: string; scenario: Scenario | undefined }> = [];
+  function paintAllocationButtons(): void {
+    const current = scenarioKey(ctx.store.get().scenario);
+    for (let i = allocationButtons.length - 1; i >= 0; i--) {
+      const b = allocationButtons[i]!;
+      if (!root.contains(b.button)) {
+        allocationButtons.splice(i, 1); // the answer was trimmed or cleared
+        continue;
+      }
+      const differs = b.scenario !== undefined && scenarioKey(b.scenario) !== current;
+      const text = differs ? `${b.text}${PANEL_TEXT.allocationScenarioHint}` : b.text;
+      if (b.button.textContent !== text) b.button.textContent = text;
+    }
+  }
+  const unsubscribeScenario = ctx.store.subscribe((s, prev) => {
+    if (s.scenario !== prev.scenario) paintAllocationButtons();
+  });
+
   function renderAllocationOffers(trace: TraceItem[]): HTMLElement | null {
     const inputs = allocationOffers(trace);
     if (inputs.length === 0) return null;
     const box = h('div', { class: 'ai-allocations' });
     inputs.forEach((input, i) => {
       const message = h('p', { class: 'ai-scenario-msg', role: 'status', 'aria-live': 'polite' });
-      const button = h(
-        'button',
-        { type: 'button', class: 'btn', 'data-role': 'apply-allocation' },
-        inputs.length > 1 ? `${PANEL_TEXT.allocationButton}（${i + 1}件目）` : PANEL_TEXT.allocationButton,
-      );
+      const text = inputs.length > 1 ? `${PANEL_TEXT.allocationButton}（${i + 1}件目）` : PANEL_TEXT.allocationButton;
+      const read = typeof input === 'object' && input !== null && !Array.isArray(input) ? toolScenario((input as Record<string, unknown>).scenario) : 'unreadable';
+      const scenario = typeof read === 'string' ? undefined : read;
+      const differs = scenario !== undefined && scenarioKey(scenario) !== scenarioKey(ctx.store.get().scenario);
+      const button = h('button', { type: 'button', class: 'btn', 'data-role': 'apply-allocation' }, differs ? `${text}${PANEL_TEXT.allocationScenarioHint}` : text);
+      allocationButtons.push({ button, text, scenario });
       button.addEventListener('click', () => {
         const rebuilt = overlayFromToolInput(input, ctx.data, ctx.runner);
         if ('error' in rebuilt) {
@@ -643,6 +664,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
   const destroy = (): void => {
     if (destroyed) return;
     destroyed = true;
+    unsubscribeScenario();
     controller?.abort();
     root.remove();
     if (registry.get(el) === destroy) registry.delete(el);

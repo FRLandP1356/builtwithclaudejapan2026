@@ -1389,12 +1389,17 @@ describe('この割り振りを地図に反映する (run_allocation in the trac
     const m = mount({ fetchFn: s.fetchFn }, ctx);
     m.typeAndSend('出生率が高いと？');
     await answersCount(m, 1);
-    m.answers()[0]!.querySelector<HTMLButtonElement>('button[data-role="apply-allocation"]')!.click();
+    const button = m.answers()[0]!.querySelector<HTMLButtonElement>('button[data-role="apply-allocation"]')!;
+    expect(button.textContent).toBe(`${PANEL_TEXT.allocationButton}${PANEL_TEXT.allocationScenarioHint}`); // no surprise
+    button.click();
     expect(ctx.store.get().scenario).toEqual({ cwrMult: 1.2, migMode: 'hold', migScale: 1, infraStrength: 0 });
+    expect(button.textContent).toBe(PANEL_TEXT.allocationButton); // the screen now has those assumptions
     expect(ctx.store.get().allocation?.label).toBe('和歌山県 +10%'); // not cleared by its own scenario change
     expect(m.answers()[0]!.querySelector('.ai-allocations .ai-scenario-msg')!.textContent).toBe(
       `${PANEL_TEXT.allocationApplied}${PANEL_TEXT.allocationScenario}（子どもの数の倍率 1.2）。`,
     );
+    ctx.store.set({ scenario: { cwrMult: 1, migMode: 'hold', migScale: 1, infraStrength: 0 } });
+    expect(button.textContent).toBe(`${PANEL_TEXT.allocationButton}${PANEL_TEXT.allocationScenarioHint}`); // and back
   });
 
   it('offers nothing for a call the tool refused (there is no allocation to draw)', async () => {
