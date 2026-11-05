@@ -42,7 +42,7 @@ The map can also be used from the keyboard. Tab enters a map at a single stop pe
 | 2040 | 0.0049% | 0.057% | 0.841% |
 | 2050 | 0.0053% | 0.076% | 1.39% |
 
-In 2050, 99.47% of municipalities are within 0.5%. The national total is 104,686,401 (this app) against 104,686,386 (official), over all 1,884 areas (the 13 villages without published assumptions use the official age-group populations as they are). The tests check this on every run (they fail unless the 2050 median error is within 0.01%, at least 98% of municipalities are within 0.5%, and the max is within 2%). How this was found is in [docs/dev-log.md](docs/dev-log.md).
+In 2050, 99.47% of municipalities are within 0.5%. The national total is 104,686,401 (this app) against 104,686,386 (official), over all 1,884 areas (the 13 villages without published assumptions use the official age-group populations as they are). The values in the table and the totals were measured at commit fa21f09. What the tests check on every run are thresholds for 2050 only (they fail unless the 2050 median error is within 0.01%, at least 98% of municipalities are within 0.5%, the max is within 2%, and the national total is within 1,000 of the official one). How this was found is in [docs/dev-log.md](docs/dev-log.md).
 
 This app's numbers up to 2050 can differ from IPSS's published values by a few people for a town and a few tens for a prefecture (the tests check this on all 1,884 areas: under 10 for a town, under 100 for a prefecture). For example, 田辺市 (Tanabe) in 2050 is 42,309 in IPSS's table and 42,311 in this app's calculation. Opening 「人口の推移の数字を表で見る」 ("see the numbers as a table") in the town panel shows the same note under the table.
 
