@@ -318,7 +318,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     if (targets.length === 0) return null;
     const box = h('div', { class: 'actions ai-links' });
     for (const target of targets) {
-      const button = h('button', { type: 'button', class: 'btn' }, `${target.label} を地図で開く`);
+      const button = h('button', { type: 'button', class: 'btn' }, `${target.label}を地図で開く`);
       button.addEventListener('click', () => {
         const done = ctx.store.set(target.kind === 'area' ? { selectedArea: target.code } : { selectedPref: target.code });
         if (done) revealMap();

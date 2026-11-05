@@ -1072,17 +1072,29 @@ describe('what the answer was built from', () => {
 });
 
 describe('links back to the map and to the assumptions', () => {
-  it('a place named in a tool input becomes 「<name> を地図で開く」 and selects it on the map (the prefecture follows)', async () => {
+  it('a place named in a tool input becomes 「<name>を地図で開く」 with no space and selects it on the map (the prefecture follows)', async () => {
     const s = script(toolUseResponse(toolUse('a', 'get_series', { areaCode: '30206' })), textResponse('田辺市です。'));
     const m = mount({ fetchFn: s.fetchFn });
     m.typeAndSend('田辺市は？');
     await answersCount(m, 1);
 
     const buttons = [...m.answers()[0]!.querySelectorAll<HTMLButtonElement>('.ai-links button')];
-    expect(buttons.map((b) => b.textContent)).toEqual(['田辺市 を地図で開く']);
+    expect(buttons.map((b) => b.textContent)).toEqual(['田辺市を地図で開く']);
+    expect(buttons[0]!.hasAttribute('aria-label')).toBe(false); // the visible text is the name the button has
+    expect(buttons[0]!.textContent).not.toMatch(/\s/);
     buttons[0]!.click();
     expect(m.ctx.store.get().selectedArea).toBe('30206');
     expect(m.ctx.store.get().selectedPref).toBe('30');
+  });
+
+  it('a name that two towns share carries its prefecture, still with no space before を', async () => {
+    const twin = data.areas.find((a) => data.areas.some((b) => b !== a && b.name === a.name))!;
+    const s = script(toolUseResponse(toolUse('a', 'get_series', { areaCode: twin.code })), textResponse('二つある名前です。'));
+    const m = mount({ fetchFn: s.fetchFn });
+    m.typeAndSend('その町は？');
+    await answersCount(m, 1);
+    const buttons = [...m.answers()[0]!.querySelectorAll<HTMLButtonElement>('.ai-links button')];
+    expect(buttons.map((b) => b.textContent)).toEqual([`${twin.name}（${twin.prefName}）を地図で開く`]);
   });
 
   it('a prefecture code selects the prefecture and clears an area that is not in it', async () => {
@@ -1093,7 +1105,7 @@ describe('links back to the map and to the assumptions', () => {
     m.typeAndSend('東京都の小さな町は？');
     await answersCount(m, 1);
     const buttons = [...m.answers()[0]!.querySelectorAll<HTMLButtonElement>('.ai-links button')];
-    expect(buttons.map((b) => b.textContent)).toEqual(['東京都 を地図で開く']);
+    expect(buttons.map((b) => b.textContent)).toEqual(['東京都を地図で開く']);
     buttons[0]!.click();
     expect(ctx.store.get().selectedPref).toBe('13');
     expect(ctx.store.get().selectedArea).toBeUndefined();
