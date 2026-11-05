@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TOOL_DEFS, TOOL_NAMES } from '../src/ai/toolDefs';
 import { handleRequest, type Env } from './index';
-import { DEFAULT_IP_LIMIT, DEFAULT_TOTAL_LIMIT } from './rateLimit';
+import { clientKey, COUNTER_TTL_SECONDS, DEFAULT_IP_LIMIT, DEFAULT_TOTAL_LIMIT, shardOf, TOTAL_SHARDS } from './rateLimit';
+import indexSource from './index.ts?raw';
+import rateLimitSource from './rateLimit.ts?raw';
 import { SYSTEM_PROMPT } from './systemPrompt';
 
 // ---------------------------------------------------------------- test doubles
@@ -10,12 +12,18 @@ import { SYSTEM_PROMPT } from './systemPrompt';
 class FakeKV {
   store = new Map<string, string>();
   puts: Array<{ key: string; value: string; options?: { expirationTtl?: number } }> = [];
+  gets: string[] = [];
   failing = false;
+  /** Makes only get() throw (put keeps working). */
+  failGet = false;
+  /** Makes get() throw for the keys this returns true for. */
+  failGetFor: ((key: string) => boolean) | null = null;
   /** Makes put() throw for the keys this returns true for. */
   failPutFor: ((key: string) => boolean) | null = null;
 
   async get(key: string): Promise<string | null> {
-    if (this.failing) throw new Error('kv down');
+    this.gets.push(key);
+    if (this.failing || this.failGet || this.failGetFor?.(key)) throw new Error('kv down');
     return this.store.get(key) ?? null;
   }
 
@@ -26,20 +34,47 @@ class FakeKV {
   }
 }
 
+/**
+ * Stand-in for the Workers Rate Limiting binding. It counts calls per key (no time window: a test is one "period")
+ * and refuses the call after `perKey` of them; `Infinity` never refuses. `failing` makes limit() throw.
+ */
+class FakeLimiter {
+  calls: string[] = [];
+  failing = false;
+  constructor(public perKey = Number.POSITIVE_INFINITY) {}
+
+  async limit({ key }: { key: string }): Promise<{ success: boolean }> {
+    this.calls.push(key);
+    if (this.failing) throw new Error('limiter down');
+    const used = this.calls.filter((seen) => seen === key).length;
+    return { success: used <= this.perKey };
+  }
+}
+
 const ORIGIN = 'https://town-2100.pages.dev';
 const API_KEY = 'sk-ant-test-SECRET-0123456789';
 const IP_HASH_SECRET = 'test-ip-hash-secret-0123456789';
 
-function makeEnv(overrides: Partial<Env> = {}): Env & { kv: FakeKV } {
+function makeEnv(overrides: Partial<Env> = {}): Env & { kv: FakeKV; limiter: FakeLimiter } {
   const kv = new FakeKV();
+  const limiter = new FakeLimiter(); // permissive by default; the burst-limit tests tighten it
   return {
     ANTHROPIC_API_KEY: API_KEY,
     IP_HASH_SECRET,
     RATE_KV: kv as unknown as KVNamespace,
+    IP_LIMITER: limiter as unknown as RateLimit,
     ALLOWED_ORIGINS: `${ORIGIN},http://localhost:5173`,
     kv,
+    limiter,
     ...overrides,
   };
+}
+
+/** HMAC-SHA-256 of a client identity, first 16 bytes as hex: what the Worker is documented to key limits on. */
+async function expectedClientKey(secret: string, identity: string): Promise<string> {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(identity));
+  return [...new Uint8Array(mac).slice(0, 16)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 /** What an honest old-style client might still send. The Worker must ignore it: the definitions are server-owned. */
@@ -66,8 +101,18 @@ function jsonResponse(body: unknown, status = 200, headers: Record<string, strin
   });
 }
 
+/**
+ * Stand-in for the Workers runtime's fetch. Like workerd, it throws a TypeError for a `redirect` mode other than
+ * 'follow' or 'manual' ('error' is standard but unsupported there), so a wrong mode fails every upstream test
+ * instead of passing here and failing in production.
+ */
 function mockFetch(responder: () => Response | Promise<Response> = () => jsonResponse(OK_BODY)) {
-  return vi.fn<typeof fetch>(async () => responder());
+  return vi.fn<typeof fetch>(async (_input, init) => {
+    if (init?.redirect !== 'follow' && init?.redirect !== 'manual') {
+      throw new TypeError(`Invalid redirect value, must be one of "follow" or "manual" (got ${String(init?.redirect)})`);
+    }
+    return responder();
+  });
 }
 
 interface ReqOptions {
@@ -99,9 +144,41 @@ function validBody(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** The JSON body the Worker sent upstream on its first call. */
+function sentBody(fetchFn: ReturnType<typeof mockFetch>): Record<string, unknown> {
+  return JSON.parse(fetchFn.mock.calls[0]![1]?.body as string) as Record<string, unknown>;
+}
+
 /** The `tools` array of the body the Worker sent upstream. */
 function sentTools(fetchFn: ReturnType<typeof mockFetch>): unknown {
-  return JSON.parse(fetchFn.mock.calls[0]![1]?.body as string).tools;
+  return sentBody(fetchFn).tools;
+}
+
+/** Every header the Worker sent upstream on its first call (names lower-cased by Headers). */
+function sentHeaders(fetchFn: ReturnType<typeof mockFetch>): Record<string, string> {
+  return Object.fromEntries(new Headers(fetchFn.mock.calls[0]![1]?.headers).entries());
+}
+
+/** A client that goes away mid-upload: reading the body rejects. */
+function abortedUpload(): Request {
+  const body = new ReadableStream({
+    start(controller) {
+      controller.error(new Error('client went away: detail-that-must-not-be-logged'));
+    },
+  });
+  return new Request('https://api.example.test/api/chat', {
+    method: 'POST',
+    headers: { origin: ORIGIN, 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.7' },
+    body,
+    duplex: 'half',
+  } as RequestInit);
+}
+
+const CONSOLE_METHODS = ['log', 'info', 'warn', 'error', 'debug'] as const;
+
+/** Every console call made so far as [method, ...arguments] (grouped by method), argument by argument. */
+function consoleCalls(): unknown[][] {
+  return CONSOLE_METHODS.flatMap((method) => vi.mocked(console[method]).mock.calls.map((args) => [method, ...args]));
 }
 
 function spyOnConsole() {
@@ -143,9 +220,9 @@ describe('system prompt and limits', () => {
     expect(SYSTEM_PROMPT).not.toContain('get_series の結果では');
   });
 
-  it('has the documented default limits', () => {
-    expect(DEFAULT_IP_LIMIT).toBe(20);
-    expect(DEFAULT_TOTAL_LIMIT).toBe(300);
+  it('has the documented default limits (Ruling 34): 60 upstream calls a day per visitor, 400 in total', () => {
+    expect(DEFAULT_IP_LIMIT).toBe(60);
+    expect(DEFAULT_TOTAL_LIMIT).toBe(400);
   });
 });
 
@@ -246,6 +323,98 @@ describe('cors_blocks_other_origin', () => {
     const res = await handleRequest(chatRequest(validBody({ messages: [] })), makeEnv(), mockFetch());
     expect(res.status).toBe(400);
     expect(res.headers.get('access-control-allow-origin')).toBe(ORIGIN);
+  });
+});
+
+// ----------------------------------------------------------- unexpected failures
+
+describe('an unexpected failure still gets the Worker\'s own response', () => {
+  it('answers 500 {error:internal_error} with nosniff when the body read rejects, and charges nothing', async () => {
+    const env = makeEnv();
+    const fetchFn = mockFetch();
+    const res = await handleRequest(abortedUpload(), env, fetchFn);
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'internal_error' });
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(res.headers.get('content-type')).toContain('application/json');
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(env.limiter.calls).toHaveLength(0);
+    expect(env.kv.gets).toHaveLength(0);
+    expect(env.kv.puts).toHaveLength(0);
+  });
+
+  it('logs one detail-free line: exactly the constant string, no error object, nothing else', async () => {
+    await handleRequest(abortedUpload(), makeEnv(), mockFetch());
+    expect(consoleCalls()).toEqual([['error', 'unexpected error']]);
+  });
+
+  it('also covers a bug anywhere else in the routing (here: reading the config throws)', async () => {
+    const env = makeEnv();
+    Object.defineProperty(env, 'ALLOWED_ORIGINS', {
+      get() {
+        throw new Error('config exploded: detail-that-must-not-be-logged');
+      },
+    });
+    const res = await handleRequest(chatRequest(validBody()), env, mockFetch());
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'internal_error' });
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(consoleCalls()).toEqual([['error', 'unexpected error']]);
+  });
+
+  it('is what the exported Worker handler does too', async () => {
+    const { default: worker } = await import('./index');
+    const res = await worker.fetch(abortedUpload() as never, makeEnv());
+    expect(res.status).toBe(500);
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+  });
+});
+
+// ---------------------------------------------------------------- hardening
+
+describe('x-content-type-options: nosniff on every response the Worker builds', () => {
+  it('is set on success, every error status, the preflight, and the routing refusals', async () => {
+    const big = JSON.stringify({ messages: [{ role: 'user', content: 'hi' }], pad: 'a'.repeat(70_000) });
+    const cases: Array<[string, number, () => Promise<Response>]> = [
+      ['200 relay', 200, () => handleRequest(chatRequest(validBody()), makeEnv(), mockFetch())],
+      ['400 invalid_json', 400, () => handleRequest(chatRequest(null, { rawBody: '{bad' }), makeEnv(), mockFetch())],
+      ['400 invalid_messages', 400, () => handleRequest(chatRequest(validBody({ messages: [] })), makeEnv(), mockFetch())],
+      ['403 origin', 403, () => handleRequest(chatRequest(validBody(), { origin: 'https://evil.example' }), makeEnv(), mockFetch())],
+      ['404', 404, () => handleRequest(chatRequest(validBody(), { path: '/x' }), makeEnv(), mockFetch())],
+      ['405', 405, () => handleRequest(chatRequest(validBody(), { method: 'GET' }), makeEnv(), mockFetch())],
+      ['413', 413, () => handleRequest(chatRequest(null, { rawBody: big }), makeEnv(), mockFetch())],
+      ['429 daily', 429, () => handleRequest(chatRequest(validBody()), makeEnv({ DAILY_IP_LIMIT: '0' }), mockFetch())],
+      [
+        '429 burst',
+        429,
+        () => handleRequest(chatRequest(validBody()), makeEnv({ IP_LIMITER: new FakeLimiter(0) as unknown as RateLimit }), mockFetch()),
+      ],
+      ['502 upstream', 502, () => handleRequest(chatRequest(validBody()), makeEnv(), mockFetch(() => jsonResponse({}, 500)))],
+      [
+        '503 store down',
+        503,
+        () => {
+          const env = makeEnv();
+          env.kv.failing = true;
+          return handleRequest(chatRequest(validBody()), env, mockFetch());
+        },
+      ],
+      ['503 misconfigured', 503, () => handleRequest(chatRequest(validBody()), makeEnv({ IP_HASH_SECRET: '' }), mockFetch())],
+      ['204 preflight', 204, () => handleRequest(chatRequest(undefined, { method: 'OPTIONS' }), makeEnv(), mockFetch())],
+    ];
+    for (const [name, status, run] of cases) {
+      const res = await run();
+      expect(res.status, name).toBe(status);
+      expect(res.headers.get('x-content-type-options'), name).toBe('nosniff');
+    }
+  });
+
+  it('is also set when the exported Worker handler answers', async () => {
+    const { default: worker } = await import('./index');
+    const res = await worker.fetch(chatRequest(validBody(), { path: '/nope' }), makeEnv());
+    expect(res.status).toBe(404);
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
   });
 });
 
@@ -426,16 +595,37 @@ describe('rate limits', () => {
     expect(fetchFn).toHaveBeenCalledTimes(3);
   });
 
-  it('applies a per-IP default of 20 a day', async () => {
+  it('applies a per-IP default of 60 a day when no limit var is set', async () => {
     const env = makeEnv();
     const fetchFn = mockFetch();
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 60; i++) {
       const res = await handleRequest(chatRequest(validBody()), env, fetchFn);
       expect(res.status, `call ${i + 1}`).toBe(200);
     }
     const blocked = await handleRequest(chatRequest(validBody()), env, fetchFn);
     expect(blocked.status).toBe(429);
-    expect(fetchFn).toHaveBeenCalledTimes(20);
+    expect(fetchFn).toHaveBeenCalledTimes(60);
+  });
+
+  it('applies a total default of 400 a day when no limit var is set (many visitors, none over their own 60)', async () => {
+    const env = makeEnv();
+    const fetchFn = mockFetch();
+    const ipOf = (i: number) => `10.${Math.floor(i / 250)}.${i % 250}.1`;
+    for (let i = 0; i < 400; i++) {
+      const res = await handleRequest(chatRequest(validBody(), { ip: ipOf(i) }), env, fetchFn);
+      expect(res.status, `call ${i + 1}`).toBe(200);
+    }
+    const blocked = await handleRequest(chatRequest(validBody(), { ip: ipOf(400) }), env, fetchFn);
+    expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toEqual({ cached: true, error: 'rate_limited' });
+    expect(fetchFn).toHaveBeenCalledTimes(400);
+  });
+
+  it('switches the AI off with DAILY_TOTAL_LIMIT=0 (the after-the-event step in the deploy checklist)', async () => {
+    const fetchFn = mockFetch();
+    const res = await handleRequest(chatRequest(validBody()), makeEnv({ DAILY_TOTAL_LIMIT: '0' }), fetchFn);
+    expect(res.status).toBe(429);
+    expect(fetchFn).not.toHaveBeenCalled();
   });
 
   it('total_limit_returns_429_cached', async () => {
@@ -486,7 +676,9 @@ describe('rate limits', () => {
     await handleRequest(chatRequest(validBody(), { ip: '203.0.113.77' }), env, mockFetch());
     expect(env.kv.puts.length).toBeGreaterThanOrEqual(2);
     for (const put of env.kv.puts) {
-      expect(put.options?.expirationTtl).toBeGreaterThanOrEqual(60);
+      // A counter must outlive its UTC day: a 60 s TTL would turn the daily limits into per-minute limits.
+      expect(put.options?.expirationTtl).toBeGreaterThanOrEqual(86_400);
+      expect(put.options?.expirationTtl).toBe(COUNTER_TTL_SECONDS);
       expect(put.key).not.toContain('203.0.113.77');
       expect(put.key).toContain('2026'); // keyed by UTC date
     }
@@ -531,22 +723,81 @@ describe('rate limits', () => {
     const passed = results.filter((res) => res.status === 200).length;
     // The documented limitation: far more than 3 (per IP) and 5 (total) get through. The real cap is the
     // Anthropic workspace spend limit. If this ever fails because the limiter became exact, update the README.
-    expect(passed).toBeGreaterThan(5);
+    // All 50 read the same empty counters before any write landed, so all 50 pass.
+    expect(passed).toBe(50);
     expect(fetchFn).toHaveBeenCalledTimes(passed);
   });
 
-  it('writes the total counter first and the IP counter second, never charging the IP when the total write fails', async () => {
+  it('writes only the visitor\'s total shard first and the IP counter second, never the old single total key', async () => {
+    const env = makeEnv();
+    await handleRequest(chatRequest(validBody(), { ip: '203.0.113.7' }), env, mockFetch());
+    const visitor = await clientKey(IP_HASH_SECRET, '203.0.113.7');
+    expect(env.kv.puts.map((put) => put.key)).toEqual([`total:2026-11-05:${shardOf(visitor)}`, `ip:2026-11-05:${visitor}`]);
+    expect(env.kv.puts.map((put) => put.value)).toEqual(['1', '1']);
+  });
+
+  it('spreads visitors over the total shards, and the cap is the SUM over them (not any one shard)', async () => {
+    const env = makeEnv({ DAILY_TOTAL_LIMIT: '40', DAILY_IP_LIMIT: '1000' });
+    const fetchFn = mockFetch();
+    let passed = 0;
+    for (let i = 0; i < 60; i++) {
+      const res = await handleRequest(chatRequest(validBody(), { ip: `192.0.2.${i + 1}` }), env, fetchFn);
+      if (res.status === 200) passed += 1;
+      else expect(res.status).toBe(429);
+    }
+    expect(passed).toBe(40);
+    const shardKeys = [...env.kv.store.keys()].filter((key) => key.startsWith('total:'));
+    expect(shardKeys.length).toBeGreaterThan(8); // 40 visitors do not all land on one or two shards
+    expect(shardKeys.every((key) => /^total:2026-11-05:(\d|1[0-5])$/.test(key))).toBe(true);
+    expect(shardKeys.length).toBeLessThanOrEqual(TOTAL_SHARDS);
+    const sum = shardKeys.reduce((acc, key) => acc + Number(env.kv.store.get(key)), 0);
+    expect(sum).toBe(40);
+  });
+
+  it('fails closed (503) when ANY one of the total shards cannot be read', async () => {
+    for (let shard = 0; shard < TOTAL_SHARDS; shard++) {
+      const env = makeEnv();
+      env.kv.failGetFor = (key) => key === `total:2026-11-05:${shard}`;
+      const fetchFn = mockFetch();
+      const res = await handleRequest(chatRequest(validBody()), env, fetchFn);
+      expect(res.status, `shard ${shard}`).toBe(503);
+      expect(fetchFn).not.toHaveBeenCalled();
+      expect(env.kv.puts).toHaveLength(0);
+    }
+  });
+
+  it('allows the request, with one detail-free warning, when the hot total counter cannot be written (KV: 1 write per second per key)', async () => {
     const env = makeEnv();
     env.kv.failPutFor = (key) => key.startsWith('total:');
     const fetchFn = mockFetch();
+    const res = await handleRequest(chatRequest(validBody(), { ip: '203.0.113.7' }), env, fetchFn);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(OK_BODY);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    // The per-IP counter was still saved (the shard write is the one that failed).
+    expect(env.kv.puts.map((put) => put.key.split(':')[0])).toEqual(['ip']);
+    expect(consoleCalls()).toEqual([['warn', 'rate counter write failed']]);
+  });
+
+  it('allows the request when no counter can be written, and still counts nothing it could not save', async () => {
+    const env = makeEnv();
+    env.kv.failPutFor = () => true;
+    const fetchFn = mockFetch();
+    const res = await handleRequest(chatRequest(validBody()), env, fetchFn);
+    expect(res.status).toBe(200);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(consoleCalls()).toEqual([['warn', 'rate counter write failed']]);
+  });
+
+  it('fails closed (503) when a counter cannot be READ, even though writes would work: no upstream call', async () => {
+    const env = makeEnv();
+    env.kv.failGet = true;
+    const fetchFn = mockFetch();
     const res = await handleRequest(chatRequest(validBody()), env, fetchFn);
     expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: 'service_unavailable' });
     expect(fetchFn).not.toHaveBeenCalled();
-    expect(env.kv.puts.filter((put) => put.key.startsWith('ip:'))).toHaveLength(0);
-
-    const env2 = makeEnv();
-    await handleRequest(chatRequest(validBody()), env2, mockFetch());
-    expect(env2.kv.puts.map((put) => put.key.split(':')[0])).toEqual(['total', 'ip']);
+    expect(env.kv.puts).toHaveLength(0);
   });
 
   it('fails closed (503) when the counter store is unavailable', async () => {
@@ -556,6 +807,114 @@ describe('rate limits', () => {
     const res = await handleRequest(chatRequest(validBody()), env, fetchFn);
     expect(res.status).toBe(503);
     expect(fetchFn).not.toHaveBeenCalled();
+  });
+});
+
+// ----------------------------------------------------------- burst limiter binding
+
+describe('burst limiter (IP_LIMITER)', () => {
+  it('answers a visitor over the burst limit with the same 429 {cached:true,error:rate_limited} as the daily limit', async () => {
+    const env = makeEnv({ DAILY_IP_LIMIT: '1000', DAILY_TOTAL_LIMIT: '1000' });
+    const limiter = new FakeLimiter(20); // what wrangler.jsonc configures: 20 calls per key per period
+    env.IP_LIMITER = limiter as unknown as RateLimit;
+    const fetchFn = mockFetch();
+    const call = (ip: string) => handleRequest(chatRequest(validBody(), { ip }), env, fetchFn);
+
+    for (let i = 1; i <= 20; i++) expect((await call('203.0.113.1')).status, `call ${i}`).toBe(200);
+    const putsBefore = env.kv.puts.length;
+    const getsBefore = env.kv.gets.length;
+    const blocked = await call('203.0.113.1');
+    expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toEqual({ cached: true, error: 'rate_limited' });
+    expect(blocked.headers.get('access-control-allow-origin')).toBe(ORIGIN);
+    expect(fetchFn).toHaveBeenCalledTimes(20);
+    // A burst refusal is decided before the daily counters: no KV read, no KV write.
+    expect(env.kv.puts).toHaveLength(putsBefore);
+    expect(env.kv.gets).toHaveLength(getsBefore);
+
+    // Another visitor has a bucket of their own.
+    expect((await call('203.0.113.2')).status).toBe(200);
+    expect(fetchFn).toHaveBeenCalledTimes(21);
+  });
+
+  it('is consulted once per request, with the HMAC of the normalized client and never the raw address', async () => {
+    const env = makeEnv();
+    await handleRequest(chatRequest(validBody(), { ip: '203.0.113.7' }), env, mockFetch());
+    await handleRequest(chatRequest(validBody(), { ip: '2001:db8:abcd:12::1' }), env, mockFetch());
+    await handleRequest(chatRequest(validBody(), { ip: '2001:db8:abcd:12:aaaa:bbbb:cccc:dddd' }), env, mockFetch());
+    expect(env.limiter.calls).toEqual([
+      await expectedClientKey(IP_HASH_SECRET, '203.0.113.7'),
+      await expectedClientKey(IP_HASH_SECRET, '2001:db8:abcd:12::/64'),
+      await expectedClientKey(IP_HASH_SECRET, '2001:db8:abcd:12::/64'),
+    ]);
+    expect(JSON.stringify(env.limiter.calls)).not.toMatch(/203\.0\.113\.7|2001/);
+
+    // A different secret gives a different key for the same visitor.
+    const other = makeEnv({ IP_HASH_SECRET: 'another-secret-0123456789' });
+    await handleRequest(chatRequest(validBody(), { ip: '203.0.113.7' }), other, mockFetch());
+    expect(other.limiter.calls[0]).not.toBe(env.limiter.calls[0]);
+  });
+
+  it('computes the visitor\'s HMAC exactly once per request, shared by the burst limiter and the daily counters', async () => {
+    const sign = vi.spyOn(crypto.subtle, 'sign');
+    const importKey = vi.spyOn(crypto.subtle, 'importKey');
+    const reached: Array<[string, Partial<Env>]> = [
+      ['allowed', {}],
+      ['burst limited', { IP_LIMITER: new FakeLimiter(0) as unknown as RateLimit }],
+      ['daily limited', { DAILY_IP_LIMIT: '0' }],
+    ];
+    for (const [name, overrides] of reached) {
+      sign.mockClear();
+      importKey.mockClear();
+      await handleRequest(chatRequest(validBody()), makeEnv(overrides), mockFetch());
+      expect(sign, name).toHaveBeenCalledTimes(1);
+      expect(importKey, name).toHaveBeenCalledTimes(1);
+    }
+    // Requests that never reach the counters compute none.
+    sign.mockClear();
+    await handleRequest(chatRequest(validBody(), { origin: 'https://evil.example' }), makeEnv(), mockFetch());
+    await handleRequest(chatRequest(validBody({ messages: [] })), makeEnv(), mockFetch());
+    expect(sign).not.toHaveBeenCalled();
+  });
+
+  it('is not consulted for requests that never reach the API (wrong origin, bad body, wrong route)', async () => {
+    const env = makeEnv();
+    const fetchFn = mockFetch();
+    await handleRequest(chatRequest(validBody(), { origin: 'https://evil.example' }), env, fetchFn);
+    await handleRequest(chatRequest(null, { rawBody: '{bad' }), env, fetchFn);
+    await handleRequest(chatRequest(validBody({ messages: [] })), env, fetchFn);
+    await handleRequest(chatRequest(validBody(), { path: '/x' }), env, fetchFn);
+    await handleRequest(chatRequest(validBody(), { method: 'GET' }), env, fetchFn);
+    await handleRequest(chatRequest(undefined, { method: 'OPTIONS' }), env, fetchFn);
+    expect(env.limiter.calls).toHaveLength(0);
+  });
+
+  it('fails closed with 503 service_unavailable when limit() throws: no upstream call, no daily counter touched', async () => {
+    const env = makeEnv();
+    env.limiter.failing = true;
+    const fetchFn = mockFetch();
+    const res = await handleRequest(chatRequest(validBody(), { ip: '203.0.113.7' }), env, fetchFn);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: 'service_unavailable' });
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(env.kv.gets).toHaveLength(0);
+    expect(env.kv.puts).toHaveLength(0);
+    // The log says what failed, nothing about the visitor or the error.
+    expect(consoleCalls()).toEqual([['error', 'burst limiter unavailable']]);
+  });
+
+  it('answers 503 server_misconfigured, charging nothing, when the binding is missing (not silently skipped)', async () => {
+    for (const value of [undefined, null]) {
+      const env = makeEnv();
+      (env as unknown as Record<string, unknown>).IP_LIMITER = value;
+      const fetchFn = mockFetch();
+      const res = await handleRequest(chatRequest(validBody()), env, fetchFn);
+      expect(res.status, String(value)).toBe(503);
+      expect(await res.json()).toEqual({ error: 'server_misconfigured' });
+      expect(fetchFn).not.toHaveBeenCalled();
+      expect(env.kv.gets).toHaveLength(0);
+      expect(env.kv.puts).toHaveLength(0);
+    }
   });
 });
 
@@ -574,16 +933,45 @@ describe('upstream call', () => {
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
-  it('calls the Messages API with the key and version headers', async () => {
+  it('calls the Messages API with exactly these headers (deep equality: adding or dropping one fails)', async () => {
     const fetchFn = mockFetch();
     await handleRequest(chatRequest(validBody()), makeEnv(), fetchFn);
     const [url, init] = fetchFn.mock.calls[0]!;
     expect(url).toBe('https://api.anthropic.com/v1/messages');
     expect(init?.method).toBe('POST');
-    const headers = new Headers(init?.headers);
-    expect(headers.get('x-api-key')).toBe(API_KEY);
-    expect(headers.get('anthropic-version')).toBe('2023-06-01');
-    expect(headers.get('content-type')).toBe('application/json');
+    expect(sentHeaders(fetchFn)).toStrictEqual({
+      'anthropic-beta': 'thinking-binding-controls-2026-08-01',
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'x-api-key': API_KEY,
+    });
+  });
+
+  it('sends exactly this upstream body (deep equality: adding or dropping a field fails)', async () => {
+    const fetchFn = mockFetch();
+    const messages = [{ role: 'user', content: '東京都千代田区の2050年の人口を教えて' }];
+    const res = await handleRequest(chatRequest({ messages }), makeEnv(), fetchFn);
+    expect(res.status).toBe(200);
+    expect(sentBody(fetchFn)).toStrictEqual({
+      model: 'claude-sonnet-5-5',
+      max_tokens: 3000,
+      output_config: { effort: 'low' },
+      thinking: { type: 'adaptive', block_binding: { prefix_mismatch_behavior: 'drop_block' } },
+      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+      messages,
+      tools: TOOL_DEFS,
+    });
+    // Nothing else is passed to fetch either: no stream, no extra signal-less options.
+    expect(Object.keys(fetchFn.mock.calls[0]![1]!).sort()).toEqual(['body', 'headers', 'method', 'redirect', 'signal']);
+  });
+
+  it('relays the upstream body untouched, whatever stop_reason it carries', async () => {
+    for (const stopReason of ['end_turn', 'max_tokens', 'refusal', 'tool_use', 'pause_turn', 'model_context_window_exceeded']) {
+      const upstreamBody = { ...OK_BODY, stop_reason: stopReason, content: [{ type: 'text', text: `停止理由 ${stopReason}` }] };
+      const res = await handleRequest(chatRequest(validBody()), makeEnv(), mockFetch(() => jsonResponse(upstreamBody)));
+      expect(res.status, stopReason).toBe(200);
+      expect(await res.text(), stopReason).toBe(JSON.stringify(upstreamBody));
+    }
   });
 
   it('never_forwards_client_system_or_model', async () => {
@@ -603,14 +991,16 @@ describe('upstream call', () => {
     const res = await handleRequest(chatRequest(body), makeEnv(), fetchFn);
     expect(res.status).toBe(200);
 
-    const [, init] = fetchFn.mock.calls[0]!;
-    const sent = JSON.parse(init?.body as string);
-    expect(Object.keys(sent).sort()).toEqual(['max_tokens', 'messages', 'model', 'system', 'tools']);
-    expect(sent.model).toBe('claude-sonnet-5-5');
-    expect(sent.max_tokens).toBe(1500);
-    expect(sent.system).toBe(SYSTEM_PROMPT);
-    expect(sent.messages).toEqual([{ role: 'user', content: 'hello' }]);
-    expect(sent.tools).toEqual(TOOL_DEFS);
+    const sent = sentBody(fetchFn);
+    expect(sent).toStrictEqual({
+      model: 'claude-sonnet-5-5',
+      max_tokens: 3000,
+      output_config: { effort: 'low' },
+      thinking: { type: 'adaptive', block_binding: { prefix_mismatch_behavior: 'drop_block' } },
+      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: 'hello' }],
+      tools: TOOL_DEFS,
+    });
     expect(JSON.stringify(sent)).not.toContain('attacker');
     expect(JSON.stringify(sent)).not.toContain('Ignore all rules');
     expect(JSON.stringify(sent)).not.toContain('Client-supplied description');
@@ -656,7 +1046,10 @@ describe('upstream call', () => {
     expect(res.status).toBe(200);
 
     const [, init] = fetchFn.mock.calls[0]!;
-    expect(init?.body as string).not.toMatch(/TAMPERED|web_search|ephemeral|evil/);
+    expect(init?.body as string).not.toMatch(/TAMPERED|web_search|evil/);
+    // The only cache_control upstream is the Worker's own, on the system block; none came from the client's tools.
+    expect(JSON.stringify(sentTools(fetchFn))).not.toMatch(/cache_control|ephemeral/);
+    expect((init?.body as string).match(/cache_control/g)).toHaveLength(1);
     expect(JSON.stringify(sentTools(fetchFn))).toBe(JSON.stringify(TOOL_DEFS));
     expect(JSON.stringify(TOOL_DEFS)).toBe(before); // the shared module is never mutated by a request
   });
@@ -699,10 +1092,44 @@ describe('upstream call', () => {
     }
   });
 
-  it('calls upstream with redirect: "error" so a redirect cannot carry the key elsewhere', async () => {
+  it('calls upstream with redirect: "manual": workerd rejects "error", and "follow" would carry the key to a redirect target', async () => {
+    const fetchFn = mockFetch();
+    const res = await handleRequest(chatRequest(validBody()), makeEnv(), fetchFn);
+    expect(res.status).toBe(200);
+    expect(fetchFn.mock.calls[0]![1]?.redirect).toBe('manual');
+  });
+
+  it('gives the upstream call a 60 s timeout, no longer than 90 s (a hung upstream must not hold a request for minutes)', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    await handleRequest(chatRequest(validBody()), makeEnv(), mockFetch());
+    expect(timeout).toHaveBeenCalledTimes(1);
+    expect(timeout).toHaveBeenCalledWith(60_000);
+    expect(timeout.mock.calls[0]![0]).toBeLessThanOrEqual(90_000);
+    // ...and that signal is the one fetch gets.
     const fetchFn = mockFetch();
     await handleRequest(chatRequest(validBody()), makeEnv(), fetchFn);
-    expect(fetchFn.mock.calls[0]![1]?.redirect).toBe('error');
+    expect(fetchFn.mock.calls[0]![1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('does not follow an upstream redirect: a 3xx is a generic 502, the location is not relayed, one fetch only', async () => {
+    const fetchFn = mockFetch(
+      () => new Response(null, { status: 307, headers: { location: 'https://attacker.example/collect' } }),
+    );
+    const res = await handleRequest(chatRequest(validBody()), makeEnv(), fetchFn);
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: 'upstream_error' });
+    expect(res.headers.get('location')).toBeNull();
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('the fetch stand-in rejects the redirect modes workerd rejects (so the tests above can catch a wrong mode)', async () => {
+    const fetchFn = mockFetch();
+    for (const redirect of ['error', undefined] as const) {
+      await expect(fetchFn('https://x.example', { redirect }), String(redirect)).rejects.toBeInstanceOf(TypeError);
+    }
+    for (const redirect of ['follow', 'manual'] as const) {
+      expect((await fetchFn('https://x.example', { redirect })).status, redirect).toBe(200);
+    }
   });
 
   it('cancels the unread upstream body on the 502 paths', async () => {
@@ -775,7 +1202,10 @@ describe('upstream call', () => {
         ],
       },
     ]);
-    expect(JSON.stringify(sent)).not.toMatch(/cache_control|citations|caller|1h/);
+    expect(JSON.stringify(sent.messages)).not.toMatch(/cache_control|citations|caller|1h/);
+    // The only cache_control upstream is the Worker's own, on the system block (checked in the exact-body test).
+    expect(JSON.stringify(sent).match(/cache_control/g)).toHaveLength(1);
+    expect(JSON.stringify(sent)).not.toMatch(/citations|caller|1h/);
   });
 
   it('rejects billable or forged blocks in nested content with 400 and sends nothing upstream', async () => {
@@ -819,7 +1249,6 @@ describe('upstream call', () => {
 
 describe('never_echoes_api_key', () => {
   it('keeps the key and upstream headers out of every response and the console', async () => {
-    const consoleSpies = spyOnConsole();
     const upstreamHeaders = {
       'x-request-id': 'req_secret_upstream_id',
       'set-cookie': 'session=abc',
@@ -846,7 +1275,21 @@ describe('never_echoes_api_key', () => {
       ['validation error', chatRequest(validBody({ messages: [] })), () => jsonResponse(OK_BODY), {}],
       ['bad origin', chatRequest(validBody(), { origin: 'https://evil.example' }), () => jsonResponse(OK_BODY), {}],
       ['rate limited', chatRequest(validBody()), () => jsonResponse(OK_BODY), { DAILY_IP_LIMIT: '0' }],
+      [
+        'burst limited',
+        chatRequest(validBody()),
+        () => jsonResponse(OK_BODY),
+        { IP_LIMITER: new FakeLimiter(0) as unknown as RateLimit },
+      ],
       ['404', chatRequest(validBody(), { path: '/x' }), () => jsonResponse(OK_BODY), {}],
+      // The key is present while another secret or binding is missing.
+      ['IP_HASH_SECRET missing (key present)', chatRequest(validBody()), () => jsonResponse(OK_BODY), { IP_HASH_SECRET: '' }],
+      [
+        'IP_LIMITER missing (key present)',
+        chatRequest(validBody()),
+        () => jsonResponse(OK_BODY),
+        { IP_LIMITER: undefined as unknown as RateLimit },
+      ],
     ];
 
     for (const [name, request, responder, envOverrides] of scenarios) {
@@ -859,9 +1302,191 @@ describe('never_echoes_api_key', () => {
       expect(res.headers.get('set-cookie'), name).toBeNull();
       expect(res.headers.get('x-request-id'), name).toBeNull();
     }
+  });
+});
 
-    for (const spy of consoleSpies) {
-      expect(JSON.stringify(spy.mock.calls)).not.toContain(API_KEY);
-    }
+// ----------------------------------------------------------------- what is logged
+
+/**
+ * One row per way the Worker can write to the console (and the quiet paths, which must write nothing). Each row
+ * asserts the EXACT list of console calls: the method, one constant string, and no other argument. An extra argument
+ * (an Error, the API key, a client address, a status text, a request id, a header, a body) makes the list differ.
+ * worker/README.md ("ログ") claims no more than this table shows.
+ */
+describe('console output: exactly these constant lines, nothing else', () => {
+  const SECRET_TEXT = `${API_KEY} 203.0.113.7 req_secret_upstream_id org-secret`;
+  const upstreamHeaders = { 'x-request-id': 'req_secret_upstream_id', 'anthropic-organization-id': 'org-secret' };
+  const upstreamResponse = (status: number, body: string, statusText = 'Status Text With org-secret') =>
+    new Response(body, { status, statusText, headers: { 'content-type': 'application/json', ...upstreamHeaders } });
+
+  interface LogRow {
+    name: string;
+    status: number;
+    calls: unknown[][];
+    run: () => Promise<Response>;
+  }
+
+  const rows: LogRow[] = [
+    // --- paths that must write nothing
+    { name: 'happy path', status: 200, calls: [], run: () => handleRequest(chatRequest(validBody()), makeEnv(), mockFetch()) },
+    {
+      name: 'daily limit reached (429)',
+      status: 429,
+      calls: [],
+      run: () => handleRequest(chatRequest(validBody()), makeEnv({ DAILY_IP_LIMIT: '0' }), mockFetch()),
+    },
+    {
+      name: 'burst limit reached (429)',
+      status: 429,
+      calls: [],
+      run: () =>
+        handleRequest(chatRequest(validBody()), makeEnv({ IP_LIMITER: new FakeLimiter(0) as unknown as RateLimit }), mockFetch()),
+    },
+    {
+      name: 'invalid body (400)',
+      status: 400,
+      calls: [],
+      run: () => handleRequest(chatRequest(validBody({ messages: [] })), makeEnv(), mockFetch()),
+    },
+    {
+      name: 'origin not allowed (403)',
+      status: 403,
+      calls: [],
+      run: () => handleRequest(chatRequest(validBody(), { origin: 'https://evil.example' }), makeEnv(), mockFetch()),
+    },
+    // --- upstream failures (warn)
+    {
+      name: 'upstream request failed (the fetch throws an Error holding the key, the address and a request id)',
+      status: 502,
+      calls: [['warn', 'upstream request failed']],
+      run: () =>
+        handleRequest(chatRequest(validBody()), makeEnv(), mockFetch(() => Promise.reject(new Error(`failed ${SECRET_TEXT}`)))),
+    },
+    ...[500, 401, 429, 529, 302].map((status): LogRow => ({
+      name: `upstream responded ${status} (statusText, request id and body are not logged)`,
+      status: 502,
+      calls: [['warn', `upstream responded ${status}`]],
+      run: () =>
+        handleRequest(chatRequest(validBody()), makeEnv(), mockFetch(() => upstreamResponse(status, `{"error":"${SECRET_TEXT}"}`))),
+    })),
+    {
+      name: 'upstream body unreadable (200, not JSON; statusText and request id are not logged)',
+      status: 502,
+      calls: [['warn', 'upstream body unreadable']],
+      run: () => handleRequest(chatRequest(validBody()), makeEnv(), mockFetch(() => upstreamResponse(200, `<html>${SECRET_TEXT}</html>`))),
+    },
+    {
+      name: 'upstream body rejected (200, JSON that contains the key)',
+      status: 502,
+      calls: [['warn', 'upstream body rejected']],
+      run: () =>
+        handleRequest(
+          chatRequest(validBody()),
+          makeEnv(),
+          mockFetch(() => upstreamResponse(200, JSON.stringify({ ...OK_BODY, content: [{ type: 'text', text: `key ${API_KEY}` }] }))),
+        ),
+    },
+    // --- the Worker's own failures (error)
+    {
+      name: 'unexpected error (an aborted upload)',
+      status: 500,
+      calls: [['error', 'unexpected error']],
+      run: () => handleRequest(abortedUpload(), makeEnv(), mockFetch()),
+    },
+    {
+      name: 'ANTHROPIC_API_KEY missing',
+      status: 503,
+      calls: [['error', 'server configuration missing: ANTHROPIC_API_KEY']],
+      run: () => handleRequest(chatRequest(validBody()), makeEnv({ ANTHROPIC_API_KEY: '' }), mockFetch()),
+    },
+    {
+      name: 'IP_HASH_SECRET missing, API key present',
+      status: 503,
+      calls: [['error', 'server configuration missing: IP_HASH_SECRET']],
+      run: () => handleRequest(chatRequest(validBody()), makeEnv({ IP_HASH_SECRET: '' }), mockFetch()),
+    },
+    {
+      name: 'IP_LIMITER missing, API key present',
+      status: 503,
+      calls: [['error', 'server configuration missing: IP_LIMITER']],
+      run: () => handleRequest(chatRequest(validBody()), makeEnv({ IP_LIMITER: undefined as unknown as RateLimit }), mockFetch()),
+    },
+    {
+      name: 'burst limiter unavailable (limit() throws an Error holding the key and the address)',
+      status: 503,
+      calls: [['error', 'burst limiter unavailable']],
+      run: () => {
+        const limiter = {
+          limit: async () => {
+            throw new Error(`limiter down ${SECRET_TEXT}`);
+          },
+        };
+        return handleRequest(chatRequest(validBody()), makeEnv({ IP_LIMITER: limiter as unknown as RateLimit }), mockFetch());
+      },
+    },
+    {
+      name: 'rate limit store unavailable (a KV read throws an Error holding the key and the address)',
+      status: 503,
+      calls: [['error', 'rate limit store unavailable']],
+      run: () => {
+        const kv = {
+          get: async () => {
+            throw new Error(`kv read failed ${SECRET_TEXT}`);
+          },
+          put: async () => {},
+        };
+        return handleRequest(chatRequest(validBody()), makeEnv({ RATE_KV: kv as unknown as KVNamespace }), mockFetch());
+      },
+    },
+    {
+      name: 'rate counter write failed (a KV write throws an Error holding the key and the address)',
+      status: 200,
+      calls: [['warn', 'rate counter write failed']],
+      run: () => {
+        const kv = {
+          get: async () => null,
+          put: async () => {
+            throw new Error(`kv write failed ${SECRET_TEXT}`);
+          },
+        };
+        return handleRequest(chatRequest(validBody()), makeEnv({ RATE_KV: kv as unknown as KVNamespace }), mockFetch());
+      },
+    },
+  ];
+
+  for (const row of rows) {
+    it(`${row.name}: ${row.calls.length === 0 ? 'no console output' : JSON.stringify(row.calls)}`, async () => {
+      const res = await row.run();
+      expect(res.status).toBe(row.status);
+      // The exact call list: method plus one constant string. toEqual is deep, so an extra argument of any kind
+      // (Error, string, object) or an extra call fails it.
+      expect(consoleCalls()).toEqual(row.calls);
+      for (const call of consoleCalls()) {
+        for (const arg of call) expect(typeof arg).toBe('string');
+      }
+      // ...and what the browser gets back carries none of it either.
+      const dump = `${await res.text()} ${JSON.stringify([...res.headers.entries()])}`;
+      expect(dump).not.toMatch(/sk-ant|203\.0\.113\.7|req_secret_upstream_id|org-secret|Status Text/);
+    });
+  }
+
+  it('covers every console call in the source: nine call sites, with exactly these argument texts', () => {
+    // A tenth log line, or an extra argument on one of these, fails here until the table above is extended.
+    const sites = [...`${indexSource}\n${rateLimitSource}`.matchAll(/console\.(log|info|warn|error|debug)\(([^;]*)\);/g)].map(
+      (match) => `${match[1]}(${match[2]})`,
+    );
+    expect(sites.sort()).toEqual(
+      [
+        "error('burst limiter unavailable')",
+        "error('rate limit store unavailable')",
+        "error('unexpected error')",
+        'error(`server configuration missing: ${missing}`)',
+        "warn('rate counter write failed')",
+        "warn('upstream body rejected')",
+        "warn('upstream body unreadable')",
+        "warn('upstream request failed')",
+        'warn(`upstream responded ${upstream.status}`)',
+      ].sort(),
+    );
   });
 });

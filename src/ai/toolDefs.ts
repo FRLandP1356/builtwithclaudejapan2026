@@ -2,8 +2,9 @@
 //
 // DATA ONLY. This module imports nothing, so the Cloudflare worker can import it (it sends these exact definitions
 // to Claude, which means a client can never supply its own tool metadata) and src/ai/tools.ts implements them.
-// The descriptions are model-visible Japanese text. Keep each description under 400 characters and each input_schema
-// under 2,000 characters when serialised (the worker caps schemas at 4,000).
+// The descriptions are model-visible Japanese text. Keep each description under 400 characters and each serialised
+// input_schema under 2,000 characters: worker/toolDefs.test.ts enforces both budgets (the Worker does not check them
+// at run time; they keep its upstream request small).
 
 export interface ToolDef {
   name: string;

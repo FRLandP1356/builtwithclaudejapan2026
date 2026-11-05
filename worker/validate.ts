@@ -177,8 +177,11 @@ function rebuildMessage(raw: unknown, budget: TextBudget): ChatMessage | null {
 }
 
 /**
- * Validates the parsed JSON body and returns a copy rebuilt from known fields only:
- * every message and content block is reconstructed, so unknown or nested client fields never leave this Worker.
+ * Validates the parsed JSON body and returns a copy of `messages` rebuilt from known fields: every message and
+ * content block is reconstructed, so unknown fields on messages and blocks (cache_control, citations, media, ...)
+ * never leave this Worker. One part is NOT rebuilt: `tool_use.input` is any JSON object and is passed on exactly as
+ * received, nested fields included. It is bounded only by the shared text budget (its serialised length counts toward
+ * MAX_TOTAL_TEXT_CHARS) and by the body-size cap; its shape is not checked against the tool's schema.
  * Only `messages` is read. A client `tools` field (or any other unknown top-level field) is ignored, not rejected:
  * the tool definitions are sent from the shared module on every request.
  */

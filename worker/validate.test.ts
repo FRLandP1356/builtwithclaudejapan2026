@@ -34,6 +34,16 @@ describe('validateChatBody: content blocks are rebuilt from known fields', () =>
     ]);
   });
 
+  it('tool_use.input is NOT rebuilt: any JSON object is passed on exactly as received, nested fields included', () => {
+    const input = { code: '13101', nested: { cache_control: { type: 'ephemeral' }, deeper: [1, { x: null }] }, extra: true };
+    const result = validate([{ role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'find_area', input }] }]);
+    const block = (messagesOf(result)[0]!.content as Array<{ input: unknown }>)[0]!;
+    expect(block.input).toEqual(input);
+    // This is why the text budget matters: the input's serialised length is what bounds it.
+    const tooBig = { q: 'x'.repeat(MAX_TOTAL_TEXT_CHARS) };
+    expect(validate([{ role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'find_area', input: tooBig }] }]).ok).toBe(false);
+  });
+
   it('tool_result keeps type, tool_use_id, string-or-text-blocks content and a boolean is_error', () => {
     const asString = validate([
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: '{"a":1}', is_error: true, cache_control: {} }] },
