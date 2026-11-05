@@ -7,3 +7,9 @@ declare module '*.jsonc?raw' {
   const text: string;
   export default text;
 }
+
+// Same for the Worker's own sources: worker/index.test.ts reads them to check every console call.
+declare module '*.ts?raw' {
+  const text: string;
+  export default text;
+}

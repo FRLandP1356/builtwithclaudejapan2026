@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TOOL_DEFS, TOOL_NAMES } from '../src/ai/toolDefs';
 import { handleRequest, type Env } from './index';
 import { clientKey, COUNTER_TTL_SECONDS, DEFAULT_IP_LIMIT, DEFAULT_TOTAL_LIMIT, shardOf, TOTAL_SHARDS } from './rateLimit';
+import indexSource from './index.ts?raw';
+import rateLimitSource from './rateLimit.ts?raw';
 import { SYSTEM_PROMPT } from './systemPrompt';
 
 // ---------------------------------------------------------------- test doubles
@@ -157,6 +159,28 @@ function sentHeaders(fetchFn: ReturnType<typeof mockFetch>): Record<string, stri
   return Object.fromEntries(new Headers(fetchFn.mock.calls[0]![1]?.headers).entries());
 }
 
+/** A client that goes away mid-upload: reading the body rejects. */
+function abortedUpload(): Request {
+  const body = new ReadableStream({
+    start(controller) {
+      controller.error(new Error('client went away: detail-that-must-not-be-logged'));
+    },
+  });
+  return new Request('https://api.example.test/api/chat', {
+    method: 'POST',
+    headers: { origin: ORIGIN, 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.7' },
+    body,
+    duplex: 'half',
+  } as RequestInit);
+}
+
+const CONSOLE_METHODS = ['log', 'info', 'warn', 'error', 'debug'] as const;
+
+/** Every console call made so far as [method, ...arguments] (grouped by method), argument by argument. */
+function consoleCalls(): unknown[][] {
+  return CONSOLE_METHODS.flatMap((method) => vi.mocked(console[method]).mock.calls.map((args) => [method, ...args]));
+}
+
 function spyOnConsole() {
   return (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) =>
     vi.spyOn(console, method).mockImplementation(() => {}),
@@ -305,21 +329,6 @@ describe('cors_blocks_other_origin', () => {
 // ----------------------------------------------------------- unexpected failures
 
 describe('an unexpected failure still gets the Worker\'s own response', () => {
-  function abortedUpload(): Request {
-    // A client that goes away mid-upload: reading the body rejects.
-    const body = new ReadableStream({
-      start(controller) {
-        controller.error(new Error('client went away: detail-that-must-not-be-logged'));
-      },
-    });
-    return new Request('https://api.example.test/api/chat', {
-      method: 'POST',
-      headers: { origin: ORIGIN, 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.7' },
-      body,
-      duplex: 'half',
-    } as RequestInit);
-  }
-
   it('answers 500 {error:internal_error} with nosniff when the body read rejects, and charges nothing', async () => {
     const env = makeEnv();
     const fetchFn = mockFetch();
@@ -335,10 +344,9 @@ describe('an unexpected failure still gets the Worker\'s own response', () => {
     expect(env.kv.puts).toHaveLength(0);
   });
 
-  it('logs one detail-free line: not the error text, not the address', async () => {
+  it('logs one detail-free line: exactly the constant string, no error object, nothing else', async () => {
     await handleRequest(abortedUpload(), makeEnv(), mockFetch());
-    const logged = [console.error, console.warn, console.log].flatMap((fn) => vi.mocked(fn).mock.calls);
-    expect(logged).toEqual([['unexpected error']]);
+    expect(consoleCalls()).toEqual([['error', 'unexpected error']]);
   });
 
   it('also covers a bug anywhere else in the routing (here: reading the config throws)', async () => {
@@ -352,7 +360,7 @@ describe('an unexpected failure still gets the Worker\'s own response', () => {
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: 'internal_error' });
     expect(res.headers.get('x-content-type-options')).toBe('nosniff');
-    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain('detail-that-must-not-be-logged');
+    expect(consoleCalls()).toEqual([['error', 'unexpected error']]);
   });
 
   it('is what the exported Worker handler does too', async () => {
@@ -768,9 +776,7 @@ describe('rate limits', () => {
     expect(fetchFn).toHaveBeenCalledTimes(1);
     // The per-IP counter was still saved (the shard write is the one that failed).
     expect(env.kv.puts.map((put) => put.key.split(':')[0])).toEqual(['ip']);
-    const warnings = vi.mocked(console.warn).mock.calls;
-    expect(warnings).toEqual([['rate counter write failed']]);
-    expect(JSON.stringify(warnings)).not.toContain('203.0.113.7');
+    expect(consoleCalls()).toEqual([['warn', 'rate counter write failed']]);
   });
 
   it('allows the request when no counter can be written, and still counts nothing it could not save', async () => {
@@ -780,7 +786,7 @@ describe('rate limits', () => {
     const res = await handleRequest(chatRequest(validBody()), env, fetchFn);
     expect(res.status).toBe(200);
     expect(fetchFn).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(console.warn).mock.calls.filter(([message]) => message === 'rate counter write failed')).toHaveLength(1);
+    expect(consoleCalls()).toEqual([['warn', 'rate counter write failed']]);
   });
 
   it('fails closed (503) when a counter cannot be READ, even though writes would work: no upstream call', async () => {
@@ -849,6 +855,28 @@ describe('burst limiter (IP_LIMITER)', () => {
     expect(other.limiter.calls[0]).not.toBe(env.limiter.calls[0]);
   });
 
+  it('computes the visitor\'s HMAC exactly once per request, shared by the burst limiter and the daily counters', async () => {
+    const sign = vi.spyOn(crypto.subtle, 'sign');
+    const importKey = vi.spyOn(crypto.subtle, 'importKey');
+    const reached: Array<[string, Partial<Env>]> = [
+      ['allowed', {}],
+      ['burst limited', { IP_LIMITER: new FakeLimiter(0) as unknown as RateLimit }],
+      ['daily limited', { DAILY_IP_LIMIT: '0' }],
+    ];
+    for (const [name, overrides] of reached) {
+      sign.mockClear();
+      importKey.mockClear();
+      await handleRequest(chatRequest(validBody()), makeEnv(overrides), mockFetch());
+      expect(sign, name).toHaveBeenCalledTimes(1);
+      expect(importKey, name).toHaveBeenCalledTimes(1);
+    }
+    // Requests that never reach the counters compute none.
+    sign.mockClear();
+    await handleRequest(chatRequest(validBody(), { origin: 'https://evil.example' }), makeEnv(), mockFetch());
+    await handleRequest(chatRequest(validBody({ messages: [] })), makeEnv(), mockFetch());
+    expect(sign).not.toHaveBeenCalled();
+  });
+
   it('is not consulted for requests that never reach the API (wrong origin, bad body, wrong route)', async () => {
     const env = makeEnv();
     const fetchFn = mockFetch();
@@ -871,10 +899,8 @@ describe('burst limiter (IP_LIMITER)', () => {
     expect(fetchFn).not.toHaveBeenCalled();
     expect(env.kv.gets).toHaveLength(0);
     expect(env.kv.puts).toHaveLength(0);
-    // The log says what failed, nothing about the visitor.
-    const logged = JSON.stringify([console.error, console.warn].flatMap((fn) => vi.mocked(fn).mock.calls));
-    expect(logged).toContain('burst limiter unavailable');
-    expect(logged).not.toMatch(/203\.0\.113\.7|limiter down/);
+    // The log says what failed, nothing about the visitor or the error.
+    expect(consoleCalls()).toEqual([['error', 'burst limiter unavailable']]);
   });
 
   it('answers 503 server_misconfigured, charging nothing, when the binding is missing (not silently skipped)', async () => {
@@ -1223,7 +1249,6 @@ describe('upstream call', () => {
 
 describe('never_echoes_api_key', () => {
   it('keeps the key and upstream headers out of every response and the console', async () => {
-    const consoleSpies = spyOnConsole();
     const upstreamHeaders = {
       'x-request-id': 'req_secret_upstream_id',
       'set-cookie': 'session=abc',
@@ -1257,6 +1282,14 @@ describe('never_echoes_api_key', () => {
         { IP_LIMITER: new FakeLimiter(0) as unknown as RateLimit },
       ],
       ['404', chatRequest(validBody(), { path: '/x' }), () => jsonResponse(OK_BODY), {}],
+      // The key is present while another secret or binding is missing.
+      ['IP_HASH_SECRET missing (key present)', chatRequest(validBody()), () => jsonResponse(OK_BODY), { IP_HASH_SECRET: '' }],
+      [
+        'IP_LIMITER missing (key present)',
+        chatRequest(validBody()),
+        () => jsonResponse(OK_BODY),
+        { IP_LIMITER: undefined as unknown as RateLimit },
+      ],
     ];
 
     for (const [name, request, responder, envOverrides] of scenarios) {
@@ -1269,9 +1302,191 @@ describe('never_echoes_api_key', () => {
       expect(res.headers.get('set-cookie'), name).toBeNull();
       expect(res.headers.get('x-request-id'), name).toBeNull();
     }
+  });
+});
 
-    for (const spy of consoleSpies) {
-      expect(JSON.stringify(spy.mock.calls)).not.toContain(API_KEY);
-    }
+// ----------------------------------------------------------------- what is logged
+
+/**
+ * One row per way the Worker can write to the console (and the quiet paths, which must write nothing). Each row
+ * asserts the EXACT list of console calls: the method, one constant string, and no other argument. An extra argument
+ * (an Error, the API key, a client address, a status text, a request id, a header, a body) makes the list differ.
+ * worker/README.md ("ログ") claims no more than this table shows.
+ */
+describe('console output: exactly these constant lines, nothing else', () => {
+  const SECRET_TEXT = `${API_KEY} 203.0.113.7 req_secret_upstream_id org-secret`;
+  const upstreamHeaders = { 'x-request-id': 'req_secret_upstream_id', 'anthropic-organization-id': 'org-secret' };
+  const upstreamResponse = (status: number, body: string, statusText = 'Status Text With org-secret') =>
+    new Response(body, { status, statusText, headers: { 'content-type': 'application/json', ...upstreamHeaders } });
+
+  interface LogRow {
+    name: string;
+    status: number;
+    calls: unknown[][];
+    run: () => Promise<Response>;
+  }
+
+  const rows: LogRow[] = [
+    // --- paths that must write nothing
+    { name: 'happy path', status: 200, calls: [], run: () => handleRequest(chatRequest(validBody()), makeEnv(), mockFetch()) },
+    {
+      name: 'daily limit reached (429)',
+      status: 429,
+      calls: [],
+      run: () => handleRequest(chatRequest(validBody()), makeEnv({ DAILY_IP_LIMIT: '0' }), mockFetch()),
+    },
+    {
+      name: 'burst limit reached (429)',
+      status: 429,
+      calls: [],
+      run: () =>
+        handleRequest(chatRequest(validBody()), makeEnv({ IP_LIMITER: new FakeLimiter(0) as unknown as RateLimit }), mockFetch()),
+    },
+    {
+      name: 'invalid body (400)',
+      status: 400,
+      calls: [],
+      run: () => handleRequest(chatRequest(validBody({ messages: [] })), makeEnv(), mockFetch()),
+    },
+    {
+      name: 'origin not allowed (403)',
+      status: 403,
+      calls: [],
+      run: () => handleRequest(chatRequest(validBody(), { origin: 'https://evil.example' }), makeEnv(), mockFetch()),
+    },
+    // --- upstream failures (warn)
+    {
+      name: 'upstream request failed (the fetch throws an Error holding the key, the address and a request id)',
+      status: 502,
+      calls: [['warn', 'upstream request failed']],
+      run: () =>
+        handleRequest(chatRequest(validBody()), makeEnv(), mockFetch(() => Promise.reject(new Error(`failed ${SECRET_TEXT}`)))),
+    },
+    ...[500, 401, 429, 529, 302].map((status): LogRow => ({
+      name: `upstream responded ${status} (statusText, request id and body are not logged)`,
+      status: 502,
+      calls: [['warn', `upstream responded ${status}`]],
+      run: () =>
+        handleRequest(chatRequest(validBody()), makeEnv(), mockFetch(() => upstreamResponse(status, `{"error":"${SECRET_TEXT}"}`))),
+    })),
+    {
+      name: 'upstream body unreadable (200, not JSON; statusText and request id are not logged)',
+      status: 502,
+      calls: [['warn', 'upstream body unreadable']],
+      run: () => handleRequest(chatRequest(validBody()), makeEnv(), mockFetch(() => upstreamResponse(200, `<html>${SECRET_TEXT}</html>`))),
+    },
+    {
+      name: 'upstream body rejected (200, JSON that contains the key)',
+      status: 502,
+      calls: [['warn', 'upstream body rejected']],
+      run: () =>
+        handleRequest(
+          chatRequest(validBody()),
+          makeEnv(),
+          mockFetch(() => upstreamResponse(200, JSON.stringify({ ...OK_BODY, content: [{ type: 'text', text: `key ${API_KEY}` }] }))),
+        ),
+    },
+    // --- the Worker's own failures (error)
+    {
+      name: 'unexpected error (an aborted upload)',
+      status: 500,
+      calls: [['error', 'unexpected error']],
+      run: () => handleRequest(abortedUpload(), makeEnv(), mockFetch()),
+    },
+    {
+      name: 'ANTHROPIC_API_KEY missing',
+      status: 503,
+      calls: [['error', 'server configuration missing: ANTHROPIC_API_KEY']],
+      run: () => handleRequest(chatRequest(validBody()), makeEnv({ ANTHROPIC_API_KEY: '' }), mockFetch()),
+    },
+    {
+      name: 'IP_HASH_SECRET missing, API key present',
+      status: 503,
+      calls: [['error', 'server configuration missing: IP_HASH_SECRET']],
+      run: () => handleRequest(chatRequest(validBody()), makeEnv({ IP_HASH_SECRET: '' }), mockFetch()),
+    },
+    {
+      name: 'IP_LIMITER missing, API key present',
+      status: 503,
+      calls: [['error', 'server configuration missing: IP_LIMITER']],
+      run: () => handleRequest(chatRequest(validBody()), makeEnv({ IP_LIMITER: undefined as unknown as RateLimit }), mockFetch()),
+    },
+    {
+      name: 'burst limiter unavailable (limit() throws an Error holding the key and the address)',
+      status: 503,
+      calls: [['error', 'burst limiter unavailable']],
+      run: () => {
+        const limiter = {
+          limit: async () => {
+            throw new Error(`limiter down ${SECRET_TEXT}`);
+          },
+        };
+        return handleRequest(chatRequest(validBody()), makeEnv({ IP_LIMITER: limiter as unknown as RateLimit }), mockFetch());
+      },
+    },
+    {
+      name: 'rate limit store unavailable (a KV read throws an Error holding the key and the address)',
+      status: 503,
+      calls: [['error', 'rate limit store unavailable']],
+      run: () => {
+        const kv = {
+          get: async () => {
+            throw new Error(`kv read failed ${SECRET_TEXT}`);
+          },
+          put: async () => {},
+        };
+        return handleRequest(chatRequest(validBody()), makeEnv({ RATE_KV: kv as unknown as KVNamespace }), mockFetch());
+      },
+    },
+    {
+      name: 'rate counter write failed (a KV write throws an Error holding the key and the address)',
+      status: 200,
+      calls: [['warn', 'rate counter write failed']],
+      run: () => {
+        const kv = {
+          get: async () => null,
+          put: async () => {
+            throw new Error(`kv write failed ${SECRET_TEXT}`);
+          },
+        };
+        return handleRequest(chatRequest(validBody()), makeEnv({ RATE_KV: kv as unknown as KVNamespace }), mockFetch());
+      },
+    },
+  ];
+
+  for (const row of rows) {
+    it(`${row.name}: ${row.calls.length === 0 ? 'no console output' : JSON.stringify(row.calls)}`, async () => {
+      const res = await row.run();
+      expect(res.status).toBe(row.status);
+      // The exact call list: method plus one constant string. toEqual is deep, so an extra argument of any kind
+      // (Error, string, object) or an extra call fails it.
+      expect(consoleCalls()).toEqual(row.calls);
+      for (const call of consoleCalls()) {
+        for (const arg of call) expect(typeof arg).toBe('string');
+      }
+      // ...and what the browser gets back carries none of it either.
+      const dump = `${await res.text()} ${JSON.stringify([...res.headers.entries()])}`;
+      expect(dump).not.toMatch(/sk-ant|203\.0\.113\.7|req_secret_upstream_id|org-secret|Status Text/);
+    });
+  }
+
+  it('covers every console call in the source: nine call sites, with exactly these argument texts', () => {
+    // A tenth log line, or an extra argument on one of these, fails here until the table above is extended.
+    const sites = [...`${indexSource}\n${rateLimitSource}`.matchAll(/console\.(log|info|warn|error|debug)\(([^;]*)\);/g)].map(
+      (match) => `${match[1]}(${match[2]})`,
+    );
+    expect(sites.sort()).toEqual(
+      [
+        "error('burst limiter unavailable')",
+        "error('rate limit store unavailable')",
+        "error('unexpected error')",
+        'error(`server configuration missing: ${missing}`)',
+        "warn('rate counter write failed')",
+        "warn('upstream body rejected')",
+        "warn('upstream body unreadable')",
+        "warn('upstream request failed')",
+        'warn(`upstream responded ${upstream.status}`)',
+      ].sort(),
+    );
   });
 });
