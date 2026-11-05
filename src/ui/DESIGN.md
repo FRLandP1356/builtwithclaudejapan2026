@@ -88,8 +88,8 @@
 | 前提 | `.controls-groups`（`.field` を罫で区切る）`.field-tags` `.controls-actions` `.controls-status` `#ctl-error` `#ctl-infra-custom` | スライダーと 2 択、適用と戻すのボタン、状態の 1 行 |
 | 割り振りの入力 | `.alloc-form` `.alloc-regions`（`fieldset`）`.alloc-region`（チェックボックス 20px、行 40px）`.alloc-year` | 対象・割合・引く元 |
 | 地図への反映 | `.alloc-map-actions` `.alloc-map-toggle`（`aria-pressed`。「地図に反映する」/「地図に反映中」）`.alloc-map-status`（`role=status`） | 押すと store の `allocation` に今の結果を置く。年・前提・入力が変わるたびに置き直す。外す・片付けると消す。反映中は地図で別の県や町を選んでも対象を変えない（印をたどってほかの県の輪を見るため）。反映していない時は、これまでどおり地図の選択が対象になる |
-| 結果 | `.alloc-result` `.alloc-summary`（`role=status`）`.alloc-notes` `.alloc-more`（`details`） | 1 文の要約と施設の表 |
-| 施設の表 | `.alloc-table-visible` `.alloc-table-hidden` `.alloc-group`（`th[scope=rowgroup]`）`.alloc-name.alloc-focus`（施設名のボタン：藍の下線付きの文字で 40px、押した状態は `--accent-soft` の面。`aria-pressed`、`data-facility`。押した状態はその場で書き換え、表を作り直さない：フォーカスも開いた「その他の施設」もそのまま）`.alloc-example` `.alloc-example-count` `.alloc-down`（減る差は `--decline-deep`） | 施設名を押すと、その施設の目安をまたいだ町に地図で印が付く |
+| 結果 | `.alloc-result` `.alloc-summary`（role なし。年を動かすたびに書き換わる）`#alloc-announce`（`.sr-only`、`role=status`。割り振りの入力を変えた時だけ、1 回書く。年は含めない。地図が対象を動かした時は空にする）`.alloc-notes` `.alloc-more`（`details`） | 1 文の要約と施設の表。読み上げるのは入力を変えた時だけで、年のコマ送りでは読み上げない |
+| 施設の表 | `.alloc-table-visible` `.alloc-table-hidden` `.alloc-group`（`th[scope=rowgroup]`）`.alloc-name.alloc-focus`（施設名のボタン：藍の下線付きの文字で 40px、押した状態は `--accent-soft` の面。`aria-pressed`、`data-facility`。押した状態はその場で書き換え、表を作り直さない：フォーカスも開いた「その他の施設」もそのまま。年や前提を変えて表を作り直した時は、同じ施設のボタン（`data-facility`）へフォーカスを戻し（画面は動かさない）、その施設が無ければ表の見出しへ）`.alloc-example` `.alloc-example-count` `.alloc-down`（減る差は `--decline-deep`） | 施設名を押すと、その施設の目安をまたいだ町に地図で印が付く |
 
 ### AI に質問（`aiPanel.css`、`aiPanel.ts`・`aiTrace.ts`）
 
@@ -97,10 +97,10 @@
 |---|---|---|
 | 入力 | `.ai-panel` `.ai-samples` `.ai-sample`（幅いっぱい・左揃え）`.ai-form` `.ai-input` `.ai-help` `.ai-counter`（`.is-over`）`.ai-input-msg` `.ai-new`（`.is-attention` は藍の 2px 枠） | 例の質問、自由入力、新しい質問 |
 | 待ち | `.ai-status` `.ai-status-text`（`role=status`）`.ai-cancel` | 1 行と「やめる」 |
-| 答え | `.ai-answers` `.ai-answer`（罫で区切る）`.ai-question` `.ai-answer-head` `.ai-answer-text` `.ai-basis` `.ai-message` `.ai-trimmed` `.ai-fail` `.ai-fail-samples` | 新しい順。保存済みは `.tag`、試算は `.badge-estimate` |
+| 答え | `.ai-answers` `.ai-answer`（罫で区切る。`[data-role=ai-unavailable]` は AI の接続先が無い時の 1 文で、画面に 1 つだけ・ボタンなし）`.ai-question` `.ai-answer-head` `.ai-answer-text` `.ai-basis`（数字の確認を通った答えにだけ）`.ai-message` `.ai-trimmed` `.ai-fail` `.ai-fail-samples`（保存済みの答えが確認済みの質問がある時だけ） | 新しい順。保存済みは `.tag`、試算は `.badge-estimate` |
 | 確かめられない数字 | `.notice.ai-warning`（墨の 4px の左罫） | 赤錆は使わない（目安を下回る印に取ってある） |
 | 使った道具 | `.ai-trace`（`details`）`.ai-trace-list` `.ai-trace-item` `.ai-trace-name` `.ai-trace-label` `.ai-trace-input` `.ai-trace-result`（`details`）`.ai-json`（`pre`、paper-2 の面）`.ai-copy-status` | 入力と結果をそのまま見せる |
-| 地図・前提・割り振りへの橋 | `.ai-links`（「◯◯ を地図で開く」）`.ai-scenarios` `.ai-scenario` `.ai-scenario-msg`（`data-role=apply-scenario`）`.ai-allocations`（`data-role=apply-allocation`、「この割り振りを地図に反映する」） | 道具の入力から計算し直して store に置く。モデルの文章は何も使わない |
+| 地図・前提・割り振りへの橋 | `.ai-links`（「◯◯を地図で開く」）`.ai-scenarios` `.ai-scenario` `.ai-scenario-msg`（`data-role=apply-scenario`）`.ai-allocations`（`data-role=apply-allocation`、「この割り振りを地図に反映する」） | 道具の入力から計算し直して store に置く。モデルの文章は何も使わない |
 
 ## 地図（`app.css`、`src/map/`）
 
