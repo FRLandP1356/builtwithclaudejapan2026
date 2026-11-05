@@ -167,7 +167,7 @@ describe('SAMPLE_QUESTIONS and public/data/cached_answers.json', () => {
   it('has_exactly_the_five_sample_questions_in_order', () => {
     expect(SAMPLE_QUESTIONS).toEqual([
       '日本の人口が減り出してから、東京はどうなっていますか？',
-      '田辺市の2100年の子どもの数は、何人くらいですか？',
+      '田辺市の2100年の人口は何人くらいで、65歳以上は何割ですか？',
       '和歌山県の人口を10%増やすと、ほかの地域はどうなりますか？',
       '人口が3,000人を下回る町は、2100年に何町ありますか？',
       '公式の推計と、このアプリの試算は、どう違いますか？',
@@ -183,15 +183,25 @@ describe('SAMPLE_QUESTIONS and public/data/cached_answers.json', () => {
     });
   });
 
-  it('json_entries_are_placeholders_until_real_answers_are_generated', () => {
+  it('json_entries_are_pending_or_verified_and_always_have_an_answer (stays true when the owner verifies them)', () => {
     for (const a of file.answers) {
-      expect(a.answer).toBe('');
-      expect(a.trace).toEqual([]);
-      expect(a.status).toBe('pending');
-      expect(a.note).toBe('Generated from real Claude answers after the API credit is granted; see docs');
+      expect(['pending', 'verified'], a.id).toContain(a.status);
+      expect(a.answer.trim(), `${a.id} has an answer`).not.toBe('');
+      expect(Array.isArray(a.trace), a.id).toBe(true);
+      // Only a verified entry is served; a pending one never matches its own question, a verified one always does.
+      if (a.status === 'pending') expect(findCached(file, a.question), a.id).toBeNull();
+      else expect(findCached(file, a.question), a.id).toEqual(a);
     }
-    // A pending placeholder must never be served.
-    for (const q of SAMPLE_QUESTIONS) expect(findCached(file, q)).toBeNull();
+  });
+
+  it('whatever_the_statuses_are_pending_is_never_served_and_verified_is: the real answers, both ways', () => {
+    const asIs = (status: 'pending' | 'verified'): CachedAnswers => ({ ...file, answers: file.answers.map((a) => ({ ...a, status })) });
+    for (const q of SAMPLE_QUESTIONS) {
+      expect(findCached(asIs('pending'), q)).toBeNull();
+      expect(findCached(asIs('verified'), q)?.question).toBe(q);
+    }
+    expect(verifiedSampleQuestions(asIs('pending'))).toEqual([]);
+    expect(verifiedSampleQuestions(asIs('verified'))).toEqual(SAMPLE_QUESTIONS);
   });
 
   it('loads_the_real_file_through_loadCachedAnswers', async () => {

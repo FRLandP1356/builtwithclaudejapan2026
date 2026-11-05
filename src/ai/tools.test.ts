@@ -5,6 +5,7 @@ import { makeEngineContext } from '../../test/helpers/engineContext';
 import { total } from '../engine/aggregate';
 import { allocate } from '../engine/allocation';
 import { facilityStatus } from '../engine/facilities';
+import { OFFICIAL_END_YEAR } from '../engine/scenarios';
 import { DEFAULT_SCENARIO } from '../engine/types';
 import type { Area, Facility, Scenario, Series } from '../engine/types';
 import { MAX_YEARS, TOOL_DEFS, TOOL_NAMES } from './toolDefs';
@@ -399,10 +400,21 @@ describe('compare_sources', () => {
     expect(r.maxRelativeDifference).toBeLessThan(0.0005);
     expect(r.maxRelativeDifference).toBeGreaterThanOrEqual(0);
     expect(r.maxRelativeDifferencePercent).toBeCloseTo(r.maxRelativeDifference * 100, 2);
-    expect(r.appEstimate.map((x) => x.year)).toEqual([2060, 2065, 2070, 2075, 2080, 2085, 2090, 2095, 2100]);
+    expect(r.appEstimate.map((x) => x.year)).toEqual([2055, 2060, 2065, 2070, 2075, 2080, 2085, 2090, 2095, 2100]);
     expect(r.appEstimate.every((x) => x.basis === 'app_estimate' && Number.isInteger(x.population))).toBe(true);
     expect(r.note).toMatch(/2050/);
+    // the first estimated year is the first grid year after the official end (2050), i.e. 2055, and the note says so
+    expect(r.appEstimate[0]!.year).toBe(OFFICIAL_END_YEAR + 5);
+    expect(r.note).toMatch(/2055/);
+    expect(r.note).not.toMatch(/2060年以降/);
     expect(r.scenario).toEqual(DEFAULT_SCENARIO);
+  });
+
+  it('the_tool_text_names_the_first_estimated_year: 2055 to 2100, never "from 2060"', () => {
+    const def = TOOL_DEFS.find((t) => t.name === 'compare_sources')!;
+    expect(def.description).toContain('2055〜2100年');
+    expect(def.description).not.toContain('2060〜');
+    expect(TOOL_DEFS.find((t) => t.name === 'get_series')!.description).not.toContain('2060年以降');
   });
 
   it('prefectures and Japan sum the official totals; a village (official ages only) is close too', () => {

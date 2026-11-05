@@ -5,8 +5,11 @@
 //   2. Otherwise a tool loop: POST { messages } to the Worker; if the model stopped to use tools, run EVERY requested
 //      tool here with runTool, send the results back, and repeat. The Worker owns the model, the system prompt and the
 //      tool definitions, so the body is `{ messages }` and nothing else.
-//   3. checkNumbers compares the numbers in the answer with ALL the numbers the tools returned in this ask. If some are
-//      missing, the model is asked ONCE to restate the answer using only numbers from the results (at most 3 requests).
+//   3. checkNumbers compares the numbers in the answer with ALL the numbers the tools returned in this ask AND with the
+//      tool_result blocks of the earlier turns of the same conversation (`history`, as it is sent: a number the model
+//      reuses from an earlier result is fine; numbers that only occur in earlier assistant or user text do not count).
+//      If some are missing, the model is asked ONCE to restate the answer using only numbers from the results (at most
+//      3 requests).
 //      Still unchecked: the answer comes back with status 'unverified_numbers' and the numbers, for the UI to warn.
 //      Most upstream requests one ask can make: maxRounds + min(3, maxRounds) = 9 at the defaults.
 //   4. If the AI cannot be reached (limit, outage, network) the saved answer for the same question is used when there
@@ -455,6 +458,26 @@ function currentHistory(conversation: Conversation): Message[] {
   return conversation.messages.slice(0, conversation.historyCount);
 }
 
+/**
+ * The texts of the tool_result blocks in the history: what the tools returned in the earlier turns of this conversation.
+ * ONLY tool_result blocks count. What the model or the visitor wrote in earlier turns is never evidence, so a number
+ * the model made up in one answer cannot pass the check by being repeated in the next. The history is read as it is
+ * sent (after trimming): an exchange that was dropped is not something the model can still see.
+ */
+function earlierToolResults(conversation: Conversation): string[] {
+  const texts: string[] = [];
+  for (const message of currentHistory(conversation)) {
+    if (message.role !== 'user' || typeof message.content === 'string') continue;
+    for (const block of message.content) if (block.type === 'tool_result') texts.push(block.content);
+  }
+  return texts;
+}
+
+/** What an answer's numbers may come from: the results of earlier turns, then the results of this ask. */
+function allowedSources(conversation: Conversation): string[] {
+  return [...earlierToolResults(conversation), ...conversation.seen];
+}
+
 function executeCall(call: ToolUseBlock, conversation: Conversation, ctx: EngineContext): ToolResultBlock {
   let result: unknown;
   try {
@@ -625,7 +648,7 @@ async function converse(question: string, cache: CachedAnswers | null, conversat
     if (first.kind === 'too_many_steps') return failureResult('error', MSG_TOO_MANY_STEPS, first.text, conversation);
     if (first.kind === 'empty') return failureResult('error', first.refused ? MSG_REFUSED : first.outOfRoom ? MSG_OUT_OF_ROOM : MSG_EMPTY, '', conversation);
 
-    const firstUnverified = checkNumbers(first.text, conversation.seen).unverified;
+    const firstUnverified = checkNumbers(first.text, allowedSources(conversation)).unverified;
     if (firstUnverified.length === 0) return okResult(first.text, first.note, conversation);
 
     // Some numbers are not in the tool results: ask once for a restatement, with a smaller budget of its own.
@@ -645,7 +668,7 @@ async function converse(question: string, cache: CachedAnswers | null, conversat
       return unverifiedResult(first.text, firstUnverified, MSG_REGENERATION_FAILED, afterFirstAnswer, conversation);
     }
 
-    const secondUnverified = checkNumbers(second.text, conversation.seen).unverified;
+    const secondUnverified = checkNumbers(second.text, allowedSources(conversation)).unverified;
     if (secondUnverified.length === 0) return okResult(second.text, second.note, conversation);
     return unverifiedResult(second.text, secondUnverified, MSG_UNVERIFIED, conversation.messages, conversation);
   } catch (error) {

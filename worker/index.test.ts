@@ -220,6 +220,8 @@ describe('system prompt and limits', () => {
   it('states the rules the brief requires (Japanese)', () => {
     expect(SYSTEM_PROMPT).toContain('このアプリの試算');
     expect(SYSTEM_PROMPT).toContain('2050');
+    expect(SYSTEM_PROMPT).toContain('2055年から2100年まで'); // the first estimated year is 2055 (the grid is 5-yearly), not 2060
+    expect(SYSTEM_PROMPT).not.toContain('2060');
     expect(SYSTEM_PROMPT).toContain('2020');
     expect(SYSTEM_PROMPT).toContain('2100');
     expect(SYSTEM_PROMPT).toContain('道具の結果');

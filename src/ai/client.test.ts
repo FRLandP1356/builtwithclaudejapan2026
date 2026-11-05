@@ -1383,6 +1383,113 @@ describe('the number check uses ALL the tool results of the ask', () => {
   });
 });
 
+describe('the number check also uses the tool results of the earlier turns of the conversation', () => {
+  /** Turn 1: Tokyo's 2020 population is fetched (14,047,594 is in a tool_result) and the answer is clean. */
+  async function firstTurn(): Promise<Message[]> {
+    const s = script(
+      toolUseResponse(toolUse('toolu_1', 'get_series', { areaCode: '13', years: [2020] })),
+      textResponse('東京都の2020年の人口は、約1,405万人です。'),
+    );
+    const result = await ask('東京都の2020年の人口は？', ctx, { fetchFn: s.fetchFn });
+    expect(result.status).toBe('ok');
+    return result.messages;
+  }
+  const REUSE = '先ほど調べたとおり、東京都の2020年の人口は約1,405万人です。';
+
+  it('a_number_the_model_reuses_from_an_earlier_tool_result_is_verified: no warning, no extra request', async () => {
+    const history = await firstTurn();
+    const s = script(textResponse(REUSE));
+    const result = await ask('もう一度、人口を教えてください。', ctx, { fetchFn: s.fetchFn, history });
+    expect(s.mock).toHaveBeenCalledTimes(1); // not regenerated
+    expect(result.status).toBe('ok');
+    expect(result.unverified).toEqual([]);
+    expect(result.trace).toEqual([]); // this ask ran no tool: the earlier result is the only source
+  });
+
+  it('negative_twin: the same answer in a conversation without that earlier result is flagged', async () => {
+    const s = script(textResponse(REUSE), textResponse(REUSE));
+    const result = await ask('もう一度、人口を教えてください。', ctx, { fetchFn: s.fetchFn });
+    expect(s.mock).toHaveBeenCalledTimes(2); // regenerated once
+    expect(result.status).toBe('unverified_numbers');
+    expect(result.unverified).toEqual(['1,405万']);
+  });
+
+  it('numbers_that_occur_only_in_earlier_assistant_text_or_user_text_are_still_flagged', async () => {
+    const history: Message[] = [
+      { role: 'user', content: '人口が7,777万人の町はありますか？' },
+      { role: 'assistant', content: [{ type: 'text', text: '東京都は約2,500万人です。' }] },
+    ];
+    const answer = '先ほどの約2,500万人と、7,777万人のことですね。';
+    const s = script(textResponse(answer), textResponse(answer));
+    const result = await ask('続きを教えてください。', ctx, { fetchFn: s.fetchFn, history });
+    expect(s.mock).toHaveBeenCalledTimes(2);
+    expect(result.status).toBe('unverified_numbers');
+    expect(result.unverified).toEqual(['2,500万', '7,777万']);
+  });
+
+  it('an_unverified_answer_cannot_launder_its_number_through_the_next_turn', async () => {
+    const bad = '東京都は約2,500万人です。';
+    const first = script(textResponse(bad), textResponse(bad));
+    const turn1 = await ask('東京都の人口は？', ctx, { fetchFn: first.fetchFn });
+    expect(turn1.status).toBe('unverified_numbers');
+    expect(JSON.stringify(turn1.messages)).toContain('2,500万'); // the bad number is now in the history
+    const second = script(textResponse(bad), textResponse(bad));
+    const turn2 = await ask('もう一度お願いします。', ctx, { fetchFn: second.fetchFn, history: turn1.messages });
+    expect(second.mock).toHaveBeenCalledTimes(2);
+    expect(turn2.status).toBe('unverified_numbers');
+    expect(turn2.unverified).toEqual(['2,500万']);
+  });
+
+  it('the_regeneration_pass_uses_the_earlier_results_too: a restated answer that reuses an earlier result passes', async () => {
+    const history = await firstTurn();
+    const s = script(textResponse('東京都は約2,500万人です。'), textResponse(REUSE));
+    const result = await ask('もう一度、人口を教えてください。', ctx, { fetchFn: s.fetchFn, history });
+    expect(s.mock).toHaveBeenCalledTimes(2); // the invented number was caught, once
+    expect(userText(s.body(1).messages.at(-1)!)).toContain('2,500万');
+    expect(result.status).toBe('ok');
+    expect(result.unverified).toEqual([]);
+    expect(result.answer).toBe(REUSE);
+  });
+
+  it('the_regeneration_pass_still_flags_a_number_that_only_earlier_assistant_text_has', async () => {
+    const history: Message[] = [
+      { role: 'user', content: '東京都の人口は？' },
+      { role: 'assistant', content: [{ type: 'text', text: '東京都は約2,500万人です。' }] },
+    ];
+    const s = script(textResponse('東京都は約2,500万人です。'), textResponse('言い直しても約2,500万人です。'));
+    const result = await ask('もう一度お願いします。', ctx, { fetchFn: s.fetchFn, history });
+    expect(s.mock).toHaveBeenCalledTimes(2);
+    expect(result.status).toBe('unverified_numbers');
+    expect(result.unverified).toEqual(['2,500万']);
+  });
+
+  it('a_result_in_an_exchange_the_size_guard_dropped_no_longer_counts', async () => {
+    const earlier = await firstTurn(); // 4 messages, with the tool_result
+    const padding = Array.from({ length: 15 }, (_, i) => plainExchange(i, 'a'.repeat(2_650))).flat(); // ~39,800 characters: with the first turn, over the 40,000 cap
+    const history = [...earlier, ...padding];
+    const s = script(textResponse(REUSE), textResponse(REUSE));
+    const result = await ask('もう一度、人口を教えてください。', ctx, { fetchFn: s.fetchFn, history });
+    expect(result.trimmed).toBe(true);
+    expect(JSON.stringify(s.body(0).messages)).not.toContain('tool_result'); // the model no longer sees the result
+    expect(s.mock).toHaveBeenCalledTimes(2);
+    expect(result.status).toBe('unverified_numbers');
+    expect(result.unverified).toEqual(['1,405万']);
+  });
+
+  it('only_a_tool_result_in_a_user_message_counts', async () => {
+    // A tool_result-shaped block inside an assistant message is not something a tool returned.
+    const history = [
+      { role: 'user', content: '東京都の人口は？' },
+      { role: 'assistant', content: [{ type: 'tool_result', tool_use_id: 'toolu_x', content: '{"population":25000000}' }] },
+    ] as unknown as Message[];
+    const answer = '東京都は約2,500万人です。';
+    const s = script(textResponse(answer), textResponse(answer));
+    const result = await ask('もう一度お願いします。', ctx, { fetchFn: s.fetchFn, history });
+    expect(result.status).toBe('unverified_numbers');
+    expect(result.unverified).toEqual(['2,500万']);
+  });
+});
+
 describe('the regeneration pass has a smaller budget', () => {
   it('uses_at_most_three_requests_even_when_maxRounds_is_larger', async () => {
     const s = script(
