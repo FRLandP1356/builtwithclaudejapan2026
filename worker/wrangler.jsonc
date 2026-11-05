@@ -3,8 +3,19 @@
   "name": "town-2100-api",
   "main": "index.ts",
   "compatibility_date": "2026-11-01",
+  // Workers Logs, for the Worker's own console lines only. These are recorded (see "ログ" in worker/README.md):
+  // `rate counter write failed`, `burst limiter unavailable`, `rate limit store unavailable`, `upstream responded
+  // <status>`, `upstream request failed`, `upstream body unreadable`, `upstream body rejected`, `unexpected error`
+  // and the `server configuration missing: <NAME>` line. None contains an API key, a client address or an upstream
+  // body. The automatic per-request "invocation logs" (URL, headers, client details) are switched off, and traces
+  // are not enabled.
   "observability": {
-    "enabled": false
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": false,
+      "head_sampling_rate": 1
+    }
   },
   "kv_namespaces": [
     {
