@@ -144,6 +144,8 @@ const MSG_REJECTED = 'AIへの問い合わせでエラーが起きました。�
 const MSG_TOO_MANY_STEPS = 'この質問は、調べる手順が多すぎて答えを出せませんでした。質問を短くするか、分けてたずねてください。';
 const MSG_EMPTY = 'AIから答えが返ってきませんでした。もう一度お試しください。';
 const MSG_CUT_OFF = '答えが長くなりすぎて、途中で終わっている可能性があります。';
+/** The reply ran out of room before any text was written (nothing to show, so it is an error, not a cut-off answer). */
+const MSG_OUT_OF_ROOM = '答えが長くなりすぎて、書き終える前に止まりました。質問を短くするか、分けてたずねてください。';
 const MSG_REFUSED = 'この質問にはお答えできません。';
 const MSG_NEW_CONVERSATION = '会話が長くなりすぎました。新しい質問を始めてください。';
 const MSG_UNVERIFIED = '答えの中の一部の数字を、計算の結果と照らし合わせて確かめられませんでした。';
@@ -420,7 +422,7 @@ interface Conversation {
 type PassOutcome =
   | { kind: 'answer'; text: string; note?: string }
   | { kind: 'too_many_steps'; text: string }
-  | { kind: 'empty'; refused: boolean };
+  | { kind: 'empty'; refused: boolean; outOfRoom: boolean };
 
 /** Even the current question and tool loop, with all the history dropped, do not fit in one request. */
 class ConversationTooLong extends Error {
@@ -490,10 +492,10 @@ async function runPass(conversation: Conversation, env: Env, maxRounds: number):
     }
 
     const refused = turn.stopReason === 'refusal';
-    if (text.trim() === '') return { kind: 'empty', refused };
+    const cutOff = turn.stopReason === 'max_tokens' || turn.stopReason === 'model_context_window_exceeded';
+    if (text.trim() === '') return { kind: 'empty', refused, outOfRoom: cutOff };
     // A tool_use here (the reply was cut off) has no result to go with it, so it is not kept.
     conversation.messages.push({ role: 'assistant', content: turn.content.filter((block) => !isToolUse(block)) });
-    const cutOff = turn.stopReason === 'max_tokens' || turn.stopReason === 'model_context_window_exceeded';
     return { kind: 'answer', text, ...(cutOff ? { note: MSG_CUT_OFF } : refused ? { note: MSG_REFUSED } : {}) };
   }
   return { kind: 'too_many_steps', text: earlierText.join('\n\n') };
@@ -620,7 +622,7 @@ async function converse(question: string, cache: CachedAnswers | null, conversat
   try {
     const first = await runPass(conversation, env, env.maxRounds);
     if (first.kind === 'too_many_steps') return failureResult('error', MSG_TOO_MANY_STEPS, first.text, conversation);
-    if (first.kind === 'empty') return failureResult('error', first.refused ? MSG_REFUSED : MSG_EMPTY, '', conversation);
+    if (first.kind === 'empty') return failureResult('error', first.refused ? MSG_REFUSED : first.outOfRoom ? MSG_OUT_OF_ROOM : MSG_EMPTY, '', conversation);
 
     const firstUnverified = checkNumbers(first.text, conversation.seen).unverified;
     if (firstUnverified.length === 0) return okResult(first.text, first.note, conversation);

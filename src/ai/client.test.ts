@@ -1410,6 +1410,41 @@ describe('stop reasons', () => {
     expect(result.message).toBe('この質問にはお答えできません。');
   });
 
+  describe('a reply that ran out of room before any text was written', () => {
+    const OUT_OF_ROOM = '答えが長くなりすぎて、書き終える前に止まりました。質問を短くするか、分けてたずねてください。';
+    const HISTORY: Message[] = [
+      { role: 'user', content: '最初の質問' },
+      { role: 'assistant', content: [{ type: 'text', text: '最初の答え' }] },
+    ];
+
+    it.each([
+      ['max_tokens with no content', () => modelResponse([], 'max_tokens')],
+      ['max_tokens with blank text', () => textResponse('  \n', 'max_tokens')],
+      ['max_tokens with a tool call that was cut off and no text', () => modelResponse([toolUse('toolu_1', 'get_series', { areaCode: '1' })], 'max_tokens')],
+      ['model_context_window_exceeded with no content', () => modelResponse([], 'model_context_window_exceeded')],
+    ])('%s: the message says it ran out of room and to ask a shorter or split question', async (_name, response) => {
+      const s = script(response());
+      const result = await ask('長い質問', ctx, { fetchFn: s.fetchFn, history: HISTORY });
+      expect(result).toMatchObject({ status: 'error', message: OUT_OF_ROOM, answer: '', fromCache: false });
+      expect(result.message).not.toContain('トークン'); // no jargon
+      expect(result.message).not.toContain('token');
+      expect(result.messages).toEqual(HISTORY); // the failed question is not part of the conversation
+      expect(vi.mocked(runTool)).not.toHaveBeenCalledWith('get_series', expect.anything(), expect.anything());
+    });
+
+    it('is_not_the_generic_message: an empty reply that did not run out of room still says no answer came back', async () => {
+      const result = await ask('質問', ctx, { fetchFn: script(modelResponse([], 'end_turn')).fetchFn });
+      expect(result).toMatchObject({ status: 'error', message: 'AIから答えが返ってきませんでした。もう一度お試しください。' });
+    });
+
+    it('a_refusal_still_wins_and_a_cut_off_answer_with_text_is_still_shown', async () => {
+      expect((await ask('質問', ctx, { fetchFn: script(modelResponse([], 'refusal')).fetchFn })).message).toBe('この質問にはお答えできません。');
+      const withText = await ask('質問', ctx, { fetchFn: script(textResponse('東京都の人口は途中で', 'max_tokens')).fetchFn });
+      expect(withText.status).toBe('ok');
+      expect(withText.answer).toBe('東京都の人口は途中で');
+    });
+  });
+
   it('model_context_window_exceeded_is_treated_like_max_tokens', async () => {
     const s = script(textResponse('東京都の人口は途中で', 'model_context_window_exceeded'));
     const result = await ask('東京', ctx, { fetchFn: s.fetchFn });
