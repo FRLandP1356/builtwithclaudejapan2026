@@ -8,6 +8,7 @@ import type { Area, Facility } from '../engine/types';
 import {
   allocationErrorMessage,
   AllocationFormError,
+  announceAllocation,
   approxPeople,
   buildAllocationInput,
   computeAllocation,
@@ -366,7 +367,12 @@ describe('mountAllocation', () => {
     expect(q('#alloc-percent').getAttribute('max')).toBe('50');
     expect(q('#alloc-percent').getAttribute('step')).toBe('5');
     expect(q('#alloc-error').getAttribute('role')).toBe('alert');
-    expect(q('#alloc-summary').getAttribute('role')).toBe('status');
+    // The visible summary follows the year, so it is not a live region; the announcement next to it is.
+    expect(q('#alloc-summary').getAttribute('role')).toBeNull();
+    expect(q('#alloc-summary').closest('[role="status"], [role="alert"], [aria-live]')).toBeNull();
+    expect(q('#alloc-announce').getAttribute('role')).toBe('status');
+    expect(q('#alloc-announce').classList.contains('sr-only')).toBe(true);
+    expect(q('#alloc-announce').textContent).toBe(''); // nothing is announced for the first drawing
     expect(q('#alloc-percent-value').textContent).toBe('+10%（約2.6万人）');
     expect(q('[data-source="proportional"]').getAttribute('aria-pressed')).toBe('true');
     expect(q<HTMLElement>('#alloc-regions').hidden).toBe(true);
@@ -604,6 +610,150 @@ describe('mountAllocation', () => {
     store.set({ selectedPref: '30' });
     expect(obs.takeRecords()).toHaveLength(0);
     obs.disconnect();
+  });
+
+  describe('the live region speaks about the visitor\'s changes only', () => {
+    const YEARS = Array.from({ length: 17 }, (_, i) => 2020 + i * 5);
+    const liveRegions = (el: HTMLElement) => [...el.querySelectorAll<HTMLElement>('[role="status"], [role="alert"], [aria-live]')];
+    /** Records every write to a live region; `drain()` returns what was written since the last call (also across an await). */
+    function watchLive(el: HTMLElement, only?: Element) {
+      const delivered: MutationRecord[] = [];
+      const obs = new MutationObserver((records) => delivered.push(...records));
+      for (const node of only ? [only] : liveRegions(el)) obs.observe(node, { childList: true, characterData: true, subtree: true, attributes: true });
+      return {
+        drain: (): MutationRecord[] => {
+          delivered.push(...obs.takeRecords());
+          return delivered.splice(0);
+        },
+        stop: () => obs.disconnect(),
+      };
+    }
+
+    test('a sweep of year steps writes to no live region, though the visible summary follows the year', () => {
+      const { el, store, text } = mount();
+      const live = liveRegions(el);
+      expect(live.length).toBeGreaterThan(0);
+      expect(live).toContain(el.querySelector('#alloc-announce'));
+      const obs = watchLive(el);
+      const seen: string[] = [];
+      for (const year of YEARS) {
+        store.set({ year });
+        seen.push(text('#alloc-summary'));
+      }
+      expect(obs.drain()).toHaveLength(0);
+      obs.stop();
+      // the visible text did change at every step
+      expect(new Set(seen).size).toBe(17);
+      expect(seen[0]).toMatch(/^2020年に和歌山県/);
+      expect(seen[16]).toMatch(/^2100年に和歌山県/);
+    });
+
+    test('a play tick (the year advancing by one step, many times) is silent too', () => {
+      const { el, store } = mount({ year: 2050 });
+      const obs = watchLive(el);
+      for (let i = 0; i < 10; i++) store.set({ year: 2050 + ((i % 8) + 1) * 5 });
+      expect(obs.drain()).toHaveLength(0);
+      obs.stop();
+    });
+
+    test('a change of assumptions or of the selection on the map is silent as well', () => {
+      const { el, store, q } = mount();
+      const obs = watchLive(el);
+      store.set({ scenario: { cwrMult: 1.2, migMode: 'hold', migScale: 1, infraStrength: 0 } });
+      store.set({ selectedPref: '13' }); // the map retargets the form
+      store.set({ selectedArea: '13101' });
+      expect(q<HTMLSelectElement>('#alloc-target').value).toBe('pref:13'); // it did follow
+      expect(obs.drain()).toHaveLength(0);
+      obs.stop();
+    });
+
+    test('each kind of form change writes exactly once, into the announcement, and says what the form asks', async () => {
+      const { el, q, choose, slide } = mount();
+      const announce = q('#alloc-announce');
+      const obs = watchLive(el);
+      const once = (expected: string) => {
+        const records = obs.drain();
+        expect(records).toHaveLength(1);
+        expect(records[0]!.target === announce || announce.contains(records[0]!.target)).toBe(true);
+        expect(announce.textContent).toBe(expected);
+      };
+
+      await slide(20);
+      once('割り振りを更新しました。和歌山県の人口を20%増やす場合です。人口を動かす元は、全国のほかの地域です。');
+
+      choose(q<HTMLSelectElement>('#alloc-target'), 'pref:13');
+      once('割り振りを更新しました。東京都の人口を20%増やす場合です。人口を動かす元は、全国のほかの地域です。');
+
+      q<HTMLButtonElement>('[data-source="regions"]').click();
+      once('割り振りを更新しました。東京都の人口を20%増やす場合です。人口を動かす元は、選んだ地域（関東）です。');
+
+      const kinki = q<HTMLInputElement>('input[data-region="kinki"]');
+      kinki.checked = true;
+      kinki.dispatchEvent(new Event('change', { bubbles: true }));
+      once('割り振りを更新しました。東京都の人口を20%増やす場合です。人口を動かす元は、選んだ地域（関東・近畿）です。');
+
+      await slide(-15);
+      once('割り振りを更新しました。東京都の人口を15%減らす場合です。人口を動かす元は、選んだ地域（関東・近畿）です。');
+
+      await slide(0);
+      once('割り振りの割合を0%にしました。東京都の人口は動きません。');
+      obs.stop();
+    });
+
+    test('a form change that leaves the announcement as it was writes nothing', async () => {
+      const { el, q, choose, slide } = mount();
+      await slide(20);
+      const obs = watchLive(el);
+      await slide(20); // the same percent again
+      choose(q<HTMLSelectElement>('#alloc-target'), 'pref:30'); // the same target again
+      q<HTMLButtonElement>('[data-source="proportional"]').click(); // the same source again
+      expect(obs.drain()).toHaveLength(0);
+      obs.stop();
+    });
+
+    test('the announcement stays as it was across year steps (it names no year), so it is never stale', async () => {
+      const { el, q, store, slide, text } = mount();
+      await slide(25);
+      const said = text('#alloc-announce');
+      expect(said).not.toMatch(/\d{4}年/);
+      store.set({ year: 2060 });
+      store.set({ year: 2030 });
+      expect(text('#alloc-announce')).toBe(said);
+      expect(text('#alloc-summary')).toMatch(/^2030年に和歌山県の人口を25%/);
+      // and the next form change after the sweep is announced exactly once again
+      const obs = watchLive(el, q('#alloc-announce'));
+      await slide(30);
+      expect(obs.drain()).toHaveLength(1);
+      obs.stop();
+    });
+
+    test('a form error is told by the alert, not by the announcement', () => {
+      const { el, q } = mount();
+      q<HTMLButtonElement>('[data-source="regions"]').click();
+      const obs = watchLive(el, q('#alloc-announce'));
+      const kanto = q<HTMLInputElement>('input[data-region="kanto"]');
+      kanto.checked = false;
+      kanto.dispatchEvent(new Event('change', { bubbles: true }));
+      expect(q<HTMLElement>('#alloc-error').hidden).toBe(false);
+      expect(q('#alloc-error').textContent).toBe('人口を動かす元の地域を、1つ以上選んでください。');
+      expect(obs.drain()).toHaveLength(0);
+      obs.stop();
+      expect(el.querySelector('#alloc-summary')!.textContent).toBe('');
+    });
+
+    test('announceAllocation: what the form asks, with no year and none of the words the app never uses', () => {
+      const base = { targetName: '和歌山県', percent: 10, sourceNames: undefined };
+      expect(announceAllocation(base)).toBe('割り振りを更新しました。和歌山県の人口を10%増やす場合です。人口を動かす元は、全国のほかの地域です。');
+      expect(announceAllocation({ ...base, percent: -30 })).toBe('割り振りを更新しました。和歌山県の人口を30%減らす場合です。人口を動かす元は、全国のほかの地域です。');
+      expect(announceAllocation({ ...base, percent: 0 })).toBe('割り振りの割合を0%にしました。和歌山県の人口は動きません。');
+      expect(announceAllocation({ ...base, sourceNames: ['関東', '近畿'] })).toBe(
+        '割り振りを更新しました。和歌山県の人口を10%増やす場合です。人口を動かす元は、選んだ地域（関東・近畿）です。',
+      );
+      for (const text of [announceAllocation(base), announceAllocation({ ...base, percent: -5 }), announceAllocation({ ...base, percent: 0 })]) {
+        expect(text).not.toMatch(/\d{4}/);
+        for (const w of FORBIDDEN) expect(text).not.toContain(w);
+      }
+    });
   });
 
   test('the teardown stops listening to the store and cancels a pending update', () => {

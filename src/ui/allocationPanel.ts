@@ -95,6 +95,24 @@ export function describeAllocation(d: DescribeInput): string {
   );
 }
 
+export interface AnnounceInput {
+  targetName: string;
+  percent: number;
+  /** Region names when people come from chosen regions; undefined for "the rest of the country". */
+  sourceNames: readonly string[] | undefined;
+}
+
+/**
+ * What a screen reader is told after the visitor changed the form. It says what the form now asks, not the year or the
+ * figures: those move with the year slider while this text stays put, so it has to stay true. The sentence with the
+ * figures is the visible summary just above it.
+ */
+export function announceAllocation(d: AnnounceInput): string {
+  if (d.percent === 0) return `割り振りの割合を0%にしました。${d.targetName}の人口は動きません。`;
+  const source = d.sourceNames ? `選んだ地域（${d.sourceNames.join('・')}）` : '全国のほかの地域';
+  return `割り振りを更新しました。${d.targetName}の人口を${Math.abs(d.percent)}%${d.percent > 0 ? '増やす' : '減らす'}場合です。人口を動かす元は、${source}です。`;
+}
+
 export interface ExampleList {
   /** How many towns crossed in this direction. */
   count: number;
@@ -255,7 +273,8 @@ const TEMPLATE = `
   </div>
   <p class="notice" id="alloc-error" role="alert" hidden></p>
   <div class="alloc-result" id="alloc-result">
-    <p class="alloc-summary" id="alloc-summary" role="status"></p>
+    <p class="alloc-summary" id="alloc-summary"></p>
+    <p class="sr-only" id="alloc-announce" role="status"></p>
     <div id="alloc-detail"></div>
   </div>
   <div class="alloc-notes">
@@ -406,6 +425,9 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
   const yearEl = q<HTMLElement>('#alloc-year');
   const errorEl = q<HTMLElement>('#alloc-error');
   const summaryEl = q<HTMLElement>('#alloc-summary');
+  // The only live region of the result. The visible summary is not one: it follows the year and every play tick, and
+  // a screen reader should hear about a change the visitor made to the form, not about each year step.
+  const announceEl = q<HTMLElement>('#alloc-announce');
   const detailEl = q<HTMLElement>('#alloc-detail');
   const mapToggle = q<HTMLButtonElement>('#alloc-map-toggle');
   const mapStatus = q<HTMLElement>('#alloc-map-status');
@@ -450,7 +472,7 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
       if (!alive) return;
       if (box.checked) regionIds.add(id);
       else regionIds.delete(id);
-      renderAll();
+      renderAll('form');
     });
     label.append(box, h('span', undefined, REGION_NAMES[id]));
     regionsEl.append(label);
@@ -571,7 +593,10 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
     },
   };
 
-  function renderAll(): void {
+  /** Why the result is drawn: 'form' = the visitor changed this panel's form (announced); anything else (year, assumptions, map) is not. */
+  type RenderCause = 'form' | 'outside';
+
+  function renderAll(cause: RenderCause = 'outside'): void {
     pending = undefined;
     const s = store.get();
     paintYear(s);
@@ -581,6 +606,7 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
     percentInput.value = String(percent);
 
     const form = currentForm();
+    const sourceNames = form.sourceMode === 'regions' ? form.regionIds.map((id) => REGION_NAMES[id]) : undefined;
     const at = populations(s);
     paintPercent(targetPeople(form.target, at));
     try {
@@ -595,9 +621,10 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
           targetName: targetName(form),
           percent: form.percent,
           people: c.input.deltaPeople,
-          sourceNames: form.sourceMode === 'regions' ? form.regionIds.map((id) => REGION_NAMES[id]) : undefined,
+          sourceNames,
         }),
       );
+      if (cause === 'form') setText(announceEl, announceAllocation({ targetName: targetName(form), percent: form.percent, sourceNames }));
       if (mapActive) pushOverlay(c, s, form);
       detailEl.replaceChildren(detailElement(c.summary, rowOpts));
     } catch (e) {
@@ -631,19 +658,19 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
   targetSelect.addEventListener('change', () => {
     if (!alive) return;
     targetValue = targetSelect.value;
-    renderAll();
+    renderAll('form');
   });
   percentInput.addEventListener('input', () => {
     if (!alive) return;
     percent = Number(percentInput.value);
     paintPercent(targetPeople(currentForm().target, populations(store.get())));
-    if (pending === undefined) pending = requestAnimationFrame(renderAll);
+    if (pending === undefined) pending = requestAnimationFrame(() => renderAll('form'));
   });
   for (const b of sourceButtons) {
     b.addEventListener('click', () => {
       if (!alive) return;
       sourceMode = b.dataset.source === 'regions' ? 'regions' : 'proportional';
-      renderAll();
+      renderAll('form');
     });
   }
 
