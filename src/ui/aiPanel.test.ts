@@ -16,6 +16,7 @@ import { createRunner } from '../data/runner';
 import type { Runner } from '../data/runner';
 import { CACHE_WAIT_MS, MAX_ANSWERS, PANEL_TEXT, mountAIPanel } from './aiPanel';
 import type { AIPanelOptions } from './aiPanel';
+import { countCodePoints } from './aiTrace';
 import { createAppStore } from './state';
 import type { PanelContext } from './state';
 
@@ -204,7 +205,7 @@ describe('mount', () => {
     const text = m.section.textContent!;
     expect(text).toContain(PANEL_TEXT.intro);
     expect(PANEL_TEXT.intro).toBe(
-      '日本語で質問すると、Claudeがこのアプリの計算を呼び出し、その結果を使って答えます。計算を行うのはこのアプリです。答えが返ってきたら、答えの中の人数や割合などの数字を、その質問で使った計算の結果と照らし合わせます。結果の中に見つからない数字は、「確かめられなかった数字」として知らせます。',
+      '日本語で質問すると、Claudeがこのアプリの計算を呼び出して答えます。答えの数字は、その質問で使った計算の結果と照らし合わせ、見つからない数字は知らせます。',
     );
     expect(text).toContain('2050年より後の数字は、このアプリの試算です');
     expect(m.samples().map((b) => b.textContent)).toEqual(SAMPLE_QUESTIONS);
@@ -720,10 +721,14 @@ describe('the intro does not overclaim', () => {
     const intro = PANEL_TEXT.intro;
     expect(intro).not.toContain('からだけ');
     expect(intro).not.toContain('だけ引いて');
-    expect(intro).toContain('照らし合わせ'); // a check after the answer arrives
-    expect(intro).toContain('見つからない数字'); // what the check finds
-    expect(intro).toContain('知らせます'); // and says so
-    expect(intro.indexOf('答えが返ってきたら')).toBeGreaterThan(intro.indexOf('計算を行うのはこのアプリ')); // the order of events
+    expect(intro).toContain('照らし合わせ'); // a check against the results
+    expect(intro).toContain('見つからない数字は知らせます'); // and what the check does with a number it cannot find
+  });
+
+  it('quotes nothing, so there is no label in it that the screen does not show, and it is short', () => {
+    expect(PANEL_TEXT.intro).not.toMatch(/[「」]/);
+    expect(PANEL_TEXT.intro).not.toContain('確かめられなかった');
+    expect(countCodePoints(PANEL_TEXT.intro)).toBeLessThanOrEqual(80); // about three lines at 390px
   });
 
   it('is true of the panel: a number the calculation never returned is flagged, one it returned is not', async () => {

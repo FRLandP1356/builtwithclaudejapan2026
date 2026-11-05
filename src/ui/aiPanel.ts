@@ -62,10 +62,10 @@ export const CACHE_WAIT_MS = 1500;
 /** Everything the panel says that is not an answer, in one place (a test scans it for words that must never appear). */
 export const PANEL_TEXT = {
   // What the app really does (src/ai/numberCheck.ts): the tools do the arithmetic; once an answer is in, its numbers are
-  // checked against this question's tool results, and the ones that cannot be matched are flagged. It does not claim
-  // that every number comes from the results.
+  // checked against this question's tool results, and the ones that cannot be found are flagged. It does not claim that
+  // every number comes from the results, and it quotes no label that is not on the screen. Kept to about three lines on a phone.
   intro:
-    '日本語で質問すると、Claudeがこのアプリの計算を呼び出し、その結果を使って答えます。計算を行うのはこのアプリです。答えが返ってきたら、答えの中の人数や割合などの数字を、その質問で使った計算の結果と照らし合わせます。結果の中に見つからない数字は、「確かめられなかった数字」として知らせます。',
+    '日本語で質問すると、Claudeがこのアプリの計算を呼び出して答えます。答えの数字は、その質問で使った計算の結果と照らし合わせ、見つからない数字は知らせます。',
   after2050: '2050年までの数字は社人研の公式推計、2050年より後の数字は、このアプリの試算です（予測ではありません）。',
   waiting: '計算の結果を引いています…',
   blank: '質問を入力してください。',
