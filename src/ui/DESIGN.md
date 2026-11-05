@@ -77,7 +77,7 @@
 | チャートの器 | `.chart-figure` `.chart`（inline SVG、幅 100%・最大 560px）`.chart-summary` `.chart-legend` `.chart-key`（`.key-estimate` `.key-baseline`） | 図と、その下の 1 文の要約と凡例。文字はすべて `--ink-2`、系列の色で文字を塗らない |
 | 折れ線 | `.line .line-official / .line-estimate / .line-baseline`、`.dot .dot-official / .dot-estimate / .dot-baseline`、`.chart-grid` `.chart-border` `.chart-marker` `.chart-end` `.chart-marker-label` `.chart-unit` `.chart-caption` | 公式（墨・実線）、試算（藍・破線）、参考（灰・点線）。線 2px、点 8px 以上、2050 年の縦線 |
 | ピラミッド | `.pyr-m` `.pyr-f` `.pyr-hit` `.pyramid-note` | 男は `--pyramid-m`、女は `--pyramid-f`。左右と「男」「女」の文字でも区別 |
-| 表の折りたたみ | `.chart-table`（`details`） | 図の数字を表でも読めるように |
+| 表の折りたたみ | `.chart-table`（`details`）、推移の表の下に `.note.chart-table-note` | 図の数字を表でも読めるように。注記は「公式推計の列は社人研の発表値。このアプリは公表された仮定から公式の方法で計算し直しているので、2050 年までの地図や町の数字は発表値と数人違うことがある」（`seriesChart.ts` の `TABLE_NOTE`。数字は変えない） |
 | 施設 | `.facility-summary`（明朝 20px）`.facility-notices` `.facility-group-title` `.facility-table`（`tbody th` は通常の太さ）`.facility-name` `.facility-guide` `.facility-note` `.facility-others`（`details`） | 施設の状態。印は `.tag` の 3 種 |
 | 文の折り返し | `.keep` | 数字と単位を途中で折らない |
 

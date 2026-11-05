@@ -199,6 +199,10 @@ export interface SeriesChartView {
   destroy(): void;
 }
 
+/** Under the data table: the 公式推計 column is the published figure; this app's own numbers are recomputed from the published assumptions. */
+export const TABLE_NOTE =
+  '公式推計の列は、社人研が発表した値です。このアプリは、公表された仮定から公式の方法で計算し直しています。そのため、2050年までの地図や町の数字は、発表値と数人違うことがあります。';
+
 const W = 360;
 const H = 232;
 const TOP = 32;
@@ -231,7 +235,10 @@ export function mountSeriesChart(host: HTMLElement): SeriesChartView {
   const table = document.createElement('table');
   table.className = 'data-table';
   wrap.append(table);
-  details.append(sum, wrap);
+  const tableNote = document.createElement('p');
+  tableNote.className = 'note chart-table-note';
+  tableNote.replaceChildren(...phraseNodes(TABLE_NOTE));
+  details.append(sum, wrap, tableNote);
   fig.append(svg, legend, summary, details);
   host.append(fig);
 

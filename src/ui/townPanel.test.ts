@@ -12,7 +12,7 @@ import { deriveTotals } from './derive';
 import { evaluateFacilities, PERMANENT_NOTE, summaryLine } from './facilityPanel';
 import { formatPct, formatPop } from './format';
 import { PYRAMID_HALF_WIDTH, pyramidScale } from './pyramid';
-import { formatAxisCount, SERIES_VIEW } from './seriesChart';
+import { formatAxisCount, SERIES_VIEW, TABLE_NOTE } from './seriesChart';
 import { createAppStore, type AllocationOverlay, type Store } from './state';
 import { ageShares, mountTownPanel } from './townPanel';
 
@@ -159,6 +159,22 @@ describe('mountTownPanel: updates only what changed', () => {
     expect(q('path.line-official')).toBe(official);
     expect(q('.chart-marker')!.getAttribute('x1')).not.toBe(x0);
     expect(q('.chart-marker-label')!.textContent).toBe('2075年');
+  });
+
+  test('the data table carries a quiet note that the app recomputes the official method, under the table, without changing a number', () => {
+    const { q, section } = setup({ selectedArea: '30206', year: 2050 });
+    const note = q('.series-figure .chart-table .chart-table-note')!;
+    expect(note.textContent).toBe(TABLE_NOTE);
+    expect(note.classList.contains('note')).toBe(true);
+    expect(note.textContent).toContain('社人研が発表した値');
+    expect(note.textContent).toContain('公表された仮定から公式の方法で計算し直しています');
+    expect(note.textContent).toContain('数人違うことがあります');
+    expect(note.textContent).not.toContain('予測');
+    expect(section.querySelectorAll('.chart-table-note')).toHaveLength(1); // only the series table has it
+    expect(q('.series-figure .chart-table')!.lastElementChild).toBe(note); // after the table wrapper
+    expect(note.previousElementSibling?.classList.contains('table-wrap')).toBe(true);
+    const rows = chartRows(section);
+    expect([rows.get(2050)![0], rows.get(2050)![1]]).toEqual(['42,309', '42,311']); // numbers untouched
   });
 
   test('the 試算 badge sits on the panel heading only after 2050', () => {

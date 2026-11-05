@@ -196,6 +196,9 @@
 .facility-others .table-wrap {
   margin-top: var(--sp-2);
 }
+.chart-table-note {
+  margin-top: var(--sp-2);
+}
 
 /* Facilities */
 .facility-summary {
