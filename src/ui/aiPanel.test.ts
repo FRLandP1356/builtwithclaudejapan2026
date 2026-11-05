@@ -716,6 +716,155 @@ const allPending = (): CachedAnswers => cacheOf(...SAMPLE_QUESTIONS.map((_, i) =
 const unavailableNotices = (m: Mounted): HTMLElement[] => m.qa('.ai-answers [data-role="ai-unavailable"]');
 const countOf = (text: string, part: string): number => text.split(part).length - 1;
 
+describe('the answer is brought into view', () => {
+  // jsdom has neither scrollIntoView nor matchMedia: stand-ins that record what the panel asks for.
+  let scrolled: ReturnType<typeof vi.fn>;
+  let reducedMotion = false;
+  let originalScroll: unknown;
+  let originalMatchMedia: unknown;
+
+  beforeEach(() => {
+    originalScroll = (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    originalMatchMedia = (window as { matchMedia?: unknown }).matchMedia;
+    scrolled = vi.fn();
+    reducedMotion = false;
+    (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView = scrolled;
+    (window as { matchMedia?: unknown }).matchMedia = (query: string) => ({ matches: reducedMotion && query.includes('prefers-reduced-motion'), media: query });
+  });
+  afterEach(() => {
+    (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView = originalScroll;
+    (window as { matchMedia?: unknown }).matchMedia = originalMatchMedia;
+  });
+
+  /** The elements scrollIntoView was called on, in order, with the options of each call. */
+  const calls = () => scrolled.mock.contexts.map((target, i) => ({ target: target as Element, options: scrolled.mock.calls[i]![0] as ScrollIntoViewOptions }));
+  /** What was scrolled to, by kind, a repeat of the same thing in a row counted once (the waiting line is shown again when the saved answers arrive). */
+  const kinds = () => calls().map((c) => (c.target as HTMLElement).className).filter((name, i, all) => name !== all[i - 1]);
+  const unavailable = () => jsonResponse({ error: 'not_found' }, 404);
+
+  it('a sample question: the waiting line first, then the card, each scrolled to only as far as needed', async () => {
+    const s = script(textResponse('はい。'));
+    const m = mount({ fetchFn: s.fetchFn, cache: allPending() });
+    m.samples()[0]!.click();
+    await answersCount(m, 1);
+    const seen = calls();
+    expect(kinds()).toEqual(['ai-status', 'ai-answer']);
+    expect(seen.at(-1)!.target).toBe(m.answers()[0]);
+    for (const c of seen) expect(c.options).toEqual({ block: 'nearest', behavior: 'smooth' });
+  });
+
+  it('a typed question, by button or by the keyboard shortcut', async () => {
+    const s = script(textResponse('一つ目。'), textResponse('二つ目。'));
+    const m = mount({ fetchFn: s.fetchFn, cache: allPending() });
+    m.typeAndSend('一つ目');
+    await answersCount(m, 1);
+    expect(kinds()).toEqual(['ai-status', 'ai-answer']);
+    scrolled.mockClear();
+    m.sendWithShortcut('二つ目');
+    await answersCount(m, 2);
+    expect(kinds()).toEqual(['ai-status', 'ai-answer']);
+    expect(calls().at(-1)!.target).toBe(m.answers()[0]);
+  });
+
+  it('the "not available" sentence is what the first tap scrolls to', async () => {
+    const m = mount({ fetchFn: script(unavailable()).fetchFn, cache: allPending() });
+    m.samples()[1]!.click();
+    await answersCount(m, 1);
+    const last = calls().at(-1)!;
+    expect(last.target).toBe(m.answers()[0]);
+    expect((last.target as HTMLElement).dataset.role).toBe('ai-unavailable');
+  });
+
+  it('a saved answer, which needs no waiting, scrolls to the card only', async () => {
+    const m = mount({ cache: cacheOf(savedEntry(TOKYO_QUESTION, '保存済みの答えです。')) });
+    await settle(); // the saved answers have arrived
+    m.samples()[0]!.click();
+    await answersCount(m, 1);
+    expect(kinds()).toEqual(['ai-answer']);
+  });
+
+  it('a visitor who asked for less motion gets no smooth scrolling, anywhere', async () => {
+    reducedMotion = true;
+    const m = mount({ fetchFn: script(textResponse('はい。')).fetchFn, cache: allPending() });
+    m.samples()[0]!.click();
+    await answersCount(m, 1);
+    expect(calls().length).toBeGreaterThan(0);
+    for (const c of calls()) expect(c.options).toEqual({ block: 'nearest', behavior: 'auto' });
+  });
+
+  it('works where there is no matchMedia, and where there is no scrollIntoView', async () => {
+    (window as { matchMedia?: unknown }).matchMedia = undefined;
+    const a = mount({ fetchFn: script(textResponse('はい。')).fetchFn, cache: allPending() });
+    a.samples()[0]!.click();
+    await answersCount(a, 1);
+    expect(calls().every((c) => c.options.behavior === 'smooth')).toBe(true);
+
+    (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView = undefined;
+    const slot = document.createElement('section');
+    document.body.append(slot);
+    const b = mount({ fetchFn: script(textResponse('はい。')).fetchFn, cache: allPending() }, makeContext(), slot);
+    b.samples()[0]!.click();
+    await answersCount(b, 1); // no throw, and the answer is there
+  });
+
+  it('focus goes back to the button that was pressed, without scrolling, and before the answer is scrolled to', async () => {
+    const focusCalls = vi.spyOn(HTMLElement.prototype, 'focus');
+    const m = mount({ fetchFn: script(textResponse('はい。')).fetchFn, cache: allPending() });
+    const button = m.samples()[2]!;
+    button.focus();
+    focusCalls.mockClear();
+    button.click();
+    await answersCount(m, 1);
+    expect(document.activeElement).toBe(button); // not taken away, not moved to the textarea
+    const back = focusCalls.mock.contexts.findIndex((target) => target === button);
+    expect(back).toBeGreaterThanOrEqual(0);
+    expect(focusCalls.mock.calls[back]).toEqual([{ preventScroll: true }]);
+    const lastScroll = scrolled.mock.invocationCallOrder.at(-1)!;
+    expect(focusCalls.mock.invocationCallOrder[back]!).toBeLessThan(lastScroll);
+  });
+
+  it('typing with the keyboard shortcut leaves focus in the textarea', async () => {
+    const m = mount({ fetchFn: script(textResponse('はい。')).fetchFn, cache: allPending() });
+    m.textarea.focus();
+    m.sendWithShortcut('質問');
+    await answersCount(m, 1);
+    expect(document.activeElement).toBe(m.textarea);
+  });
+
+  it('a stopped question scrolls to the waiting line but never to a card (there is none)', async () => {
+    const m = mount({ fetchFn: script(hangUntilAborted()).fetchFn, cache: allPending() });
+    m.typeAndSend('止める');
+    await vi.waitFor(() => expect(m.cancelBtn().hidden).toBe(false));
+    m.cancelBtn().click();
+    await vi.waitFor(() => expect(m.submit.disabled).toBe(false));
+    expect(m.answers()).toHaveLength(0);
+    expect(kinds()).toEqual(['ai-status']);
+  });
+
+  it('a card that could not be drawn is scrolled to as well: the plain error is what the visitor needs to see', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const broken = { ...(await ask('x', { areas: [], facilities: [], groups: { cities: {}, prefs: {} }, run: () => new Map() }, { fetchFn: script(textResponse('はい。')).fetchFn })), trace: 'not a list' as never };
+    vi.mocked(ask).mockResolvedValueOnce(broken);
+    const m = mount({ cache: allPending() });
+    m.samples()[0]!.click();
+    await answersCount(m, 1);
+    expect(m.answers()[0]!.textContent).toContain(PANEL_TEXT.crashed);
+    expect(calls().at(-1)!.target).toBe(m.answers()[0]);
+  });
+
+  it('a conversation that is too long: the message is scrolled to and the new-conversation button takes focus', async () => {
+    const three = [toolUse('t1', 'find_area', { query: 'x' }), toolUse('t2', 'find_area', { query: 'x' }), toolUse('t3', 'find_area', { query: 'x' })];
+    const focusCalls = vi.spyOn(HTMLElement.prototype, 'focus');
+    const m = mount({ fetchFn: script(toolUseResponse(...three)).fetchFn, cache: allPending() }, makeContext(longNameData()));
+    m.typeAndSend('x');
+    await answersCount(m, 1);
+    expect(document.activeElement).toBe(m.newBtn());
+    const onNew = focusCalls.mock.contexts.findIndex((target) => target === m.newBtn());
+    expect(focusCalls.mock.calls[onNew]).toEqual([{ preventScroll: true }]);
+    expect(calls().at(-1)!.target).toBe(m.answers()[0]);
+  });
+});
+
 describe('the intro does not overclaim', () => {
   it('says what is checked, not that every number comes from the calculation', () => {
     const intro = PANEL_TEXT.intro;

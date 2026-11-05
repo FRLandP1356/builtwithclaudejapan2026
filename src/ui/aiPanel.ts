@@ -200,6 +200,8 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     h('div', { class: 'actions' }, submitBtn, newBtn),
   );
 
+  const statusBox = h('div', { class: 'ai-status' }, statusText, cancelBtn);
+
   const root = h(
     'div',
     { class: 'ai-panel' },
@@ -207,7 +209,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     h('p', { class: 'note' }, PANEL_TEXT.after2050),
     h('div', { class: 'panel-section' }, h('h3', { class: 'panel-section-title' }, '質問の例'), samplesList),
     h('div', { class: 'panel-section' }, h('h3', { class: 'panel-section-title' }, '自分で質問する'), form),
-    h('div', { class: 'ai-status' }, statusText, cancelBtn),
+    statusBox,
     answersEl,
   );
   el.append(root);
@@ -260,7 +262,19 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     const lost =
       !active || active === document.body || active === cancelBtn || active === statusText || (root.contains(active) && (active as HTMLButtonElement).disabled === true);
     if (!lost) return;
-    (origin && origin.isConnected ? origin : textarea).focus();
+    // preventScroll: bringing the answer into view (below) is what moves the page, not the focus going back up to the button.
+    (origin && origin.isConnected ? origin : textarea).focus({ preventScroll: true });
+  }
+
+  /**
+   * On a phone the answer area is hundreds of pixels below the sample question or the form, so the first tap would
+   * look like nothing happened. Scroll just enough to show `target` ('nearest': nothing moves if it is in view), and
+   * not smoothly for a visitor who asked for less motion. Focus is not touched.
+   */
+  function bringIntoView(target: Element): void {
+    if (typeof target.scrollIntoView !== 'function') return;
+    const calm = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    target.scrollIntoView({ block: 'nearest', behavior: calm ? 'auto' : 'smooth' });
   }
 
   /** The map is above the panels on a phone: bring it into view after a link has moved it. */
@@ -498,7 +512,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
   }
 
   /** Shows a finished ask at the top of the list. The older failure notices lose their sample buttons (the newest keeps its own). */
-  function showResult(question: string, result: AskResult): void {
+  function showResult(question: string, result: AskResult): HTMLElement {
     const article = renderAnswer(question, result); // drawn first: if it throws, the page is left as it was
     for (const old of answersEl.querySelectorAll('.ai-fail-samples')) old.remove();
     // The "not available" sentence is on the page once: the newest one replaces the one before it.
@@ -506,6 +520,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     answersEl.prepend(article);
     // Bounded growth: the oldest answers leave the page, and their buttons and closures with them.
     while (answersEl.childElementCount > MAX_ANSWERS) answersEl.lastElementChild?.remove();
+    return article;
   }
 
   const errorResult = (): AskResult => ({ answer: '', trace: [], unverified: [], fromCache: false, status: 'error', message: PANEL_TEXT.crashed, messages: history });
@@ -538,6 +553,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
   function showWaiting(): void {
     statusText.textContent = PANEL_TEXT.waiting;
     cancelBtn.hidden = false;
+    bringIntoView(statusBox); // the waiting line and the stop button, which sit just above the answers
   }
 
   // ---- asking -----------------------------------------------------------------------------------------------
@@ -595,14 +611,15 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
 
     if (result) {
       let shown = result;
+      let drawn: HTMLElement | undefined;
       try {
-        showResult(question, result);
+        drawn = showResult(question, result);
       } catch (error) {
         // Drawing failed: say so plainly. The answer nobody saw is not put into the conversation.
         console.error('AI panel: could not draw the answer', error);
         shown = errorResult();
         try {
-          showResult(question, shown);
+          drawn = showResult(question, shown);
         } catch (again) {
           console.error('AI panel: could not draw the error either', again);
         }
@@ -616,9 +633,13 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
       if (shown.needsNewConversation) {
         newBtn.hidden = false;
         newBtn.classList.add('is-attention');
-        newBtn.focus();
+        newBtn.focus({ preventScroll: true });
+        if (drawn) bringIntoView(drawn);
         return;
       }
+      restoreFocus(trigger);
+      if (drawn) bringIntoView(drawn); // after the focus is back: the page ends up showing the answer, not the button
+      return;
     }
     restoreFocus(trigger);
   }
