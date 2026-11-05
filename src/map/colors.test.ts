@@ -119,6 +119,13 @@ describe('allocation scale (change in percent, centred on 0)', () => {
     expect(allocationScale([Number.NaN, 7])).toBe(10);
   });
 
+  test('allocationScale compares at the shown precision: noise around a round number does not widen it', () => {
+    expect(allocationScale([10.000000000000018])).toBe(10); // engine noise (北海道 +10% in 2100)
+    expect(allocationScale([-10.0001])).toBe(10); // whole-person rounding on the AI path
+    expect(allocationScale([20.04])).toBe(20); // shown as +20.0%
+    expect(allocationScale([10.06])).toBe(20); // shown as +10.1%: really wider than 10
+  });
+
   test('legend stops are symmetric with signed labels and a 0 in the middle', () => {
     const stops = allocationLegendStops(10);
     expect(stops.map((s) => s.label)).toEqual(['−10%', '−5%', '0', '+5%', '+10%']);

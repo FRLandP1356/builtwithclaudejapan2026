@@ -153,12 +153,17 @@ export function legendRamp(steps = 32): Array<{ offset: number; color: string }>
 export const ALLOC_MIN_SCALE = 5;
 const NICE_SCALES = [5, 10, 20, 30, 50, 100];
 
-/** Half-width of the symmetric domain for a set of percent changes: a round number at or above the largest |change|. */
+/**
+ * Half-width of the symmetric domain for a set of percent changes: a round number at or above the largest |change|,
+ * compared at the precision the screen shows (one decimal, as formatDeltaPct). Floating-point noise from the engine
+ * (10.000000000000018) or whole-person rounding (10.0001) must not widen a +10% allocation to ±20.
+ */
 export function allocationScale(changes: Iterable<number>): number {
   let max = 0;
   for (const v of changes) if (Number.isFinite(v) && Math.abs(v) > max) max = Math.abs(v);
-  for (const s of NICE_SCALES) if (max <= s) return Math.max(ALLOC_MIN_SCALE, s);
-  return Math.ceil(max / 100) * 100;
+  const shown = Math.round(max * 10) / 10;
+  for (const s of NICE_SCALES) if (shown <= s) return Math.max(ALLOC_MIN_SCALE, s);
+  return Math.ceil(shown / 100) * 100;
 }
 
 /** Fill colour for a change of `percent` on a domain of +-`scale` percent. 0 is the neutral; beyond +-scale clamps. */

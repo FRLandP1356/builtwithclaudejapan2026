@@ -4,7 +4,9 @@ import { DEFAULT_SCENARIO } from '../engine/types';
 import { makeEngineContext } from '../../test/helpers/engineContext';
 import { runTool } from '../ai/tools';
 import { buildOverlay, changePercentOf, deltaLabel, overlayFromToolInput } from './allocationOverlay';
-import { computeAllocation, populationAt } from './allocationPanel';
+import { allocate } from '../engine/allocation';
+import { ALLOC_MIN_SCALE, allocationScale } from '../map/colors';
+import { buildAllocationInput, computeAllocation, EXAMPLE_COUNT, PERCENT_MAX, PERCENT_MIN, PERCENT_STEP, populationAt, targetPeople } from './allocationPanel';
 import { allocatedTotals, deriveTotals, yearIndex } from './derive';
 import { formatDeltaPct } from './format';
 
@@ -12,6 +14,45 @@ const ctx = makeRealContext({ year: 2100 });
 const { data, runner } = ctx;
 const series = runner.run(DEFAULT_SCENARIO);
 const wakayama = data.areas.filter((a) => a.prefCode === '30').map((a) => a.code);
+
+describe('the colour scale of an allocation depends on its percent only (not on the year or on float noise)', () => {
+  const NICE = [5, 10, 20, 30, 50, 100];
+  const expected = (pct: number) => Math.max(ALLOC_MIN_SCALE, NICE.find((s) => Math.abs(pct) <= s)!);
+  const atYear = new Map([2050, 2100].map((y) => [y, populationAt(data, series, y)] as const));
+  const scaleOf = (year: number, pref: string, pct: number, wholePeople: boolean) => {
+    const at = atYear.get(year)!;
+    const input = buildAllocationInput({ target: { kind: 'pref', code: pref }, percent: pct, sourceMode: 'proportional', regionIds: [] }, targetPeople({ kind: 'pref', code: pref }, at));
+    if (wholePeople) input.deltaPeople = Math.round(input.deltaPeople); // the AI path
+    const result = allocate(at.popByArea, at.areaPref, input, []); // facilities do not change the populations
+    return allocationScale(Object.values(changePercentOf(at.popByArea, result.pop)));
+  };
+
+  test('北海道 +10% is ±10 in 2100 and in 2050, on the panel path and on the AI path', () => {
+    const c = computeAllocation(data, series, 2100, { target: { kind: 'pref', code: '01' }, percent: 10, sourceMode: 'proportional', regionIds: [] });
+    const cp = changePercentOf(populationAt(data, series, 2100).popByArea, c.result.pop);
+    expect(Math.max(...Object.values(cp))).not.toBe(10); // the engine's sum carries float noise here
+    expect(allocationScale(Object.values(cp))).toBe(10);
+    for (const year of [2050, 2100]) for (const whole of [false, true]) expect(scaleOf(year, '01', 10, whole)).toBe(10);
+  });
+
+  test('every prefecture × every slider percent, in 2050 and 2100, on both paths: the scale is the same function of the percent', () => {
+    const percents: number[] = [];
+    for (let p = PERCENT_MIN; p <= PERCENT_MAX; p += PERCENT_STEP) if (p !== 0) percents.push(p);
+    expect(percents).toHaveLength(16);
+    const wrong: string[] = [];
+    for (const year of [2050, 2100]) {
+      for (const pref of data.prefNames.keys()) {
+        for (const pct of percents) {
+          for (const whole of [false, true]) {
+            const got = scaleOf(year, pref, pct, whole);
+            if (got !== expected(pct)) wrong.push(`${year} ${pref} ${pct}% ${whole ? 'AI' : 'panel'}: ${got}`);
+          }
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
+  }, 30_000);
+});
 
 describe('changePercentOf', () => {
   test('percent change per area, 0 when nobody was there before', () => {
@@ -90,6 +131,29 @@ describe('buildOverlay on real data: 和歌山県 +10% in 2100', () => {
   test('a focus is kept only when it names a flip', () => {
     expect(buildOverlay({ result: c.result, before: at.popByArea, facilities: data.facilities, year: 2100, label: 'x', focusFacilityId: 'grocery' }).focusFacilityId).toBe('grocery');
     expect(buildOverlay({ result: c.result, before: at.popByArea, facilities: data.facilities, year: 2100, label: 'x', focusFacilityId: 'nope' }).focusFacilityId).toBeUndefined();
+  });
+});
+
+describe('buildOverlay keeps EVERY gained and lost town, not only the panel\'s examples: 北海道 −30% in 2100', () => {
+  const at = populationAt(data, series, 2100);
+  const c = computeAllocation(data, series, 2100, { target: { kind: 'pref', code: '01' }, percent: -30, sourceMode: 'proportional', regionIds: [] }, at);
+  const overlay = buildOverlay({ result: c.result, before: at.popByArea, facilities: data.facilities, year: 2100, label: '北海道 −30%' });
+
+  test('many towns cross for one facility, far more than the examples the table names', () => {
+    const most = Math.max(...overlay.flips.map((f) => f.lost.length));
+    expect(most).toBeGreaterThan(EXAMPLE_COUNT * 3);
+  });
+
+  test('each facility carries exactly the engine\'s gained and lost codes, and the table\'s counts', () => {
+    const changed = c.result.flips.filter((f) => f.gained.length + f.lost.length > 0);
+    expect(overlay.flips.map((f) => f.facilityId)).toEqual(changed.map((f) => f.facilityId));
+    for (const f of changed) {
+      const mine = overlay.flips.find((x) => x.facilityId === f.facilityId)!;
+      expect([...mine.gained].sort()).toEqual([...f.gained].sort());
+      expect([...mine.lost].sort()).toEqual([...f.lost].sort());
+      const row = c.summary.rows.find((r) => r.facilityId === f.facilityId)!;
+      expect([mine.gained.length, mine.lost.length]).toEqual([row.gained.count, row.lost.count]);
+    }
   });
 });
 
