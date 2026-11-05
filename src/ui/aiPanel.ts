@@ -19,6 +19,7 @@ import type { CachedAnswers } from '../ai/cached';
 import type { EngineContext } from '../ai/tools';
 import { isScenarioError, sanitizeScenario, scenarioKey } from '../data/runner';
 import {
+  allocationOffers,
   clipCodePoints,
   compactJson,
   countCodePoints,
@@ -30,6 +31,7 @@ import {
   toolLabel,
   traceUsesEstimate,
 } from './aiTrace';
+import { overlayFromToolInput } from './allocationOverlay';
 import { ESTIMATE_BADGE, ESTIMATE_NOTE } from './sources';
 import type { PanelContext } from './state';
 import type { Scenario } from '../engine/types';
@@ -74,6 +76,10 @@ export const PANEL_TEXT = {
   scenarioFailed: 'この前提を画面に反映できませんでした。',
   trimmed: '古いやり取りは省略しました',
   trySaved: '保存済みの質問を試せます。',
+  allocationButton: 'この割り振りを地図に反映する',
+  allocationApplied: '地図に反映しました。地図の色は、割り振りによる人口の変化を示します。',
+  allocationFailed: 'この割り振りを地図に反映できませんでした。',
+  allocationScenario: 'この割り振りの前提も画面に反映しました',
 } as const;
 
 const DEFAULT_ENDPOINT = '/api/chat';
@@ -347,6 +353,45 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
     return h('div', { class: 'ai-scenarios' }, ...offers.map((offer) => renderScenarioOffer(offer, offers.length > 1)));
   }
 
+  /**
+   * For each run_allocation call that returned a result (allocationOffers): a button that recomputes that allocation
+   * locally from the tool INPUT (never from the model's text or the tool result) and draws it on the map, moving the
+   * year slider to the allocation's year. A bad input is refused with a message (text only).
+   */
+  function renderAllocationOffers(trace: TraceItem[]): HTMLElement | null {
+    const inputs = allocationOffers(trace);
+    if (inputs.length === 0) return null;
+    const box = h('div', { class: 'ai-allocations' });
+    inputs.forEach((input, i) => {
+      const message = h('p', { class: 'ai-scenario-msg', role: 'status', 'aria-live': 'polite' });
+      const button = h(
+        'button',
+        { type: 'button', class: 'btn', 'data-role': 'apply-allocation' },
+        inputs.length > 1 ? `${PANEL_TEXT.allocationButton}（${i + 1}件目）` : PANEL_TEXT.allocationButton,
+      );
+      button.addEventListener('click', () => {
+        const rebuilt = overlayFromToolInput(input, ctx.data, ctx.runner);
+        if ('error' in rebuilt) {
+          message.textContent = rebuilt.error;
+          return;
+        }
+        const { overlay, scenario } = rebuilt;
+        // The towns that cross a guide depend on the assumptions: the screen takes the allocation's own, in the
+        // same patch (a scenario change alone would clear the overlay), and the message says so.
+        const withScenario = scenarioKey(ctx.store.get().scenario) !== scenarioKey(scenario);
+        const done = ctx.store.set(withScenario ? { scenario, year: overlay.year, allocation: overlay } : { year: overlay.year, allocation: overlay });
+        message.textContent = !done
+          ? PANEL_TEXT.allocationFailed
+          : withScenario
+            ? `${PANEL_TEXT.allocationApplied}${PANEL_TEXT.allocationScenario}（${describeScenario(scenario)}）。`
+            : PANEL_TEXT.allocationApplied;
+        if (done) revealMap();
+      });
+      box.append(h('div', { class: 'ai-scenario' }, button, message));
+    });
+    return box;
+  }
+
   function renderFailureSamples(): HTMLElement {
     const list = h('ul', { class: 'ai-samples' });
     for (const question of SAMPLE_QUESTIONS) list.append(sampleButton(question));
@@ -401,6 +446,8 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
       if (links) article.append(links);
       const scenarios = renderScenarioOffers(result.trace);
       if (scenarios) article.append(scenarios);
+      const allocations = renderAllocationOffers(result.trace);
+      if (allocations) article.append(allocations);
     }
     return article;
   }

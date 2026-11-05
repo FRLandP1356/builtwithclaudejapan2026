@@ -1356,3 +1356,94 @@ describe('run uses the shared runner', () => {
     expect(run).toHaveBeenCalled();
   });
 });
+
+describe('この割り振りを地図に反映する (run_allocation in the trace)', () => {
+  const allocationCall = (input: Record<string, unknown>): Response => toolUseResponse(toolUse('a', 'run_allocation', input));
+
+  it('offers a button that recomputes the allocation from the tool input and puts it on the map', async () => {
+    const ctx = makeContext();
+    const s = script(allocationCall({ target: { kind: 'pref', code: '30' }, deltaPercent: 10, year: 2100 }), textResponse('和歌山県を1割増やすと、ほかが少し減ります。'));
+    const m = mount({ fetchFn: s.fetchFn }, ctx);
+    m.typeAndSend('和歌山を増やしたら？');
+    await answersCount(m, 1);
+
+    const button = m.answers()[0]!.querySelector<HTMLButtonElement>('button[data-role="apply-allocation"]')!;
+    expect(button.textContent).toBe(PANEL_TEXT.allocationButton);
+    expect(ctx.store.get().allocation).toBeUndefined();
+    button.click();
+    const a = ctx.store.get().allocation!;
+    expect(a.year).toBe(2100);
+    expect(ctx.store.get().year).toBe(2100); // the map moves to the allocation's year
+    expect(a.label).toBe('和歌山県 +10%');
+    expect(a.changePercent['30206']).toBeCloseTo(10, 3);
+    expect(a.flips.find((f) => f.facilityId === 'grocery')?.gained).toContain('30344');
+    const msg = m.answers()[0]!.querySelector('.ai-allocations .ai-scenario-msg')!;
+    expect(msg.textContent).toBe(PANEL_TEXT.allocationApplied);
+    expect(msg.getAttribute('role')).toBe('status');
+  });
+
+  it('an allocation computed under other assumptions brings them along in the same change, and says so', async () => {
+    const ctx = makeContext();
+    const input = { target: { kind: 'pref', code: '30' }, deltaPercent: 10, year: 2100, scenario: { cwrMult: 1.2 } };
+    const s = script(allocationCall(input), textResponse('前提を変えて計算しました。'));
+    const m = mount({ fetchFn: s.fetchFn }, ctx);
+    m.typeAndSend('出生率が高いと？');
+    await answersCount(m, 1);
+    m.answers()[0]!.querySelector<HTMLButtonElement>('button[data-role="apply-allocation"]')!.click();
+    expect(ctx.store.get().scenario).toEqual({ cwrMult: 1.2, migMode: 'hold', migScale: 1, infraStrength: 0 });
+    expect(ctx.store.get().allocation?.label).toBe('和歌山県 +10%'); // not cleared by its own scenario change
+    expect(m.answers()[0]!.querySelector('.ai-allocations .ai-scenario-msg')!.textContent).toBe(
+      `${PANEL_TEXT.allocationApplied}${PANEL_TEXT.allocationScenario}（子どもの数の倍率 1.2）。`,
+    );
+  });
+
+  it('offers nothing for a call the tool refused (there is no allocation to draw)', async () => {
+    const ctx = makeContext();
+    const s = script(allocationCall({ target: { kind: 'pref', code: '99' }, deltaPercent: 10, year: 2100 }), textResponse('できませんでした。'));
+    const m = mount({ fetchFn: s.fetchFn }, ctx);
+    m.typeAndSend('どこか');
+    await answersCount(m, 1);
+    expect(m.answers()[0]!.querySelector('.ai-trace')).not.toBeNull(); // the call is in the trace
+    expect(m.answers()[0]!.querySelector('button[data-role="apply-allocation"]')).toBeNull();
+  });
+
+  it('a saved answer whose input cannot be reproduced is refused in Japanese, as text, and the store is left alone', async () => {
+    const ctx = makeContext();
+    const forged = { target: { kind: 'pref', code: '<img src=x onerror=alert(1)>' }, deltaPercent: 10, year: 2100 };
+    const entry = savedEntry(TOKYO_QUESTION, '保存済みの答えです。', { trace: [{ tool: 'run_allocation', input: forged, result: { year: 2100 } }] });
+    const m = mount({ cache: cacheOf(entry) }, ctx);
+    m.samples()[0]!.click();
+    await answersCount(m, 1);
+    m.answers()[0]!.querySelector<HTMLButtonElement>('button[data-role="apply-allocation"]')!.click();
+    expect(ctx.store.get().allocation).toBeUndefined();
+    expect(ctx.store.get().year).toBe(2050);
+    const msg = m.answers()[0]!.querySelector('.ai-allocations .ai-scenario-msg')!;
+    expect(msg.textContent).toContain('<img src=x o…');
+    expect(msg.textContent).toContain('地図に反映できません');
+    expect(msg.children).toHaveLength(0); // the model's text never becomes markup
+    expect(m.section.querySelector('img')).toBeNull();
+  });
+
+  it('offers nothing when no run_allocation was used, and numbers each button when several were', async () => {
+    const ctx = makeContext();
+    const s = script(
+      toolUseResponse(toolUse('a', 'get_series', { areaCode: '13' })),
+      textResponse(GOOD_TOKYO_ANSWER),
+      toolUseResponse(
+        toolUse('b', 'run_allocation', { target: { kind: 'pref', code: '30' }, deltaPercent: 10, year: 2100 }),
+        toolUse('c', 'run_allocation', { target: { kind: 'pref', code: '13' }, deltaPercent: -5, year: 2100 }),
+      ),
+      textResponse('二つ計算しました。'),
+    );
+    const m = mount({ fetchFn: s.fetchFn }, ctx);
+    m.typeAndSend('一');
+    await answersCount(m, 1);
+    expect(m.answers()[0]!.querySelector('button[data-role="apply-allocation"]')).toBeNull();
+    m.typeAndSend('二');
+    await answersCount(m, 2);
+    const buttons = [...m.answers()[0]!.querySelectorAll<HTMLButtonElement>('button[data-role="apply-allocation"]')];
+    expect(buttons.map((b) => b.textContent)).toEqual([`${PANEL_TEXT.allocationButton}（1件目）`, `${PANEL_TEXT.allocationButton}（2件目）`]);
+    buttons[1]!.click();
+    expect(ctx.store.get().allocation?.label).toBe('東京都 −5%');
+  });
+});

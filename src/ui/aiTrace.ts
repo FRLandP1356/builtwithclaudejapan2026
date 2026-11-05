@@ -228,6 +228,37 @@ export function describeScenario(s: Scenario): string {
 
 const MAX_WALK_NODES = 50_000;
 
+// ---------------------------------------------------------------------------------------------------------------
+// Allocations an answer computed (offered for the map)
+// ---------------------------------------------------------------------------------------------------------------
+
+export const MAX_ALLOCATION_OFFERS = 3;
+
+/**
+ * The distinct inputs, at most three, of the run_allocation calls in the trace whose result is not an error, in the
+ * order the model made them. Only the INPUT is returned: the map recomputes the allocation from it locally (and
+ * validates it again), so nothing the model wrote reaches the screen except as text.
+ */
+export function allocationOffers(trace: TraceItem[], max: number = MAX_ALLOCATION_OFFERS): unknown[] {
+  const out: unknown[] = [];
+  const seen = new Set<string>();
+  for (const traceItem of trace) {
+    if (out.length >= max) break;
+    if (traceItem.tool !== 'run_allocation') continue;
+    if (isRecord(traceItem.result) && 'error' in traceItem.result) continue;
+    let id: string;
+    try {
+      id = JSON.stringify(traceItem.input) ?? '';
+    } catch {
+      continue; // not plain data: nothing to recompute from
+    }
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(traceItem.input);
+  }
+  return out;
+}
+
 /** True when a tool result is marked as this app's estimate (basis 'app_estimate') or reaches a year after 2050. */
 export function traceUsesEstimate(trace: TraceItem[]): boolean {
   let budget = MAX_WALK_NODES;
