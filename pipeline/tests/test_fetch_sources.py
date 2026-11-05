@@ -3,11 +3,14 @@ import hashlib
 import json
 import os
 import pathlib
+import contextlib
+import io
 import tempfile
 import unittest
 from unittest import mock
 
 from pipeline import fetch_sources
+from pipeline.tests.helpers import snapshot
 
 
 class TestFetchOne(unittest.TestCase):
@@ -60,12 +63,13 @@ class TestUnsafeFileNames(unittest.TestCase):
     def test_rejected_names_raise_before_anything_is_written(self):
         bad = ["../escape.bin", "sub/../../escape.bin", "a/b.bin", "/abs.bin", "a\\b.bin", "..\\escape.bin",
                ".", "..", "", "nul\x00.bin", None, 7]
+        before = snapshot(self.tmp.name)
         for name in bad:
             with self.subTest(name=name):
                 with self.assertRaises(fetch_sources.UnsafeFileName):
                     fetch_sources.fetch_one(self.entry(name), self.raw)
                 self.assertFalse(os.path.exists(self.raw), "the raw directory must not even be created")
-                self.assertFalse((self.base / "escape.bin").exists())
+                self.assertEqual(snapshot(self.tmp.name), before, "nothing may be created, replaced or rewritten")
 
     def test_plain_base_names_are_accepted(self):
         for name in ["suikei_kekka.xlsx", "N03-20210101_01_GML.zip", "katei_cwr_0-4sr.xlsx", "..hidden", "a..b"]:
@@ -77,10 +81,17 @@ class TestUnsafeFileNames(unittest.TestCase):
         outside = self.base / "outside.bin"
         outside.write_bytes(b"precious")
         os.makedirs(self.raw)
-        os.symlink(outside, os.path.join(self.raw, "link.bin"))
+        link = os.path.join(self.raw, "link.bin")
+        os.symlink(outside, link)
+        before = snapshot(self.tmp.name)
         with self.assertRaises(fetch_sources.UnsafeFileName):
             fetch_sources.fetch_one(self.entry("link.bin"), self.raw, force=True)
+        # An unguarded download would swap the symlink for a regular file: the link must still be a link
+        # to the same target, the outside file unchanged, and no .part file left behind.
+        self.assertTrue(os.path.islink(link))
+        self.assertEqual(os.readlink(link), str(outside))
         self.assertEqual(outside.read_bytes(), b"precious")
+        self.assertEqual(snapshot(self.tmp.name), before)
 
     def test_a_normal_name_still_downloads(self):
         self.assertEqual(fetch_sources.fetch_one(self.entry("ok.bin"), self.raw), "unverified")
@@ -189,6 +200,15 @@ class TestDownloadSizeCap(unittest.TestCase):
                 self.assertEqual(resp.served, limit + 1)
                 self.assertEqual(self.leftovers(), [])
 
+    def test_too_large_message_says_what_to_do(self):
+        with self.assertRaisesRegex(fetch_sources.DownloadTooLarge, r"--record"):
+            self.run_download(FakeResponse(total=None), 1000)
+        with self.assertRaisesRegex(fetch_sources.DownloadTooLarge, r"--record"):
+            self.run_download(FakeResponse(total=10, content_length=10**9), 1000)
+        with mock.patch.object(fetch_sources, "MAX_UNRECORDED_BYTES", 500):
+            with self.assertRaisesRegex(fetch_sources.DownloadTooLarge, r"MAX_UNRECORDED_BYTES"):
+                self.run_download(FakeResponse(total=2000), None)
+
     def test_without_a_recorded_size_the_ceiling_applies(self):
         with mock.patch.object(fetch_sources, "MAX_UNRECORDED_BYTES", 500):
             with self.assertRaises(fetch_sources.DownloadTooLarge):
@@ -206,6 +226,77 @@ class TestDownloadSizeCap(unittest.TestCase):
         self.assertEqual(os.listdir(raw), [])
         fits = {"file": "a.bin", "url": src.as_uri(), "bytes": 200}     # within the tolerance
         self.assertEqual(fetch_sources.fetch_one(fits, raw), "unverified")
+
+
+class TestMainEntryPoints(unittest.TestCase):
+    """fetch_sources.main reports a bad entry (FAILED, exit 1) on the normal and the --record path alike."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.base = pathlib.Path(self.tmp.name)
+        self.src = self.base / "src.bin"
+        self.src.write_bytes(b"y" * (fetch_sources.SIZE_TOLERANCE_MIN + 200))
+        self.raw = str(self.base / "raw")
+
+    def run_main(self, argv, entries):
+        err, out = io.StringIO(), io.StringIO()
+        with mock.patch.object(fetch_sources, "load_sources", return_value={"sources": entries}), \
+                mock.patch.object(fetch_sources, "RAW_DIR", self.raw), \
+                mock.patch.object(fetch_sources, "save_sources") as save, \
+                contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+            rc = fetch_sources.main(argv)
+        return rc, out.getvalue(), err.getvalue(), save
+
+    def entry(self, name, **extra):
+        return dict({"file": name, "url": self.src.as_uri()}, **extra)
+
+    def test_normal_path_reports_an_unsafe_name(self):
+        before = snapshot(self.tmp.name)
+        rc, _out, err, save = self.run_main([], [self.entry("../escape.bin")])
+        self.assertEqual(rc, 1)
+        self.assertIn("FAILED", err)
+        self.assertEqual(snapshot(self.tmp.name), before)
+        save.assert_not_called()
+
+    def test_normal_path_reports_a_download_that_is_too_large(self):
+        rc, _out, err, _save = self.run_main([], [self.entry("a.bin", bytes=100)])
+        self.assertEqual(rc, 1)
+        self.assertIn("FAILED", err)
+        self.assertIn("--record", err)
+        self.assertEqual(os.listdir(self.raw), [])
+
+    def test_record_path_rejects_an_unsafe_name_without_writing_or_saving(self):
+        before = snapshot(self.tmp.name)
+        rc, _out, err, save = self.run_main(["--record"], [self.entry("../escape.bin")])
+        self.assertEqual(rc, 1)
+        self.assertIn("FAILED", err)
+        self.assertIn("NOT updated", err)
+        self.assertEqual(snapshot(self.tmp.name), before, "nothing may be written outside or inside raw")
+        save.assert_not_called()
+
+    def test_record_path_reports_a_download_over_the_ceiling(self):
+        with mock.patch.object(fetch_sources, "MAX_UNRECORDED_BYTES", 500):
+            rc, _out, err, save = self.run_main(["--record"], [self.entry("a.bin")])
+        self.assertEqual(rc, 1)
+        self.assertIn("FAILED", err)
+        self.assertEqual(os.listdir(self.raw), [])
+        save.assert_not_called()
+
+    def test_record_path_does_not_save_a_half_recorded_file(self):
+        good, bad = self.entry("good.bin"), self.entry("../escape.bin")
+        rc, _out, _err, save = self.run_main(["--record"], [good, bad])
+        self.assertEqual(rc, 1)
+        save.assert_not_called()
+
+    def test_record_path_still_records_a_good_entry(self):
+        good = self.entry("good.bin")
+        rc, out, _err, save = self.run_main(["--record"], [good])
+        self.assertEqual(rc, 0)
+        self.assertIn("recorded", out)
+        save.assert_called_once()
+        self.assertEqual(good["bytes"], fetch_sources.SIZE_TOLERANCE_MIN + 200)
+        self.assertEqual(good["sha256"], fetch_sources.sha256_of(os.path.join(self.raw, "good.bin")))
 
 
 class TestSourcesJson(unittest.TestCase):

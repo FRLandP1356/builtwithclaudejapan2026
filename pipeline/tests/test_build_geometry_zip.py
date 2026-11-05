@@ -2,14 +2,17 @@
 
 All archives are crafted in memory; no raw downloads are needed.
 """
+import contextlib
 import io
 import json
 import os
 import tempfile
 import unittest
 import zipfile
+from unittest import mock
 
 from pipeline import build_geometry as bg
+from pipeline.tests.helpers import snapshot
 
 GEOJSON = json.dumps({"type": "FeatureCollection", "features": [{"properties": {"N03_007": "30201"}}]})
 
@@ -92,6 +95,73 @@ class TestReadN03FeaturesRejectsHostileArchives(unittest.TestCase):
     def test_hostile_name_on_the_geojson_member_itself_is_rejected(self):
         with self.assertRaises(bg.UnsafeArchiveMember):
             self.read(make_zip([], geojson_name="../../evil.geojson"))
+
+
+class TestFetchAndRecordEntryPoints(unittest.TestCase):
+    """fetch_all and record_hashes report a bad entry (FAILED, stop) instead of ending in a traceback."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.raw = os.path.join(self.tmp.name, "raw")
+        self.src = os.path.join(self.tmp.name, "src.zip")
+        with open(self.src, "wb") as fh:
+            fh.write(b"z" * (bg.fetch_sources.SIZE_TOLERANCE_MIN + 200))
+        self.enterContext(contextlib.redirect_stdout(io.StringIO()))    # the FAILED / recorded lines
+        self.enterContext(contextlib.redirect_stderr(io.StringIO()))
+
+    def entry(self, name, **extra):
+        return dict({"file": name, "url": "file://" + self.src}, **extra)
+
+    def patched(self, entries):
+        stack = [
+            mock.patch.object(bg, "RAW_DIR", self.raw),
+            mock.patch.object(bg, "default_entries", return_value=entries),
+            mock.patch.object(bg.fetch_sources, "load_sources", return_value={}),
+        ]
+        save = mock.patch.object(bg.fetch_sources, "save_sources")
+        return stack, save
+
+    def test_fetch_all_stops_on_an_unsafe_name(self):
+        before = snapshot(self.tmp.name)
+        with mock.patch.object(bg, "RAW_DIR", self.raw):
+            with self.assertRaises(SystemExit):
+                bg.fetch_all([self.entry("../escape.zip")])
+        self.assertEqual(snapshot(self.tmp.name), before)
+
+    def test_fetch_all_stops_on_a_download_that_is_too_large(self):
+        with mock.patch.object(bg, "RAW_DIR", self.raw):
+            with self.assertRaises(SystemExit):
+                bg.fetch_all([self.entry("a.zip", bytes=100)])
+        self.assertEqual(os.listdir(self.raw), [])
+
+    def test_record_hashes_rejects_an_unsafe_name_without_writing_or_saving(self):
+        before = snapshot(self.tmp.name)
+        stack, save = self.patched([self.entry("../escape.zip")])
+        with stack[0], stack[1], stack[2], save as saved:
+            with self.assertRaises(SystemExit) as cm:
+                bg.record_hashes()
+        self.assertIn("NOT updated", str(cm.exception))
+        self.assertEqual(snapshot(self.tmp.name), before)
+        saved.assert_not_called()
+
+    def test_record_hashes_reports_a_download_over_the_ceiling(self):
+        stack, save = self.patched([self.entry("a.zip")])
+        with stack[0], stack[1], stack[2], save as saved, \
+                mock.patch.object(bg.fetch_sources, "MAX_UNRECORDED_BYTES", 500):
+            with self.assertRaises(SystemExit):
+                bg.record_hashes()
+        saved.assert_not_called()
+
+    def test_record_hashes_still_records_a_good_entry(self):
+        entries = [self.entry("a.zip")]
+        stack, save = self.patched(entries)
+        with stack[0], stack[1], stack[2], save as saved:
+            bg.record_hashes()
+        saved.assert_called_once()
+        recorded = saved.call_args[0][0][bg.SOURCES_KEY]["sources"]
+        self.assertEqual(recorded[0]["bytes"], bg.fetch_sources.SIZE_TOLERANCE_MIN + 200)
+        self.assertRegex(recorded[0]["sha256"], r"^[0-9a-f]{64}$")
 
 
 if __name__ == "__main__":

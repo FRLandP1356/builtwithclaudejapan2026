@@ -81,9 +81,14 @@ def sha256_of(path: str) -> str:
     return h.hexdigest()
 
 
+def is_recorded(expected_bytes: Any) -> bool:
+    """True if expected_bytes is a usable recorded size (a positive int)."""
+    return isinstance(expected_bytes, int) and not isinstance(expected_bytes, bool) and expected_bytes > 0
+
+
 def size_limit(expected_bytes: Optional[int]) -> int:
     """Most bytes a download may deliver: the recorded size plus the tolerance, or the ceiling if none is recorded."""
-    if isinstance(expected_bytes, int) and not isinstance(expected_bytes, bool) and expected_bytes > 0:
+    if is_recorded(expected_bytes):
         return expected_bytes + max(SIZE_TOLERANCE_MIN, expected_bytes * SIZE_TOLERANCE_PERCENT // 100)
     return MAX_UNRECORDED_BYTES
 
@@ -99,6 +104,15 @@ def declared_length(headers: Any) -> Optional[int]:
         return None
     value = value.strip()
     return int(value) if value.isascii() and value.isdigit() else None
+
+
+def too_large_hint(expected_bytes: Optional[int]) -> str:
+    """What to do about a DownloadTooLarge, depending on whether a size was recorded."""
+    if not is_recorded(expected_bytes):
+        return (f"no size is recorded, so the absolute ceiling of {MAX_UNRECORDED_BYTES} bytes applies; "
+                "check the source before raising MAX_UNRECORDED_BYTES")
+    return ("if the upstream file was changed on purpose, check the new file, delete the old copy in "
+            "data/raw and re-run with --record to record its new size and hash")
 
 
 def download(url: str, dest: str, expected_bytes: Optional[int] = None, opener: Optional[Callable[..., Any]] = None) -> None:
@@ -118,7 +132,8 @@ def download(url: str, dest: str, expected_bytes: Optional[int] = None, opener: 
         with os.fdopen(fd, "wb") as out, open_url(req, timeout=120) as resp:
             declared = declared_length(getattr(resp, "headers", None))
             if declared is not None and declared > limit:
-                raise DownloadTooLarge(f"{url}: server announces {declared} bytes, limit is {limit}")
+                raise DownloadTooLarge(
+                    f"{url}: server announces {declared} bytes, limit is {limit}; {too_large_hint(expected_bytes)}")
             received = 0
             while True:
                 block = resp.read(min(CHUNK, limit - received + 1))
@@ -126,7 +141,9 @@ def download(url: str, dest: str, expected_bytes: Optional[int] = None, opener: 
                     break
                 received += len(block)
                 if received > limit:
-                    raise DownloadTooLarge(f"{url}: more than {limit} bytes received (recorded size {expected_bytes})")
+                    raise DownloadTooLarge(
+                        f"{url}: more than {limit} bytes received (recorded size {expected_bytes}); "
+                        f"{too_large_hint(expected_bytes)}")
                 out.write(block)
         os.replace(tmp, dest)
     except BaseException:
@@ -178,15 +195,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     for entry in data["sources"]:
         if args.record:
             # Recording trusts what the server sends now; do not compare with the old hash.
-            dest = safe_dest(RAW_DIR, entry["file"])
-            if args.force or not os.path.exists(dest):
-                download(entry["url"], dest)
-            entry["sha256"] = sha256_of(dest)
-            entry["bytes"] = os.path.getsize(dest)
+            try:
+                dest = safe_dest(RAW_DIR, entry["file"])
+                if args.force or not os.path.exists(dest):
+                    download(entry["url"], dest)
+                entry["sha256"] = sha256_of(dest)
+                entry["bytes"] = os.path.getsize(dest)
+            except (UnsafeFileName, DownloadTooLarge, OSError) as exc:
+                print(f"FAILED      {entry['file']}: {exc}", file=sys.stderr)
+                failed = True
+                continue
             print(f"recorded    {entry['file']}  {entry['bytes']} bytes  {entry['sha256']}")
             continue
         try:
-            status = fetch_one(entry, force=args.force)
+            status = fetch_one(entry, raw_dir=RAW_DIR, force=args.force)
         except HashMismatch as exc:
             print(f"MISMATCH    {exc}", file=sys.stderr)
             failed = True
@@ -199,7 +221,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         if status == "unverified":
             print("            (no hash recorded; run with --record)", file=sys.stderr)
     if args.record:
-        save_sources(data)
+        if failed:
+            print("sources.json was NOT updated because a download failed (see above)", file=sys.stderr)
+        else:
+            save_sources(data)
     return 1 if failed else 0
 
 

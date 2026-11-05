@@ -106,13 +106,21 @@ def record_hashes() -> None:
     """Download what is missing, then write size and SHA256 of every zip into sources.json."""
     data = fetch_sources.load_sources()
     entries = default_entries()
+    failed = False
     for entry in entries:
-        dest = fetch_sources.safe_dest(RAW_DIR, entry["file"])
-        if not os.path.exists(dest):
-            fetch_sources.download(entry["url"], dest)
-        entry["bytes"] = os.path.getsize(dest)
-        entry["sha256"] = fetch_sources.sha256_of(dest)
+        try:
+            dest = fetch_sources.safe_dest(RAW_DIR, entry["file"])
+            if not os.path.exists(dest):
+                fetch_sources.download(entry["url"], dest)
+            entry["bytes"] = os.path.getsize(dest)
+            entry["sha256"] = fetch_sources.sha256_of(dest)
+        except (fetch_sources.UnsafeFileName, fetch_sources.DownloadTooLarge, OSError) as exc:
+            print(f"FAILED      {entry['file']}: {exc}", file=sys.stderr)
+            failed = True
+            continue
         print(f"recorded    {entry['file']}  {entry['bytes']} bytes  {entry['sha256']}")
+    if failed:
+        raise SystemExit("could not record every N03 zip; sources.json was NOT updated (see above)")
     data[SOURCES_KEY] = {
         "note": (
             "Municipal boundaries for the map. Raw zips are NOT committed: pipeline/build_geometry.py downloads "
