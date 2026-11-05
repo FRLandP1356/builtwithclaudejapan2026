@@ -788,6 +788,40 @@ describe('地図に反映する (the map overlay)', () => {
     expect(store.get().allocation?.label).toBe('AI'); // the panel did not draw its own over it
   });
 
+  test('while the map shows the allocation, moving around the map neither retargets nor redraws it', () => {
+    const { q, el, store } = mount();
+    q<HTMLButtonElement>('#alloc-map-toggle').click();
+    [...el.querySelectorAll<HTMLButtonElement>('.alloc-focus')].find((b) => b.dataset.facility === 'cafe')!.click();
+    const shown = store.get().allocation!;
+    expect(shown.label).toBe('和歌山県 +10%');
+    expect(shown.flips.find((f) => f.facilityId === 'cafe')!.lost).toContain('20521'); // 坂城町, in 長野県
+    store.set({ selectedPref: '20' }); // the visitor follows the −1 marker on 長野県
+    expect(store.get().allocation).toBe(shown);
+    expect(q<HTMLSelectElement>('#alloc-target').value).toBe('pref:30');
+    store.set({ selectedArea: '20521' });
+    expect(store.get().allocation).toBe(shown);
+    expect(q<HTMLSelectElement>('#alloc-target').value).toBe('pref:30');
+    expect(q('#alloc-summary').textContent).toContain('和歌山県');
+    // with the map off again, the map drives the target as before
+    q<HTMLButtonElement>('#alloc-map-toggle').click();
+    store.set({ selectedPref: '13' });
+    expect(q<HTMLSelectElement>('#alloc-target').value).toBe('pref:13');
+  });
+
+  test('a town target is kept (and still offered) while the map shows it and the selection moves away', () => {
+    const { q, store, choose } = mount();
+    store.set({ selectedArea: '30206' });
+    choose(q<HTMLSelectElement>('#alloc-target'), 'area:30206');
+    q<HTMLButtonElement>('#alloc-map-toggle').click();
+    const shown = store.get().allocation!;
+    expect(shown.label).toBe('田辺市 +10%');
+    store.set({ selectedPref: '13' });
+    expect(store.get().allocation).toBe(shown);
+    const select = q<HTMLSelectElement>('#alloc-target');
+    expect(select.value).toBe('area:30206');
+    expect([...select.options].find((o) => o.value === 'area:30206')?.textContent).toBe('選んだ町：田辺市');
+  });
+
   test('the panel never says the forbidden words, with the map on', () => {
     const { el, q } = mount();
     q<HTMLButtonElement>('#alloc-map-toggle').click();

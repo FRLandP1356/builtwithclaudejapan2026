@@ -464,6 +464,9 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
       options.push(o);
     };
     if (s.selectedArea !== undefined && areaByCode.has(s.selectedArea)) add(`area:${s.selectedArea}`, `選んだ町：${nameOf(s.selectedArea)}`);
+    // A town target kept while the map shows it, after the selection moved elsewhere.
+    const kept = targetValue.startsWith('area:') ? targetValue.slice('area:'.length) : undefined;
+    if (kept !== undefined && kept !== s.selectedArea && areaByCode.has(kept)) add(targetValue, `選んだ町：${nameOf(kept)}`);
     for (const code of [...data.prefNames.keys()].sort()) add(`pref:${code}`, prefName(code));
     targetSelect.replaceChildren(...options);
     if (!options.some((o) => o.value === targetValue)) targetValue = `pref:${pickPref(s)}`;
@@ -644,15 +647,7 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
     });
   }
 
-  // The map drives the default: moving to another prefecture retargets; a selected town is offered as a choice.
   const unsubscribe = store.subscribe((s, prev) => {
-    const selChanged = s.selectedPref !== prev.selectedPref || s.selectedArea !== prev.selectedArea;
-    if (selChanged) {
-      if (s.selectedPref !== undefined && s.selectedPref !== prev.selectedPref) targetValue = `pref:${pickPref(s)}`;
-      else if (targetValue.startsWith('area:') && s.selectedArea !== undefined) targetValue = `area:${s.selectedArea}`;
-      else if (targetValue.startsWith('area:') && s.selectedArea === undefined) targetValue = `pref:${pickPref(prev)}`;
-      rebuildTargetOptions(s);
-    }
     // The overlay left the store without us: replaced by another one (the AI panel), or cleared from the map. The
     // toggle follows. A scenario change alone clears it too, but then the series changed and renderAll below draws
     // it again.
@@ -666,7 +661,19 @@ export function mountAllocation(el: HTMLElement, ctx: PanelContext): () => void 
         paintFocus();
       }
     }
-    if (selChanged || s.year !== prev.year || s.series !== prev.series) renderAll();
+    // The map drives the default: moving to another prefecture retargets; a selected town is offered as a choice.
+    // Not while this panel's allocation is on the map: then moving around the map (to see the rings and markers in
+    // other prefectures) must not change the allocation, so the target, the result and the overlay stay as they are.
+    const selChanged = s.selectedPref !== prev.selectedPref || s.selectedArea !== prev.selectedArea;
+    if (selChanged) {
+      if (!mapActive) {
+        if (s.selectedPref !== undefined && s.selectedPref !== prev.selectedPref) targetValue = `pref:${pickPref(s)}`;
+        else if (targetValue.startsWith('area:') && s.selectedArea !== undefined) targetValue = `area:${s.selectedArea}`;
+        else if (targetValue.startsWith('area:') && s.selectedArea === undefined) targetValue = `pref:${pickPref(prev)}`;
+      }
+      rebuildTargetOptions(s);
+    }
+    if (s.year !== prev.year || s.series !== prev.series || (selChanged && !mapActive)) renderAll();
   });
 
   rebuildTargetOptions(store.get());
