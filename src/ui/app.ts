@@ -17,6 +17,7 @@ import { deriveTotals, ratioAt, yearIndex, type Totals } from './derive';
 import { formatPct, formatPop } from './format';
 import { breadcrumbs, buildSearchIndex, goUp, levelOf, pickArea, pickPref, prefOfArea, type Selection } from './nav';
 import { mountSearch } from './search';
+import { phrases } from './seriesChart';
 import { mountAIPanel } from './aiPanel';
 import { allocatedBasisNote, APP_LEAD, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, SOURCES, type SourceLine } from './sources';
 import { createAppStore, DEFAULT_YEAR, type AllocationOverlay, type AppState, type PanelContext, type Store } from './state';
@@ -73,11 +74,18 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
+/** Text as no-break phrases (`.keep`), so a line breaks between phrases, not inside 「R2JHf 450」 or 「（2026年11月5日取得）」. */
+function phraseHtml(text: string): string {
+  return phrases(text)
+    .map((p) => `<span class="keep">${escapeHtml(p)}</span>`)
+    .join('');
+}
+
 /** One footer entry: what it is, then the page as a link whose text is the URL, the day it was read, and the approval line. */
 export function sourceHtml(s: SourceLine): string {
   const link = `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener">${escapeHtml(s.url)}</a>`;
-  const approval = s.approval ? `<span class="src-approval">${escapeHtml(s.approval)}</span>` : '';
-  return `<dt>${escapeHtml(s.label)}</dt><dd><span class="src-text">${escapeHtml(s.text)}</span><span class="src-where">${link}（${escapeHtml(s.retrieved)}取得）</span>${approval}</dd>`;
+  const approval = s.approval ? `<span class="src-approval">${phraseHtml(s.approval)}</span>` : '';
+  return `<dt>${escapeHtml(s.label)}</dt><dd><span class="src-text">${phraseHtml(s.text)}</span><span class="src-where">${link} ${phraseHtml(`（${s.retrieved}取得）`)}</span>${approval}</dd>`;
 }
 
 function headerHtml(): string {

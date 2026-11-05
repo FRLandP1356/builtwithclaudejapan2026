@@ -119,7 +119,8 @@ describe('footer attribution', () => {
       expect(links[0].textContent).toBe(src.url); // the URL itself is the visible text
       expect(links[0].getAttribute('rel')).toBe('noopener');
       expect(links[0].getAttribute('target')).toBe('_blank');
-      expect(dd.querySelector('.src-where')!.textContent).toBe(`${src.url}（2026年11月5日取得）`);
+      expect(dd.querySelector('.src-where')!.textContent).toBe(`${src.url} （2026年11月5日取得）`);
+      expect(dd.querySelector('.src-where .keep:last-child')!.textContent).toBe('（2026年11月5日取得）'); // the date never breaks inside
     });
   });
 
@@ -129,6 +130,7 @@ describe('footer attribution', () => {
     expect(facility.textContent).toContain('国土交通省国土政策局「サービス施設の立地する確率が50%・80%となる自治体の人口規模（三大都市圏を除く）」（2009〜2012年の統計）を加工して作成');
     expect(facility.querySelector('.src-approval')).toBeNull();
     expect(boundary.querySelector('.src-approval')!.textContent).toBe('測量法に基づく国土地理院長承認（複製）R2JHf 450');
+    expect([...boundary.querySelectorAll('.src-approval .keep')].map((k) => k.textContent)).toEqual(['測量法に基づく国土地理院長承認', '（複製）R2JHf 450']); // 「R2JHf 450」 stays together
     expect(boundary.lastElementChild).toBe(boundary.querySelector('.src-approval'));
     expect(root.querySelectorAll('.app-foot .src-approval')).toHaveLength(1);
     expect(root.querySelector('.app-foot')!.textContent).not.toContain('予測');
