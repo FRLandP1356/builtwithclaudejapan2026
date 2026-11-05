@@ -4,7 +4,7 @@ import type { AppData } from '../data/loader';
 import { isScenarioError, sanitizeScenario, type Runner } from '../data/runner';
 import { allocate, type AllocationInput, type AllocationResult } from '../engine/allocation';
 import type { Facility, Scenario } from '../engine/types';
-import { allocationErrorMessage, populationAt, targetPeople, type PopulationAt } from './allocationPanel';
+import { allocationErrorMessage, populationAt, targetPeople, type PopulationAt } from './allocationCore';
 import { YEAR_MAX, YEAR_MIN, YEAR_STEP, type AllocationOverlay } from './state';
 
 /** The change in percent per area: (after - before) / before * 100; an area with no one before stays at 0. */
@@ -63,6 +63,22 @@ function echo(v: unknown): string {
   if (typeof v !== 'string' || v.trim() === '') return '（なし）';
   const chars = [...v.trim()];
   return chars.length > ECHO_MAX ? `${chars.slice(0, ECHO_MAX).join('')}…` : chars.join('');
+}
+
+/**
+ * The scenario of a tool input as the tool reads it: missing or null entries take the default; the rest goes through
+ * sanitizeScenario (Ruling 21), which refuses anything out of range.
+ */
+export function toolScenario(raw: unknown): Scenario | 'unreadable' | 'out_of_range' {
+  if (raw !== undefined && raw !== null && !isRecord(raw)) return 'unreadable';
+  const given: Partial<Record<keyof Scenario, unknown>> = {};
+  if (isRecord(raw)) {
+    for (const key of ['cwrMult', 'migMode', 'migScale', 'infraStrength'] as const) {
+      if (raw[key] !== undefined && raw[key] !== null) given[key] = raw[key];
+    }
+  }
+  const scenario = sanitizeScenario(given as Partial<Scenario>);
+  return isScenarioError(scenario) ? 'out_of_range' : scenario;
 }
 
 /** An allocation rebuilt from a tool input: the overlay, and the assumptions it was computed under. */
@@ -132,19 +148,10 @@ export function overlayFromToolInput(
     return { error: '年が2020〜2100年の範囲にないため、地図に反映できません。' };
   }
   const year = Math.floor(raw.year / YEAR_STEP) * YEAR_STEP;
-  // The scenario as the tool read it: missing or null entries take the default; the rest goes through
-  // sanitizeScenario (Ruling 21), which refuses anything out of range.
-  if (raw.scenario !== undefined && raw.scenario !== null && !isRecord(raw.scenario)) {
-    return { error: 'この割り振りの前提が読めないため、地図に反映できません。' };
-  }
-  const given: Partial<Record<keyof Scenario, unknown>> = {};
-  if (isRecord(raw.scenario)) {
-    for (const key of ['cwrMult', 'migMode', 'migScale', 'infraStrength'] as const) {
-      if (raw.scenario[key] !== undefined && raw.scenario[key] !== null) given[key] = raw.scenario[key];
-    }
-  }
-  const scenario = sanitizeScenario(given as Partial<Scenario>);
-  if (isScenarioError(scenario)) return { error: 'この割り振りの前提が範囲外の値を含むため、地図に反映できません。' };
+  const read = toolScenario(raw.scenario);
+  if (read === 'unreadable') return { error: 'この割り振りの前提が読めないため、地図に反映できません。' };
+  if (read === 'out_of_range') return { error: 'この割り振りの前提が範囲外の値を含むため、地図に反映できません。' };
+  const scenario = read;
 
   let at: PopulationAt;
   try {

@@ -8,12 +8,15 @@ import './controlsPanel.css';
 import type { AppData } from '../data/loader';
 import { allocate, type AllocationInput, type AllocationResult, type FacilityFlip } from '../engine/allocation';
 import type { Area, Facility, Series } from '../engine/types';
+import { AllocationFormError, allocationErrorMessage, populationAt, targetPeople, type AllocationTarget, type PopulationAt } from './allocationCore';
 import { buildOverlay } from './allocationOverlay';
-import { deriveTotals, yearIndex } from './derive';
 import { formatPop } from './format';
 import { prefCodesOf, REGION_IDS, REGION_NAMES, type RegionId } from './regions';
 import { badgeFor } from './sources';
 import type { AllocationOverlay, AppState, PanelContext } from './state';
+
+// Re-exported so the panel stays the one import for its form helpers (they live in allocationCore.ts).
+export { AllocationFormError, allocationErrorMessage, populationAt, targetPeople, type AllocationTarget, type PopulationAt };
 
 /** Button texts for drawing the allocation on the map. */
 export const MAP_BUTTON = { off: '地図に反映する', on: '地図に反映中' } as const;
@@ -38,22 +41,12 @@ export const EXAMPLE_COUNT = 3;
 export const DEFAULT_TARGET_PREF = '30';
 
 export interface AllocationForm {
-  target: { kind: 'pref' | 'area'; code: string };
+  target: AllocationTarget;
   /** Share of the target group's population to move, in percent: negative takes people out of the target. */
   percent: number;
   sourceMode: 'proportional' | 'regions';
   /** Used when `sourceMode` is 'regions'. */
   regionIds: readonly RegionId[];
-}
-
-/** A form that cannot be turned into an allocation. The message is for the user (Japanese). */
-export class AllocationFormError extends RangeError {
-  readonly userMessage: string;
-  constructor(userMessage: string) {
-    super(`allocation form: ${userMessage}`);
-    this.name = 'AllocationFormError';
-    this.userMessage = userMessage;
-  }
 }
 
 /** The engine's input for a form, given the target group's population in people (percent -> people). */
@@ -66,19 +59,6 @@ export function buildAllocationInput(form: AllocationForm, targetPeople: number)
     source = { mode: 'regions', prefCodes };
   }
   return { target: { ...form.target }, deltaPeople: (targetPeople * form.percent) / 100, source };
-}
-
-/** A message the user can read for anything the allocation can throw. Never shows an English engine message. */
-export function allocationErrorMessage(e: unknown): string {
-  if (e instanceof AllocationFormError) return e.userMessage;
-  if (e instanceof RangeError) {
-    const m = e.message;
-    if (m.includes('takes more than the target')) return 'そこまで減らせる人口がありません。';
-    if (m.includes("larger than the source")) return '人口を動かす元の地域に、それだけの人口がありません。';
-    if (m.includes('source group is empty')) return '人口を動かす元になる地域がありません。';
-    if (m.includes('no area matches target')) return '選んだ地域が見つかりません。';
-  }
-  return 'この条件では計算できませんでした。';
 }
 
 const countFormat = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 0 });
@@ -210,38 +190,6 @@ export function summarizeAllocation(
   const essentialCount = rows.filter((r) => r.essential).length;
   const cut = Math.max(VISIBLE_ROW_CAP, essentialCount);
   return { year, rows, visible: rows.slice(0, cut), hidden: rows.slice(cut), nothingFlips: rows.length === 0 };
-}
-
-export interface PopulationAt {
-  /** Population of each of the full area list at one year, in the order of `areas`. */
-  popByArea: Map<string, number>;
-  areaPref: Map<string, string>;
-}
-
-const prefMapCache = new WeakMap<readonly Area[], Map<string, string>>();
-
-/** Every area's population in `year` under the series (Ruling 20: always the full list). */
-export function populationAt(data: Pick<AppData, 'areas' | 'groups'>, series: Map<string, Series>, year: number): PopulationAt {
-  const totals = deriveTotals(series, data.groups);
-  const i = yearIndex(totals.years, year);
-  if (i < 0) throw new RangeError(`populationAt: year ${year} is not in the series`);
-  let areaPref = prefMapCache.get(data.areas);
-  if (!areaPref) {
-    areaPref = new Map(data.areas.map((a) => [a.code, a.prefCode]));
-    prefMapCache.set(data.areas, areaPref);
-  }
-  const popByArea = new Map<string, number>();
-  for (const a of data.areas) popByArea.set(a.code, totals.area.get(a.code)?.[i] ?? Number.NaN);
-  return { popByArea, areaPref };
-}
-
-/** People in the target group (the prefecture, or the one town). */
-export function targetPeople(target: AllocationForm['target'], at: PopulationAt): number {
-  let sum = 0;
-  for (const [code, p] of at.popByArea) {
-    if (target.kind === 'area' ? code === target.code : at.areaPref.get(code) === target.code) sum += p;
-  }
-  return sum;
 }
 
 export interface Computed {
