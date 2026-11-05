@@ -38,7 +38,7 @@
     "note": "Municipal boundaries for the map. Raw zips are NOT committed: pipeline/build_geometry.py downloads them to data/raw/n03 (git-ignored) and checks the SHA256 below. Run `python3 -m pipeline.build_geometry --record` after a deliberate source update.",
     "publisher": "Ministry of Land, Infrastructure, Transport and Tourism (MLIT), National Land Numerical Information",
     "title": "Administrative Area Data (N03), 2021-01-01 edition",
-    "license": "Site terms for National Land Numerical Information (government standard terms, compatible with CC BY 4.0); attribution required, state that the data was processed. See docs/sources.d/geometry.md.",
+    "license": "Site terms for National Land Numerical Information (government standard terms, compatible with CC BY 4.0); attribution required, state that the data was processed. See docs/sources.md.",
     "landing_page": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2021.html",
     "terms_page": "https://nlftp.mlit.go.jp/ksj/other/agreement.html",
     "sources": [
