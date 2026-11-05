@@ -109,6 +109,31 @@
 .alloc-name {
   font-weight: 600;
 }
+/* Facility names in the allocation table are buttons that point the map at that facility's towns (aria-pressed):
+   link-like text in a 40px target, the pressed one on the accent's pale face. */
+.alloc-focus {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 var(--sp-2);
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--accent);
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
+.alloc-focus:hover {
+  background: var(--paper-2);
+}
+.alloc-focus[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--ink);
+  text-decoration: none;
+}
 .alloc-more {
   margin-top: var(--sp-3);
 }
