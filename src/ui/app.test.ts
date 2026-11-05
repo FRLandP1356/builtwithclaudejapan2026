@@ -76,7 +76,7 @@ describe('mountApp shell', () => {
     const { root, visibleHost, crumbs } = await mount();
     expect(root.querySelector('main')).not.toBeNull();
     expect([...root.querySelectorAll('.panel')].map((p) => p.id)).toEqual(['panel-town', 'panel-controls', 'panel-allocation', 'panel-ai']);
-    expect(root.querySelectorAll('.panel .panel-empty')).toHaveLength(4);
+    expect(root.querySelectorAll('.panel .panel-empty')).toHaveLength(2); // town and AI placeholders; controls and allocation are mounted (Task 10)
     expect(visibleHost()?.classList.contains('map-host-national')).toBe(true);
     expect(visibleHost()?.querySelectorAll('path.area')).toHaveLength(3);
     expect(crumbs()).toBe('日本');
