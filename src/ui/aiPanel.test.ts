@@ -2204,6 +2204,28 @@ describe('この割り振りを地図に反映する (run_allocation in the trac
       expect(buttons(m).every((b) => b.textContent === hinted)).toBe(true);
     });
 
+    it('keeps what a button needs in a WeakMap keyed by the button, not in a Map that would hold every button for the life of the panel', async () => {
+      // A forced garbage collection would be the direct proof, but it is not deterministic. What can be pinned is that the
+      // per-button data goes into a WeakMap: the global is replaced by one that records its keys, for the panel mounted here.
+      const keys: unknown[] = [];
+      class RecordingWeakMap<K extends WeakKey, V> extends WeakMap<K, V> {
+        override set(key: K, value: V): this {
+          keys.push(key);
+          return super.set(key, value);
+        }
+      }
+      vi.stubGlobal('WeakMap', RecordingWeakMap);
+      try {
+        const m = mount({ cache: withOtherAssumptions() });
+        m.samples()[0]!.click();
+        await answersCount(m, 1);
+        const button = buttons(m)[0]!;
+        expect(keys.filter((key) => key === button)).toHaveLength(1);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
     it('a new conversation clears the answers and their buttons; the next answer\'s button is still repainted', async () => {
       const ctx = makeContext();
       const m = mount({ cache: withOtherAssumptions() }, ctx);
