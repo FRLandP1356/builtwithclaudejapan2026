@@ -92,6 +92,18 @@ export function placeNumbers(totals: Totals, year: number, kind: PlaceKind, code
   return { pop, ratio: row[0] > 0 ? pop / row[0] : NaN, allocated: true, popBefore: before };
 }
 
+/** Relative size below which a difference is arithmetic noise, not a change (the sum over 1,884 areas is exact to ~1e-13). */
+const CHANGE_TOLERANCE = 1e-9;
+
+/**
+ * The allocation really changes this place's figure: its numbers include the allocation and differ from the projected
+ * ones. The whole country (zero-sum, it cannot change) and a place with a 0 % change are not changed, so the figure
+ * there is still the official one.
+ */
+export function figureChanged(n: PlaceNumbers): boolean {
+  return n.allocated && Math.abs(n.pop - n.popBefore) > CHANGE_TOLERANCE * Math.max(1, Math.abs(n.popBefore));
+}
+
 /** Whether the overlay covers a place (every area of a prefecture or Japan is in a full overlay). */
 export function overlayCovers(overlay: AllocationOverlay, areaCodes: readonly string[]): boolean {
   return areaCodes.some((c) => c in overlay.changePercent);

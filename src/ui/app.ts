@@ -12,7 +12,7 @@ import { mountNationalMap } from '../map/nationalMap';
 import { mountPrefectureMap } from '../map/prefectureMap';
 import { mountAllocation } from './allocationPanel';
 import { mountControls } from './controls';
-import { allocationLines, allocationView, changeOf, countMarkers, placeNumbers, type AllocationView, type PlaceKind, type PlaceNumbers } from './allocationView';
+import { allocationLines, allocationView, changeOf, countMarkers, figureChanged, placeNumbers, type AllocationView, type PlaceKind, type PlaceNumbers } from './allocationView';
 import { deriveTotals, ratioAt, yearIndex, type Totals } from './derive';
 import { formatPct, formatPop } from './format';
 import { breadcrumbs, buildSearchIndex, goUp, levelOf, pickArea, pickPref, prefOfArea, type Selection } from './nav';
@@ -449,9 +449,10 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     const parts: Node[] = [keep(`${s.year}年 `, b)];
     if (before) parts.push(keep(before));
     parts.push(document.createTextNode('　'), keep(`2020年比 ${formatPct(n.ratio)}`), document.createTextNode('　'));
-    // An allocation up to 2050 makes the figure this app's own calculation: the 公式推計 / 実績 mark would be wrong, so
-    // 割り振り後 comes with a note on what it is based on instead. After 2050 the 試算 mark stays and 割り振り後 follows.
-    const basisNote = n.allocated ? allocatedBasisNote(s.year) : undefined;
+    // An allocation up to 2050 that changes this place's figure makes it this app's own calculation: the 公式推計 / 実績
+    // mark would be wrong, so 割り振り後 comes with a note on what it is based on instead. Where the figure cannot change
+    // (the whole country) the original mark stays. After 2050 the 試算 mark stays and 割り振り後 follows.
+    const basisNote = figureChanged(n) ? allocatedBasisNote(s.year) : undefined;
     if (!basisNote) {
       const badge = document.createElement('span');
       badge.className = badgeInfo.estimate ? 'badge-estimate' : 'badge-official';

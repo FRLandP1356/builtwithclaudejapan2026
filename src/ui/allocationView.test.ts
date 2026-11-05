@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { Groups } from '../engine/types';
-import { allocationLines, allocationView, crossingCounts, changeOf, countMarkers, overlayCovers, placeNumbers } from './allocationView';
+import { allocationLines, allocationView, changeOf, countMarkers, crossingCounts, figureChanged, overlayCovers, placeNumbers } from './allocationView';
 import type { Totals } from './derive';
 import type { AllocationOverlay } from './state';
 
@@ -72,6 +72,29 @@ describe('placeNumbers', () => {
     expect(placeNumbers(totals, 2100, 'area', '01001')).toEqual({ pop: 100, ratio: 0.5, allocated: false, popBefore: 100 });
     expect(placeNumbers(totals, 2055, 'area', '01001', v)).toBeUndefined();
     expect(placeNumbers(totals, 2100, 'area', '99999', v)).toBeUndefined();
+  });
+});
+
+describe('figureChanged', () => {
+  test('a place whose number moved: yes; the whole country (zero-sum), a place at 0 % and a place without the allocation: no', () => {
+    expect(figureChanged(placeNumbers(totals, 2100, 'area', '01001', v)!)).toBe(true); // +10 %
+    expect(figureChanged(placeNumbers(totals, 2100, 'pref', '02', v)!)).toBe(true); // -5 %
+    expect(figureChanged(placeNumbers(totals, 2100, 'area', '01002', v)!)).toBe(false); // 0 %
+    // a zero-sum allocation: 01001 gains 10 people (100 -> 110), 02001 gives 10 up (600 -> 590); the country's 1,000 stays
+    const zeroSum = allocationView({ ...overlay, changePercent: { '01001': 10, '01002': 0, '02001': -(10 / 600) * 100 } }, totals, groups);
+    const japan = placeNumbers(totals, 2100, 'japan', '', zeroSum)!;
+    expect(japan.allocated).toBe(true); // the numbers do include the allocation...
+    expect(figureChanged(japan)).toBe(false); // ...and it is the same total
+    expect(figureChanged(placeNumbers(totals, 2100, 'pref', '02', zeroSum)!)).toBe(true);
+    expect(figureChanged(placeNumbers(totals, 2100, 'area', '01001')!)).toBe(false); // no allocation drawn
+    expect(figureChanged(placeNumbers(totals, 2020, 'area', '01001', v)!)).toBe(false); // an allocation for another year
+  });
+
+  test('arithmetic noise is not a change; one person in a million is', () => {
+    expect(figureChanged({ pop: 1_000_000_000 * (1 + 1e-12), ratio: 1, allocated: true, popBefore: 1_000_000_000 })).toBe(false);
+    expect(figureChanged({ pop: 1_000_001, ratio: 1, allocated: true, popBefore: 1_000_000 })).toBe(true);
+    expect(figureChanged({ pop: 0.4, ratio: 1, allocated: true, popBefore: 0 })).toBe(true);
+    expect(figureChanged({ pop: 5, ratio: 1, allocated: false, popBefore: 3 })).toBe(false);
   });
 });
 

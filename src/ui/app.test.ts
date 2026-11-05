@@ -524,15 +524,16 @@ describe('allocation overlay on the map', () => {
     expect(tip.querySelector('.badge-alloc')!.textContent).toBe(ALLOC_BADGE);
   });
 
-  test('up to 2050 an allocation is no longer the official figure: 割り振り後 with its basis replaces 公式推計', async () => {
+  test('up to 2050 an allocation is no longer the official figure: 割り振り後 with its basis replaces 公式推計 where the figure changes', async () => {
     const { root, store } = await mount();
     const num = () => root.querySelector('.map-headline-num')!;
-    store.set({ year: 2050 });
+    store.set({ year: 2050, selectedPref: '30' });
+    await settle();
     expect(num().querySelector('.badge-official')!.textContent).toBe('公式推計');
     expect(num().querySelector('.badge-alloc')).toBeNull();
     expect(num().querySelector('.head-basis')).toBeNull();
 
-    store.set({ allocation: overlay({ year: 2050 }) });
+    store.set({ allocation: overlay({ year: 2050 }) }); // 和歌山県: three towns +10%
     expect(num().querySelector('.badge-official')).toBeNull();
     expect(num().querySelector('.badge-estimate')).toBeNull();
     expect(num().querySelector('.badge-alloc')!.textContent).toBe(ALLOC_BADGE);
@@ -546,6 +547,36 @@ describe('allocation overlay on the map', () => {
     store.set({ year: 2050 });
     expect(num().querySelector('.badge-official')).toBeNull();
     store.set({ allocation: undefined });
+    expect(num().querySelector('.badge-official')!.textContent).toBe('公式推計');
+    expect(num().querySelector('.head-basis')).toBeNull();
+  });
+
+  test('where the allocation cannot change the figure (the whole country, or a place at 0 %) the original mark stays', async () => {
+    const { root, store } = await mount();
+    const num = () => root.querySelector('.map-headline-num')!;
+    store.set({ year: 2050 });
+    // A zero-sum allocation (as the allocation panel makes it): 和歌山県の田辺市 +10 %, the other towns give the same people up.
+    const at2050 = (code: string) => total(store.get().series.get(code)![2050]);
+    const taken = (at2050('30206') * 10) / 100;
+    const others = ['13101', '13402', '01101'];
+    const give = -(taken / others.reduce((t, c) => t + at2050(c), 0)) * 100;
+    const zeroSum = (patch: Partial<AllocationOverlay> = {}) =>
+      overlay({ year: 2050, changePercent: { '30206': 10, '30201': 0, '30427': 0, ...Object.fromEntries(others.map((c) => [c, give])) }, ...patch });
+    store.set({ allocation: zeroSum() }); // Japan: the total of a zero-sum allocation
+    expect(num().querySelector('.badge-official')!.textContent).toBe('公式推計');
+    expect(num().querySelector('.head-basis')).toBeNull();
+    expect(num().textContent).not.toContain('このアプリが計算');
+    expect(num().textContent).not.toContain('割り振り前'); // the same total: no second number either
+
+    // 東京都 changes by a real amount: the official mark gives way
+    store.set({ selectedPref: '13' });
+    await settle();
+    expect(num().querySelector('.badge-official')).toBeNull();
+    expect(num().querySelector('.head-basis')!.textContent).toBe('公式推計をもとにこのアプリが計算');
+
+    // 北海道 has a change of 0: its figure is the unallocated one
+    store.set({ allocation: zeroSum({ changePercent: { '30206': 10, '01101': 0 } }), selectedPref: '01' });
+    await settle();
     expect(num().querySelector('.badge-official')!.textContent).toBe('公式推計');
     expect(num().querySelector('.head-basis')).toBeNull();
   });
@@ -572,7 +603,8 @@ describe('allocation overlay on the map', () => {
 
   test('the 2020 census year with an allocation says it is based on the census', async () => {
     const { root, store } = await mount();
-    store.set({ year: 2020, allocation: overlay({ year: 2020 }) });
+    store.set({ year: 2020, selectedPref: '30', allocation: overlay({ year: 2020 }) });
+    await settle();
     const num = root.querySelector('.map-headline-num')!;
     expect(num.querySelector('.badge-official')).toBeNull();
     expect(num.querySelector('.head-basis')!.textContent).toBe('国勢調査をもとにこのアプリが計算');
