@@ -114,7 +114,10 @@ async function callAnthropic(
         'content-type': 'application/json',
       },
       body: JSON.stringify(payload),
-      redirect: 'error',
+      // Cloudflare's fetch accepts only 'follow' or 'manual' (the standard 'error' throws a TypeError in workerd, so
+      // every call would fail). 'manual' hands a 3xx back unfollowed, and the status check below turns it into the
+      // generic 502: the key header is never sent to a redirect target.
+      redirect: 'manual',
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
   } catch {

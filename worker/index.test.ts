@@ -66,8 +66,18 @@ function jsonResponse(body: unknown, status = 200, headers: Record<string, strin
   });
 }
 
+/**
+ * Stand-in for the Workers runtime's fetch. Like workerd, it throws a TypeError for a `redirect` mode other than
+ * 'follow' or 'manual' ('error' is standard but unsupported there), so a wrong mode fails every upstream test
+ * instead of passing here and failing in production.
+ */
 function mockFetch(responder: () => Response | Promise<Response> = () => jsonResponse(OK_BODY)) {
-  return vi.fn<typeof fetch>(async () => responder());
+  return vi.fn<typeof fetch>(async (_input, init) => {
+    if (init?.redirect !== 'follow' && init?.redirect !== 'manual') {
+      throw new TypeError(`Invalid redirect value, must be one of "follow" or "manual" (got ${String(init?.redirect)})`);
+    }
+    return responder();
+  });
 }
 
 interface ReqOptions {
@@ -699,10 +709,32 @@ describe('upstream call', () => {
     }
   });
 
-  it('calls upstream with redirect: "error" so a redirect cannot carry the key elsewhere', async () => {
+  it('calls upstream with redirect: "manual": workerd rejects "error", and "follow" would carry the key to a redirect target', async () => {
     const fetchFn = mockFetch();
-    await handleRequest(chatRequest(validBody()), makeEnv(), fetchFn);
-    expect(fetchFn.mock.calls[0]![1]?.redirect).toBe('error');
+    const res = await handleRequest(chatRequest(validBody()), makeEnv(), fetchFn);
+    expect(res.status).toBe(200);
+    expect(fetchFn.mock.calls[0]![1]?.redirect).toBe('manual');
+  });
+
+  it('does not follow an upstream redirect: a 3xx is a generic 502, the location is not relayed, one fetch only', async () => {
+    const fetchFn = mockFetch(
+      () => new Response(null, { status: 307, headers: { location: 'https://attacker.example/collect' } }),
+    );
+    const res = await handleRequest(chatRequest(validBody()), makeEnv(), fetchFn);
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: 'upstream_error' });
+    expect(res.headers.get('location')).toBeNull();
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('the fetch stand-in rejects the redirect modes workerd rejects (so the tests above can catch a wrong mode)', async () => {
+    const fetchFn = mockFetch();
+    for (const redirect of ['error', undefined] as const) {
+      await expect(fetchFn('https://x.example', { redirect }), String(redirect)).rejects.toBeInstanceOf(TypeError);
+    }
+    for (const redirect of ['follow', 'manual'] as const) {
+      expect((await fetchFn('https://x.example', { redirect })).status, redirect).toBe(200);
+    }
   });
 
   it('cancels the unread upstream body on the 502 paths', async () => {
