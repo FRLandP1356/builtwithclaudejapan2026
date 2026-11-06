@@ -1,5 +1,6 @@
 // Town detail panel (Task 9): key numbers (with the support ratio, 15-64 per person aged 65+, as the fifth tile),
-// population pyramid, population over time, the support ratio over time and, for a town, the facility panel.
+// population pyramid, population over time, the support ratio over time and, for a town, the facility panel and
+// the spending-per-resident block (today's actuals for municipalities of this size).
 // Ruling 27 decides what is shown: nothing selected -> Japan summary; only a prefecture -> prefecture summary
 // (no facilities); a town -> everything.
 //
@@ -11,6 +12,7 @@ import { DEFAULT_SCENARIO, type Area, type Pop, type Series } from '../engine/ty
 import type { AppData } from '../data/loader';
 import { populationAt, type PopulationAt } from './allocationCore';
 import { allocationView, overlayCovers, placeNumbers } from './allocationView';
+import { mountBurdenPanel } from './burdenPanel';
 import { deriveSupport, deriveTotals, type Totals } from './derive';
 import { mountFacilityPanel } from './facilityPanel';
 import { formatPct, formatPop, formatSupport } from './format';
@@ -245,6 +247,12 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
   facilitySection.className = 'panel-section town-facilities';
   const facilities = mountFacilityPanel(facilitySection, data.facilities);
 
+  // After the facilities: also for a town only, and the one block that is an actual of today rather than this app's own
+  // calculation, so it closes the panel.
+  const burdenSection = document.createElement('div');
+  burdenSection.className = 'panel-section town-burden';
+  const burden = mountBurdenPanel(burdenSection, data.finance);
+
   root.append(head, hint, kpiSection, pyramidSection, seriesSection, supportSection);
   el.append(root);
 
@@ -321,8 +329,10 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
       hint.textContent = scope.level === 'japan' ? '町を選ぶと、ここにその町の数字と施設の目安が出ます。' : '市区町村を選ぶと、その町の施設の目安も出ます。';
       if (scope.level === 'area') {
         if (!facilitySection.isConnected) root.append(facilitySection);
+        if (!burdenSection.isConnected) root.append(burdenSection);
       } else {
         facilitySection.remove();
+        burdenSection.remove();
       }
     }
     const sc = scope!;
@@ -400,6 +410,9 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
       supportChart.setMarker(supportPoints.marker);
     }
 
+    // Spending per resident: only for a town; the band is chosen by the population of the selected year (the number above).
+    if (sc.level === 'area' && sc.area) burden.update({ code: sc.area.code, kind: sc.area.kind, year: s.year, population: row[idx] });
+
     // Facilities: only for a town, judged on the unrounded projected population.
     if (sc.level === 'area' && sc.area) {
       facilities.update({
@@ -450,6 +463,7 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
     chart.destroy();
     supportChart.destroy();
     facilities.destroy();
+    burden.destroy();
     if (titleBadge.isConnected) {
       titleBadge.previousSibling?.remove();
       titleBadge.remove();

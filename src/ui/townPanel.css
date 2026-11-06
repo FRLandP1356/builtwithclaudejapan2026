@@ -323,3 +323,103 @@
 .facility-keep-status {
   flex: 1 1 12em;
 }
+
+/* Spending per resident (今の市町村の実績): the town's own figure, the band of today's municipalities of the same size, a
+   strip of the seven bands. The bar of the town's band is the accent colour and is also marked in words. */
+.burden-lead,
+.burden-year {
+  margin: var(--sp-1) 0 0;
+}
+.burden-own {
+  margin: var(--sp-3) 0 var(--sp-1);
+  font-family: var(--font-display);
+  font-size: var(--fs-20);
+  line-height: var(--lh-tight);
+  text-wrap: balance;
+}
+.burden-band {
+  margin: var(--sp-2) 0 0;
+}
+.burden-figure {
+  margin-top: var(--sp-3);
+}
+.burden-strip-title {
+  margin: 0 0 var(--sp-1);
+}
+.burden-bars {
+  display: grid;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.burden-bar {
+  display: grid;
+  grid-template-columns: 7.5em minmax(0, 1fr) 3.25em;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 28px;
+  font-size: var(--fs-14);
+  color: var(--ink-2);
+}
+.burden-label {
+  display: block;
+}
+.burden-here {
+  display: block;
+  font-size: var(--fs-12);
+  font-weight: 600;
+  color: var(--accent);
+}
+.burden-here[hidden] {
+  display: none;
+}
+.burden-track {
+  display: block;
+}
+.burden-fill {
+  display: block;
+  width: var(--burden-w);
+  height: 12px;
+  background: var(--series-reference);
+}
+.burden-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.burden-bar.is-current {
+  color: var(--ink);
+}
+.burden-bar.is-current .burden-label,
+.burden-bar.is-current .burden-value {
+  font-weight: 600;
+}
+.burden-bar.is-current .burden-fill {
+  background: var(--accent);
+}
+.burden-limits,
+.burden-source {
+  margin-top: var(--sp-3);
+}
+.burden-source {
+  margin-top: var(--sp-2);
+}
+.burden-table tr.is-current th,
+.burden-table tr.is-current td {
+  font-weight: 600;
+}
+.burden-table .burden-here {
+  display: inline;
+  margin-left: var(--sp-2);
+}
+.burden-table .burden-here[hidden] {
+  display: none;
+}
+.burden-table th[scope='row'] {
+  font-weight: 400;
+  text-align: left;
+}
+.burden-national,
+.burden-published-note {
+  margin-top: var(--sp-2);
+}
