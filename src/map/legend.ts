@@ -1,5 +1,8 @@
-// Always-visible legend for the map colour. Three modes: the ratio to 2020 (default), the support ratio (people aged
-// 15-64 per person aged 65+, in six classes) and, while a reallocation is drawn, the change in percent caused by it.
+// Always-visible legend for the map colour. Three modes: the ratio to 2020 (default; eight classes of one indigo, paler
+// = fewer people remain), the support ratio (people aged 15-64 per person aged 65+, six classes, closer to black = fewer)
+// and, while a reallocation is drawn, the change in percent caused by it (the diverging rust / blue scale).
+// The two sequential scales run in opposite directions, so the title that says which way sits right under the map, in
+// the body size (app.css .legend-title).
 import {
   allocationLegendRamp,
   allocationLegendStops,
@@ -19,14 +22,14 @@ export interface Legend {
   mode(): LegendMode;
 }
 
-const RATIO_TITLE = '色は2020年の人口との比（濃い赤ほど減り、青は増えた所）';
+export const RATIO_TITLE = '色は2020年の人口に対して、どれだけ残るか（薄いほど少ない）';
 const ALLOCATION_TITLE = '割り振りによる人口の変化（%）（赤は減り、青は増えた所）';
-export const SUPPORT_TITLE = '色は高齢者1人を支える人数（濃いほど多い）';
+export const SUPPORT_TITLE = '色は高齢者1人を支える人数（黒に近いほど少なく、大変）';
 
 interface RenderOptions {
   /** The first and last ticks sit on the bar's ends (aligned inward); off for ticks that all sit between classes. */
   edges: boolean;
-  /** Drop the last label a row (the growth end of the ratio legend sits close to the neutral tick). */
+  /** Drop the last label a row (the end label of the ratio legend, 増えた所は一番濃い, is wider than its block). */
   twoRowEnd: boolean;
   /** What the label reads after the title; by default the tick labels from left to right. */
   spoken?: string[];
@@ -54,8 +57,9 @@ function render(el: HTMLElement, title: string, ramp: Array<{ offset: number; co
     if (opts.edges && i === 0) t.dataset.edge = 'start';
     else if (opts.edges && i === stops.length - 1) {
       t.dataset.edge = 'end';
-      if (opts.twoRowEnd) t.dataset.row = '2'; // the growth end sits close to the neutral tick; drop its label a row
+      if (opts.twoRowEnd) t.dataset.row = '2'; // the end label is wider than its block; drop it a row
     }
+    if (s.row === 2) t.dataset.row = '2'; // a stop may ask for the second row itself (colors.ts legendStops)
     t.textContent = s.label;
     ticks.append(t);
   });

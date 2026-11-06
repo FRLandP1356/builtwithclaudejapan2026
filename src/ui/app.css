@@ -271,6 +271,12 @@
   stroke-linejoin: round;
   pointer-events: none;
 }
+/* The population map (legend in its ratio mode): its palest classes are almost paper, so the paper borders and the
+   light coast would vanish there; a translucent ink line stays visible on every class. */
+.map-column:has(.legend[data-mode='ratio']) .mesh,
+.map-column:has(.legend[data-mode='ratio']) .coast {
+  stroke: var(--map-line-pale);
+}
 .ring {
   fill: none;
   pointer-events: none;
@@ -434,26 +440,29 @@
   margin-top: var(--sp-3);
 }
 
-/* Legend */
+/* Legend. The two sequential scales (population: paler = fewer; support ratio: closer to black = fewer) run in opposite
+   directions, so the title that says which way is in the body size and the body ink, right under the map. */
 .legend {
   padding: var(--sp-3) 0 0;
 }
 .legend-title {
-  font-size: var(--fs-13);
-  color: var(--muted);
+  font-size: var(--fs-16);
+  line-height: 1.5;
+  color: var(--ink);
+  word-break: auto-phrase; /* wraps between phrases in Chromium (どれだけ残るか | 薄いほど), anywhere elsewhere */
 }
 .legend-bar {
   position: relative;
-  height: 10px;
-  margin-top: 6px;
+  height: 14px;
+  margin-top: var(--sp-2);
   border-radius: 2px;
 }
-/* Tall enough for the labels that drop a row (the 1.5倍以上 end label: a 26px tick line, its gap and a 21px text line),
-   so nothing hangs out of the box into the year block below, and the row-2 label sits clear of 「同じ」 above it. */
+/* Tall enough for the labels that drop a row (the 増えた所は一番濃い end label: a 26px tick line, its gap and a 21px text
+   line), so nothing hangs out of the box into the year block below, and the row-2 label sits clear of 「同じ」 above it. */
 .legend-ticks {
   position: relative;
   height: 52px;
-  font-size: var(--fs-12);
+  font-size: var(--fs-13);
   color: var(--ink-2);
 }
 .legend-tick {
