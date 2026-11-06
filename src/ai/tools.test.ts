@@ -8,10 +8,11 @@ import { facilityStatus } from '../engine/facilities';
 import { OFFICIAL_END_YEAR } from '../engine/scenarios';
 import { DEFAULT_SCENARIO } from '../engine/types';
 import type { Area, Facility, Pop, Scenario, Series } from '../engine/types';
+import { MAX_TOOL_RESULT_CHARS, formatToolResult } from './client';
 import { MAX_YEARS, TOOL_DEFS, TOOL_NAMES } from './toolDefs';
 import { TOOL_NAMES as SHARED_NAMES } from './toolNames';
 import { checkNumbers } from './numberCheck';
-import { runTool } from './tools';
+import { runTool, summariseDecreases } from './tools';
 import type { EngineContext } from './tools';
 
 const ctx = makeEngineContext();
@@ -114,6 +115,8 @@ interface AllocOut {
   targetBefore: number;
   targetAfter: number;
   top: Array<Who & { before: number; after: number }>;
+  largestDecreases: Array<Who & { before: number; after: number; delta: number; changePercent: number }>;
+  decreaseSummary: { areaCount: number; totalRemoved: number; medianChangePercent?: number; note: string };
   flippedFacilityCount: number;
   essentialFlippedCount: number;
   omittedFlipCount: number;
@@ -787,6 +790,13 @@ describe('facility_check', () => {
   });
 });
 
+/**
+ * What one run_allocation result may weigh. It was 6 KB before the list of areas that lose people was added (10 more
+ * entries and a summary, about 1.5 KB); the largest result over every prefecture and several moves is about 6.1 KB.
+ * The hard limit on a tool result is MAX_TOOL_RESULT_CHARS (20,000): a test below keeps every result far inside it.
+ */
+const ALLOCATION_BUDGET = 8000;
+
 describe('run_allocation', () => {
   const wakayama10 = { target: { kind: 'pref', code: '30' }, deltaPercent: 10, year: 2100 };
 
@@ -871,7 +881,7 @@ describe('run_allocation', () => {
       expect(r.omittedFlipCount).toBeGreaterThan(0);
       const counts = r.facilityFlips.map((f) => f.lostCount + f.gainedCount);
       expect([...counts].sort((a, b) => b - a)).toEqual(counts);
-      expect(jsonSize(r), JSON.stringify(input)).toBeLessThan(6000);
+      expect(jsonSize(r), JSON.stringify(input)).toBeLessThan(ALLOCATION_BUDGET);
     }
   });
 
@@ -981,7 +991,7 @@ describe('run_allocation', () => {
     expect(call('run_allocation', { deltaPercent: 5, year: 2100 }).error).toBe('invalid_input');
   });
 
-  it('results stay compact (< 6 KB) for a prefecture, an area, a negative move and a many-prefecture source', () => {
+  it('results stay compact (< 8 KB) for a prefecture, an area, a negative move and a many-prefecture source', () => {
     for (const input of [
       wakayama10,
       { target: { kind: 'pref', code: '13' }, deltaPercent: -20, year: 2050 },
@@ -990,8 +1000,304 @@ describe('run_allocation', () => {
     ]) {
       const r = call('run_allocation', input);
       expect(r.error, JSON.stringify(input)).toBeUndefined();
-      expect(jsonSize(r)).toBeLessThan(6000);
+      expect(jsonSize(r)).toBeLessThan(ALLOCATION_BUDGET);
     }
+  });
+});
+
+describe('run_allocation: the areas that lose people', () => {
+  const wakayama10 = { target: { kind: 'pref' as const, code: '30' }, deltaPercent: 10, year: 2100 };
+
+  /** The engine's own allocation for the same move, computed here with no help from the tool. */
+  function oracle(input: { target: { kind: 'pref' | 'area'; code: string }; deltaPercent: number; year: number; prefCodes?: string[] }) {
+    const run = ctx.run(DEFAULT_SCENARIO);
+    const before = new Map(ctx.areas.map((a) => [a.code, total(run.get(a.code)![input.year])]));
+    const prefOf = new Map(ctx.areas.map((a) => [a.code, a.prefCode]));
+    const targetCodes = input.target.kind === 'pref' ? ctx.groups.prefs[input.target.code] : [input.target.code];
+    const targetTotal = targetCodes.reduce((t, c) => t + before.get(c)!, 0);
+    const deltaPeople = Math.round((targetTotal * input.deltaPercent) / 100);
+    const source = input.prefCodes ? ({ mode: 'regions', prefCodes: input.prefCodes } as const) : ({ mode: 'proportional' } as const);
+    const after = allocate(before, prefOf, { target: input.target, deltaPeople, source }, []).pop;
+    // areas that lost people, the biggest loss first: whole people, then the unrounded loss, then the code
+    const losers = ctx.areas
+      .filter((a) => after.get(a.code)! < before.get(a.code)!)
+      .map((a) => ({
+        a,
+        rounded: Math.abs(Math.round(after.get(a.code)!) - Math.round(before.get(a.code)!)),
+        exact: before.get(a.code)! - after.get(a.code)!,
+      }))
+      .sort((x, y) => y.rounded - x.rounded || y.exact - x.exact || x.a.code.localeCompare(y.a.code));
+    return { before, after, deltaPeople, targetCodes, losers };
+  }
+
+  it('Wakayama +10% by the default source: the ten biggest losers are big cities elsewhere, each down by the same tiny share', () => {
+    const r = call('run_allocation', wakayama10);
+    const o = oracle(wakayama10);
+    expect(r.error).toBeUndefined();
+    expect(r.largestDecreases).toHaveLength(10);
+    expect(r.largestDecreases.map((d) => d.code)).toEqual(o.losers.slice(0, 10).map((l) => l.a.code));
+    // an anchor in real figures: the biggest loss is 世田谷区, 345 people or 0.04 percent
+    expect(r.largestDecreases[0]).toEqual({
+      code: '13112', name: '世田谷区', prefName: '東京都', before: 831_236, after: 830_891, delta: -345, changePercent: -0.04,
+    });
+    const wakayamaAreas = new Set(ctx.groups.prefs['30']);
+    // each entry: the exact fields, delta = after - before (negative), the percent from the unrounded figures
+    const sourceTotal = ctx.areas.filter((a) => !wakayamaAreas.has(a.code)).reduce((t, a) => t + o.before.get(a.code)!, 0);
+    const expectedPercent = Math.round((-100 * o.deltaPeople) / sourceTotal * 100) / 100;
+    expect(expectedPercent).toBe(-0.04);
+    r.largestDecreases.forEach((d, i) => {
+      expect(Object.keys(d).sort(), d.code).toEqual(['after', 'before', 'changePercent', 'code', 'delta', 'name', 'prefName']);
+      expect(wakayamaAreas.has(d.code), `${d.code} is not in the target`).toBe(false);
+      expect(d.delta, d.code).toBe(d.after - d.before);
+      expect(d.delta, d.code).toBeLessThan(0);
+      expect(d.after, d.code).toBeLessThan(d.before);
+      expect(d.before, d.code).toBe(Math.round(o.before.get(d.code)!));
+      expect(d.after, d.code).toBe(Math.round(o.after.get(d.code)!));
+      expect(d.changePercent, d.code).toBe(expectedPercent);
+      if (i > 0) expect(Math.abs(d.delta)).toBeLessThanOrEqual(Math.abs(r.largestDecreases[i - 1].delta)); // biggest loss first
+    });
+    // the cut-off: the eleventh loser is no bigger than the tenth that was listed
+    expect(o.losers[10].rounded).toBeLessThanOrEqual(Math.abs(r.largestDecreases[9].delta));
+    // none of the ten is a gainer: the gaining side is in `top`, not here
+    expect(r.top.some((t) => t.after > t.before)).toBe(true);
+  });
+
+  it('decreaseSummary: every other area loses people, and the total removed is the number added to the target (within rounding)', () => {
+    const r = call('run_allocation', wakayama10);
+    const o = oracle(wakayama10);
+    const outside = ctx.areas.length - ctx.groups.prefs['30'].length;
+    expect(outside).toBe(1854);
+    expect(r.decreaseSummary.areaCount).toBe(outside);
+    expect(r.decreaseSummary.areaCount).toBe(o.losers.length);
+    // what the target gained is what the rest lost: the tool's own deltaPeople, and the rounded figures within one person
+    expect(r.decreaseSummary.totalRemoved).toBe(r.deltaPeople);
+    expect(r.decreaseSummary.totalRemoved).toBe(Math.round(o.losers.reduce((t, l) => t + l.exact, 0)));
+    expect(Math.abs(r.decreaseSummary.totalRemoved - (r.targetAfter - r.targetBefore))).toBeLessThanOrEqual(1);
+    expect(r.decreaseSummary.medianChangePercent).toBe(-0.04);
+    expect(r.decreaseSummary.medianChangePercent).toBe(r.largestDecreases[0].changePercent);
+  });
+
+  it('the note says, in one plain sentence with no figures and no advice, that the others lose a tiny equal share', () => {
+    const { note } = call('run_allocation', wakayama10).decreaseSummary;
+    expect(note).toMatch(/[ぁ-んァ-ヶ一-龠]/);
+    expect(note).toContain('すべての地域');
+    expect(note).toContain('同じ割合');
+    expect(note).toContain('わずかに');
+    expect(note).toContain('人口の多い地域の順');
+    expect(note.split('。').filter(Boolean)).toHaveLength(1);
+    expect(note).not.toMatch(/\d/);
+    expect(note).not.toMatch(/予測|予想|残せ|勧め|べき|しましょう|おすすめ/);
+    // a big move is not called tiny: Osaka +100% takes several percent from every other area
+    const big = call('run_allocation', { target: { kind: 'pref', code: '27' }, deltaPercent: 100, year: 2100 });
+    expect(Math.abs(big.decreaseSummary.medianChangePercent!)).toBeGreaterThan(1);
+    expect(big.decreaseSummary.note).toContain('同じ割合');
+    expect(big.decreaseSummary.note).not.toContain('わずかに');
+  });
+
+  it('sourceMode regions: the decreases are concentrated in the named prefecture, each area down by the same larger share', () => {
+    const input = { ...wakayama10, deltaPercent: 5, sourceMode: 'regions', prefCodes: ['27'] };
+    const r = call('run_allocation', input);
+    const o = oracle({ target: { kind: 'pref', code: '30' }, deltaPercent: 5, year: 2100, prefCodes: ['27'] });
+    const osaka = new Set(ctx.groups.prefs['27']);
+    expect(r.error).toBeUndefined();
+    // only Osaka's areas lose people, and every one of them does
+    expect(r.decreaseSummary.areaCount).toBe(osaka.size);
+    expect(o.losers.map((l) => l.a.code).sort()).toEqual([...osaka].sort());
+    expect(r.largestDecreases).toHaveLength(10);
+    expect(r.largestDecreases.map((d) => d.code)).toEqual(o.losers.slice(0, 10).map((l) => l.a.code));
+    for (const d of r.largestDecreases) expect(osaka.has(d.code), d.code).toBe(true);
+    // the share is the one Osaka pays, far larger than the nationwide share of the same move
+    const osakaTotal = [...osaka].reduce((t, c) => t + o.before.get(c)!, 0);
+    const share = Math.round((-100 * o.deltaPeople) / osakaTotal * 100) / 100;
+    expect(share).toBeLessThan(-0.3);
+    expect(r.decreaseSummary.medianChangePercent).toBe(share);
+    for (const d of r.largestDecreases) expect(d.changePercent, d.code).toBe(share);
+    const nationwide = call('run_allocation', { ...wakayama10, deltaPercent: 5 });
+    expect(r.decreaseSummary.areaCount).toBeLessThan(nationwide.decreaseSummary.areaCount / 10);
+    expect(Math.abs(share)).toBeGreaterThan(Math.abs(nationwide.decreaseSummary.medianChangePercent!) * 10);
+    expect(r.decreaseSummary.totalRemoved).toBe(r.deltaPeople);
+    expect(r.decreaseSummary.note).toContain('指定した県');
+    expect(r.decreaseSummary.note).not.toContain('ほかの全国');
+    expect(r.decreaseSummary.note).not.toMatch(/\d/);
+  });
+
+  it('a negative move: the losers are the target\'s own areas, down by the percentage asked, and the others gain', () => {
+    const input = { target: { kind: 'pref', code: '13' }, deltaPercent: -20, year: 2050 };
+    const r = call('run_allocation', input);
+    const o = oracle({ target: { kind: 'pref', code: '13' }, deltaPercent: -20, year: 2050 });
+    const tokyo = new Set(ctx.groups.prefs['13']);
+    expect(r.deltaPeople).toBeLessThan(0);
+    expect(r.decreaseSummary.areaCount).toBe(tokyo.size);
+    expect(r.decreaseSummary.totalRemoved).toBe(-r.deltaPeople);
+    expect(r.decreaseSummary.medianChangePercent).toBe(-20);
+    expect(r.largestDecreases.map((d) => d.code)).toEqual(o.losers.slice(0, 10).map((l) => l.a.code));
+    for (const d of r.largestDecreases) {
+      expect(tokyo.has(d.code), d.code).toBe(true);
+      expect(d.delta).toBeLessThan(0);
+      expect(d.changePercent).toBe(-20);
+    }
+    expect(r.decreaseSummary.note).toContain('対象');
+    expect(r.decreaseSummary.note).not.toContain('ほかの全国');
+    // a single area target
+    const one = call('run_allocation', { target: { kind: 'area', code: TANABE }, deltaPercent: -20, year: 2100 });
+    expect(one.largestDecreases).toEqual([{ code: TANABE, name: '田辺市', prefName: '和歌山県', before: 11_880, after: 9_504, delta: -2_376, changePercent: -20 }]);
+    expect(one.decreaseSummary).toMatchObject({ areaCount: 1, totalRemoved: 2_376, medianChangePercent: -20 });
+  });
+
+  it('an area target that gains takes people from every other area, including the rest of its own prefecture', () => {
+    const r = call('run_allocation', { target: { kind: 'area', code: TANABE }, deltaPercent: 20, year: 2100 });
+    expect(r.decreaseSummary.areaCount).toBe(ctx.areas.length - 1);
+    expect(r.largestDecreases.map((d) => d.code)).not.toContain(TANABE);
+    expect(r.decreaseSummary.totalRemoved).toBe(r.deltaPeople);
+  });
+
+  it('nothing moves: no area loses people, the list is empty and the summary has no median', () => {
+    const r = call('run_allocation', { ...wakayama10, deltaPercent: 0 });
+    expect(r.error).toBeUndefined();
+    expect(r.largestDecreases).toEqual([]);
+    expect(r.decreaseSummary).toEqual({ areaCount: 0, totalRemoved: 0, note: '人口が動いていないので、減る地域はありません。' });
+    expect(Object.keys(r.decreaseSummary)).not.toContain('medianChangePercent');
+  });
+
+  it('a one-person move: the percentages round to 0 (never -0) and the list is still by size', () => {
+    const r = call('run_allocation', { target: { kind: 'pref', code: '30' }, deltaPeople: 1, year: 2100 });
+    expect(r.decreaseSummary.areaCount).toBe(1854); // every other area loses a fraction of a person
+    expect(r.decreaseSummary.totalRemoved).toBe(1);
+    expect(Object.is(r.decreaseSummary.medianChangePercent, 0)).toBe(true);
+    for (const d of r.largestDecreases) {
+      expect(Object.is(d.changePercent, 0), d.code).toBe(true);
+      expect(Object.is(d.delta, 0) || d.delta < 0, d.code).toBe(true);
+    }
+    const deltas = r.largestDecreases.map((d) => Math.abs(d.delta));
+    expect([...deltas].sort((a, b) => b - a)).toEqual(deltas);
+  });
+
+  it('every existing field is kept, in the same place, and only the two new ones are added', () => {
+    const r = call('run_allocation', wakayama10);
+    expect(Object.keys(r)).toEqual([
+      'year', 'scenario', 'target', 'deltaPercent', 'deltaPeople', 'source', 'targetBefore', 'targetAfter', 'top',
+      'largestDecreases', 'decreaseSummary', 'flippedFacilityCount', 'essentialFlippedCount', 'omittedFlipCount', 'essentialFlips', 'facilityFlips',
+    ]);
+    // `top` is still the ten areas with the biggest change in either direction (here the gaining side leads)
+    const o = oracle(wakayama10);
+    const bySize = ctx.areas
+      .map((a) => ({ code: a.code, rounded: Math.abs(Math.round(o.after.get(a.code)!) - Math.round(o.before.get(a.code)!)), exact: Math.abs(o.after.get(a.code)! - o.before.get(a.code)!) }))
+      .sort((x, y) => y.rounded - x.rounded || y.exact - x.exact || x.code.localeCompare(y.code));
+    expect(r.top.map((t) => t.code)).toEqual(bySize.slice(0, 10).map((t) => t.code));
+    expect(r.top[0]).toEqual({ code: '30201', name: '和歌山市', prefName: '和歌山県', before: 153_006, after: 168_307 });
+  });
+
+  it('the tool text names both lists and the summary', () => {
+    const def = TOOL_DEFS.find((t) => t.name === 'run_allocation')!;
+    for (const word of ['top', 'largestDecreases', 'decreaseSummary', 'essentialFlips']) expect(def.description, word).toContain(word);
+    expect(def.description).toContain('減る');
+    expect(def.description.length).toBeLessThan(400);
+  });
+
+  it('the new figures can be quoted: the number check accepts the ones in the result and flags an invented one', () => {
+    const r = call('run_allocation', wakayama10);
+    const d = r.largestDecreases[0];
+    const quote = `世田谷区は${d.before.toLocaleString('en-US')}人から${d.after.toLocaleString('en-US')}人へ、${Math.abs(d.delta)}人（約${Math.abs(d.changePercent)}%）減ります。減る地域は${r.decreaseSummary.areaCount.toLocaleString('en-US')}で、合計${r.decreaseSummary.totalRemoved.toLocaleString('en-US')}人です。`;
+    expect(checkNumbers(quote, [r]).unverified).toEqual([]);
+    expect(checkNumbers('世田谷区は約7.77%減ります。', [r]).unverified).toEqual(['7.77%']);
+  });
+
+  it('size: large moves of every kind stay far below the 20,000-character limit on a tool result and the 8 KB budget', () => {
+    const inputs: unknown[] = [
+      { target: { kind: 'pref', code: '27' }, deltaPercent: 100, year: 2100 },
+      { target: { kind: 'pref', code: '13' }, deltaPercent: -30, year: 2100 },
+      { target: { kind: 'pref', code: '14' }, deltaPercent: -50, year: 2100 },
+      { target: { kind: 'pref', code: '01' }, deltaPeople: 500_000, year: 2100, prefCodes: ['11', '12', '13', '14'] },
+      { target: { kind: 'area', code: '39201' }, deltaPercent: 1000, year: 2100 },
+      { target: { kind: 'pref', code: '13' }, deltaPercent: 100, year: 2050, prefCodes: Object.keys(ctx.groups.prefs).filter((c) => c !== '13') },
+    ];
+    for (const input of inputs) {
+      const r = call('run_allocation', input);
+      expect(r.error, JSON.stringify(input)).toBeUndefined();
+      expect(r.largestDecreases.length).toBeLessThanOrEqual(10);
+      expect(jsonSize(r), JSON.stringify(input)).toBeLessThan(ALLOCATION_BUDGET);
+      expect(formatToolResult(r).truncated).toBe(false);
+      expect(jsonSize(r)).toBeLessThan(MAX_TOOL_RESULT_CHARS / 2);
+    }
+    // every prefecture as the target, gaining and losing: the biggest result of the lot
+    let biggest = 0;
+    for (const code of Object.keys(ctx.groups.prefs)) {
+      for (const deltaPercent of [-50, 100]) {
+        const r = call('run_allocation', { target: { kind: 'pref', code }, deltaPercent, year: 2100 });
+        if (r.error === undefined) biggest = Math.max(biggest, jsonSize(r));
+      }
+    }
+    expect(biggest).toBeGreaterThan(5000); // the sweep really reaches the heavy cases
+    expect(biggest).toBeLessThan(ALLOCATION_BUDGET);
+  });
+});
+
+describe('summariseDecreases (the count, the total and the median on made-up figures)', () => {
+  // falls of 1, 2, 10, 3 and 50 percent of 100, given out of order
+  const area = (percent: number): { before: number; after: number } => ({ before: 100, after: 100 - percent });
+  const five = [area(2), area(50), area(1), area(10), area(3)];
+
+  it('an odd number of areas: the middle percentage, whatever the order they come in', () => {
+    expect(summariseDecreases(five, 66, 'proportional')).toMatchObject({ areaCount: 5, totalRemoved: 66, medianChangePercent: -3 });
+    expect(summariseDecreases([...five].reverse(), 66, 'proportional')).toMatchObject({ medianChangePercent: -3 });
+  });
+
+  it('an even number: the mean of the two middle ones; one area: its own percentage; none: no median', () => {
+    expect(summariseDecreases([area(2), area(10), area(1), area(3)], 16, 'proportional')).toMatchObject({ areaCount: 4, totalRemoved: 16, medianChangePercent: -2.5 });
+    expect(summariseDecreases([area(7)], 7, 'regions')).toMatchObject({ areaCount: 1, totalRemoved: 7, medianChangePercent: -7 });
+    expect(Object.keys(summariseDecreases([], 0, 'proportional')).sort()).toEqual(['areaCount', 'note', 'totalRemoved']);
+  });
+
+  it('the total adds the unrounded falls before rounding; the median is rounded to two decimals', () => {
+    const r = summariseDecreases([{ before: 10, after: 9.6 }, { before: 10, after: 9.6 }, { before: 3, after: 2.7 }], 1, 'proportional');
+    expect(r.totalRemoved).toBe(1); // 0.4 + 0.4 + 0.3 = 1.1
+    expect(r.medianChangePercent).toBe(-4); // (-4, -4, -10): the middle one
+    expect(summariseDecreases([{ before: 3, after: 2.9 }], 0, 'proportional').medianChangePercent).toBe(-3.33);
+  });
+});
+
+describe('run_allocation: the order of the decreases on a synthetic world', () => {
+  const pop = (n: number): Pop => ({ M: [n, ...new Array(19).fill(0)], F: new Array(20).fill(0) });
+  const area = (code: string, prefCode: string, n: number): Area => ({
+    code, name: `area${code}`, prefCode, prefName: `pref${prefCode}`, kind: 'city', base: pop(n),
+    official: { 2025: n, 2030: n, 2035: n, 2040: n, 2045: n, 2050: n }, assumptions: null,
+  });
+  const worldOf = (areas: Area[], prefs: Record<string, string[]>): EngineContext => ({
+    areas,
+    facilities: [],
+    groups: { cities: {}, prefs },
+    run: () => new Map(areas.map((a) => [a.code, Object.fromEntries(Array.from({ length: 17 }, (_, i) => [2020 + 5 * i, a.base])) as Series])),
+  });
+
+  it('equal whole-person losses are ordered by the unrounded loss, then by code', () => {
+    // T gains 2 people. S1 (1,000), S2 and S3 (1,010 each) pay: each loses about 0.66 or 0.67, a whole person once
+    // rounded; S2 and S3 lose a little more than S1, and S2 and S3 are exactly equal.
+    const world = worldOf(
+      [area('01001', '01', 1000), area('01002', '01', 1010), area('01003', '01', 1010), area('02001', '02', 1000)],
+      { '01': ['01001', '01002', '01003'], '02': ['02001'] },
+    );
+    const r = call('run_allocation', { target: { kind: 'pref', code: '02' }, deltaPeople: 2, year: 2050 }, world);
+    expect(r.error).toBeUndefined();
+    expect(r.largestDecreases).toEqual([
+      { code: '01002', name: 'area01002', prefName: 'pref01', before: 1010, after: 1009, delta: -1, changePercent: -0.07 },
+      { code: '01003', name: 'area01003', prefName: 'pref01', before: 1010, after: 1009, delta: -1, changePercent: -0.07 },
+      { code: '01001', name: 'area01001', prefName: 'pref01', before: 1000, after: 999, delta: -1, changePercent: -0.07 },
+    ]);
+    expect(r.decreaseSummary).toMatchObject({ areaCount: 3, totalRemoved: 2, medianChangePercent: -0.07 });
+  });
+
+  it('the whole-person change comes first even when the unrounded loss says otherwise (the order is the same as in top)', () => {
+    // T gains 1 person; A (100.6), B (200) and C (700) pay 0.1005, 0.1999 and 0.6996 of a person. Rounded to whole
+    // people, A goes 101 -> 100 (down 1), B stays 200 (down 0) and C goes 700 -> 699 (down 1).
+    const world = worldOf(
+      [area('01001', '01', 100.6), area('01002', '01', 200), area('01003', '01', 700), area('02001', '02', 1000)],
+      { '01': ['01001', '01002', '01003'], '02': ['02001'] },
+    );
+    const r = call('run_allocation', { target: { kind: 'pref', code: '02' }, deltaPeople: 1, year: 2050 }, world);
+    expect(r.error).toBeUndefined();
+    expect(r.largestDecreases.map((d) => [d.code, d.delta])).toEqual([['01003', -1], ['01001', -1], ['01002', 0]]);
+    expect(r.top.map((t) => t.code).slice(0, 3)).toEqual(['02001', '01003', '01001']); // the same comparator: the target's +1, then C, then A (B, down 0, is last)
+    expect(r.decreaseSummary).toMatchObject({ areaCount: 3, totalRemoved: 1, medianChangePercent: -0.1 });
   });
 });
 

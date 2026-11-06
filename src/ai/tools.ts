@@ -3,7 +3,8 @@
 //
 // runTool never throws for bad model input. It returns `{ error, message }` (Japanese message) with one of the codes
 // unknown_tool, invalid_input, unknown_area, year_out_of_range, scenario_out_of_range, allocation_not_possible or
-// internal_error. Results are curated plain JSON (no raw Area objects, no file paths) and stay well under 6 KB.
+// internal_error. Results are curated plain JSON (no raw Area objects, no file paths); the largest, run_allocation, is
+// about 6 KB, far below the 20,000 characters the client lets one tool result carry.
 import { ageGroups, ages65, sumSeries, total } from '../engine/aggregate';
 import { allocate } from '../engine/allocation';
 import type { AllocationInput } from '../engine/allocation';
@@ -264,6 +265,8 @@ function parseFiniteNumber(raw: unknown, label: string): number {
 
 const people = (x: number): number => Math.round(x);
 const percent1 = (x: number): number => Math.round(x * 10) / 10;
+/** Two decimals; a change that rounds to nothing is 0, never -0. */
+const percent2 = (x: number): number => Math.round(x * 100) / 100 || 0;
 const basisOf = (year: number): 'official' | 'app_estimate' => (year <= OFFICIAL_END_YEAR ? 'official' : 'app_estimate');
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -539,6 +542,45 @@ function allocationFailureMessage(engineMessage: string, deltaPeople: number, ta
   return 'この条件では人口を動かせません。対象と人数、引く側の指定を見直してください。';
 }
 
+export interface Decrease {
+  before: number;
+  after: number;
+}
+
+/** One plain sentence on who loses people and why the list looks the way it does. Digits and advice stay out of it. */
+function decreaseNote(count: number, deltaPeople: number, sourceMode: 'proportional' | 'regions', smallShare: boolean): string {
+  if (count === 0) return '人口が動いていないので、減る地域はありません。';
+  if (deltaPeople < 0) return '減るのは対象の人口で、対象の中のどの地域も、人口に比例して同じ割合で減ります。';
+  if (sourceMode === 'regions') {
+    return '引く元に指定した県の地域だけが、人口に比例して同じ割合で減るため、この一覧はその中の人口の多い地域の順です。';
+  }
+  return smallShare
+    ? 'ほかの全国のすべての地域が、人口に比例して同じ割合でわずかに減るため、この一覧は人口の多い地域の順です。'
+    : 'ほかの全国のすべての地域が、人口に比例して同じ割合で減るため、この一覧は人口の多い地域の順です。';
+}
+
+/**
+ * The losing side of an allocation as a whole: how many areas lose people, how many people they lose together (the
+ * same number as the target gains, up to rounding) and the median of their percentage changes. Inside the group that
+ * pays, the engine takes the same share from every area, so the median is also the change of each of them.
+ * Exported for tests (the engine alone cannot produce areas with different shares to test the median on).
+ */
+export function summariseDecreases(
+  losing: Decrease[],
+  deltaPeople: number,
+  sourceMode: 'proportional' | 'regions',
+): { areaCount: number; totalRemoved: number; medianChangePercent?: number; note: string } {
+  const percents = losing.map((m) => (100 * (m.after - m.before)) / m.before).sort((a, b) => a - b);
+  const mid = percents.length >> 1;
+  const median = percents.length === 0 ? undefined : percents.length % 2 === 1 ? percents[mid] : (percents[mid - 1] + percents[mid]) / 2;
+  return {
+    areaCount: losing.length,
+    totalRemoved: people(losing.reduce((t, m) => t + (m.before - m.after), 0)),
+    ...(median !== undefined ? { medianChangePercent: percent2(median) } : {}),
+    note: decreaseNote(losing.length, deltaPeople, sourceMode, median !== undefined && Math.abs(median) < 1),
+  };
+}
+
 function runAllocation(raw: unknown, ctx: EngineContext): unknown {
   const input = asInput(raw);
   if (!isRecord(input.target)) return fail('invalid_input', 'target は { kind: "pref" か "area", code } で指定してください。');
@@ -591,15 +633,34 @@ function runAllocation(raw: unknown, ctx: EngineContext): unknown {
   }
 
   const name = (code: string): string => index.areaByCode.get(code)!.name;
-  const top = ctx.areas
-    .map((a) => {
-      const before = popByArea.get(a.code)!;
-      const after = result.pop.get(a.code)!;
-      return { a, before, after, rounded: Math.abs(people(after) - people(before)), exact: Math.abs(after - before) };
-    })
-    .sort((x, y) => y.rounded - x.rounded || y.exact - x.exact || (x.a.code < y.a.code ? -1 : 1))
+  const moved = ctx.areas.map((a) => {
+    const before = popByArea.get(a.code)!;
+    const after = result.pop.get(a.code)!;
+    return { a, before, after, rounded: Math.abs(people(after) - people(before)), exact: Math.abs(after - before) };
+  });
+  type Moved = (typeof moved)[number];
+  /** Largest change first (in whole people, then unrounded), ties by code: the order of both lists below. */
+  const biggestChange = (x: Moved, y: Moved): number => y.rounded - x.rounded || y.exact - x.exact || (x.a.code < y.a.code ? -1 : 1);
+  const top = [...moved]
+    .sort(biggestChange)
     .slice(0, MAX_TOP)
     .map(({ a, before, after }) => ({ code: a.code, name: a.name, prefName: a.prefName, before: people(before), after: people(after) }));
+
+  // The losing side: every area whose population fell. `top` is by size of change, so it mostly shows the gaining side.
+  const losing = moved.filter((m) => m.after < m.before);
+  const largestDecreases = [...losing]
+    .sort(biggestChange)
+    .slice(0, MAX_TOP)
+    .map(({ a, before, after }) => ({
+      code: a.code,
+      name: a.name,
+      prefName: a.prefName,
+      before: people(before),
+      after: people(after),
+      delta: people(after) - people(before),
+      changePercent: percent2((100 * (after - before)) / before),
+    }));
+  const decreaseSummary = summariseDecreases(losing, deltaPeople, source.mode);
 
   const examples = (codes: string[]): string[] =>
     [...codes].sort((x, y) => result.pop.get(y)! - result.pop.get(x)! || (x < y ? -1 : 1)).slice(0, MAX_EXAMPLES).map(name);
@@ -634,6 +695,8 @@ function runAllocation(raw: unknown, ctx: EngineContext): unknown {
     targetBefore: people(targetBefore),
     targetAfter: people(sumOf(targetCodes, result.pop)),
     top,
+    largestDecreases,
+    decreaseSummary,
     flippedFacilityCount: changed.length,
     essentialFlippedCount: essentialFlips.length,
     omittedFlipCount: others.length - facilityFlips.length,

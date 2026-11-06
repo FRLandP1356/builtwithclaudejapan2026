@@ -120,7 +120,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'run_allocation',
     description:
-      '人口を動かす仮定。対象（都道府県か市区町村）の人口を deltaPercent か deltaPeople のどちらか一方で増減し、同じ人数を他の地域から引く（全国の合計は変わらない）。引く元は既定で全国に人口比。regions と prefCodes で県を限れる。変化の大きい地域と、目安をまたぐ施設を返す（必須の施設は essentialFlips に全部）。',
+      '人口を動かす仮定。対象（都道府県か市区町村）の人口を deltaPercent か deltaPeople のどちらか一方で増減し、同じ人数を他の地域から引く（全国の合計は変わらない）。引く元は既定で全国に人口比。regions と prefCodes で県を限れる。返すのは、変化の大きい地域（top）、人口が減る地域の上位10件（largestDecreases）とその集計（decreaseSummary：減る地域の数・減った人数の合計・減る割合の中央値）、目安をまたぐ施設（必須の施設は essentialFlips に全部）。',
     input_schema: {
       type: 'object',
       properties: {
