@@ -632,6 +632,22 @@ describe('guidance marks under the controls', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  test('the sentences wrap between phrases, never inside a number or a bracket (one no-break span per phrase)', () => {
+    const { el } = mount();
+    for (const sel of ['.bar-marks-intro', '#ctl-cwr-marks .bar-marks-fact', '#ctl-migscale-marks .bar-marks-fact']) {
+      const p = el.querySelector(sel)!;
+      const spans = [...p.querySelectorAll(':scope > .keep')];
+      expect(spans.length, sel).toBeGreaterThan(2);
+      expect(spans.map((s) => s.textContent).join(''), sel).toBe(p.textContent);
+    }
+    expect([...el.querySelectorAll('#ctl-cwr-marks .bar-marks-fact .keep')].map((s) => s.textContent)).toEqual([
+      'この範囲の右端',
+      '（×1.4）でも、',
+      '2100年の日本全体は2050年',
+      '（1億469万人）に届きません。',
+    ]);
+  });
+
   test('the controls are described by their marks (screen readers read them with the control)', () => {
     const { q } = mount();
     expect(q('#ctl-cwr').getAttribute('aria-describedby')).toBe('ctl-cwr-marks ctl-cwr-help');

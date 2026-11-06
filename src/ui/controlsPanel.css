@@ -39,6 +39,13 @@
 .bar-marks-list dd {
   margin: 0;
 }
+.bar-marks-fact {
+  margin-top: var(--sp-1);
+}
+/* The mode block sits right above the strength bar's label: leave a gap so the two groups read apart. */
+.bar-marks + .field-label {
+  margin-top: var(--sp-3);
+}
 
 /* The two long migration choices stack so neither wraps awkwardly at 390px. */
 .choice-stack {

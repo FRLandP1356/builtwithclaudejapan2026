@@ -184,7 +184,7 @@ function marksElement(b: MarksBlock): HTMLElement {
   const badge = document.createElement('span');
   badge.className = 'badge-estimate';
   badge.textContent = ESTIMATE_BADGE;
-  title.append(badge, ' ', b.title);
+  title.append(badge, ' ', ...phraseNodes(b.title));
   const list = document.createElement('dl');
   list.className = 'bar-marks-list';
   for (const row of b.rows) {
