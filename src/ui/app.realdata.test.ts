@@ -9,6 +9,7 @@ import { computeAllocation, populationAt } from './allocationPanel';
 import { total } from '../engine/aggregate';
 import { mountApp, type AppHandle } from './app';
 import { formatPop } from './format';
+import { SUPPORT_COLORS } from '../map/colors';
 
 const diskFetch = (async (input: string | URL | Request) => {
   const path = String(input).replace(/^\//, '');
@@ -225,7 +226,7 @@ describe('the support ratio on the real maps (people aged 15-64 per person aged 
     expect(root.querySelector('#panel-town .town-support-kpi .kpi-value')!.textContent).toBe('0.8人');
     // every area has a colour from the ramp (no area without anyone aged 65+ in the real data)
     const fills = new Set([...pref.querySelectorAll('path.area')].map((p) => p.getAttribute('fill')));
-    for (const f of fills) expect(['#a0afc3', '#889ab5', '#7086a8', '#58739a', '#415f8c', '#2b4c7e']).toContain(f);
+    for (const f of fills) expect(SUPPORT_COLORS).toContain(f);
     store.set({ mapMode: 'change', selectedArea: undefined });
     await settle();
   }, 30_000);

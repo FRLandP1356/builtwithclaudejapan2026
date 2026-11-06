@@ -4,7 +4,7 @@ import { loadSampleAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
 import { loadFinance } from '../../test/helpers/loadFinance';
 import { makeTopology } from '../../test/helpers/makeTopology';
-import { allocationColor, changeColor, RATIO_MAX, SUPPORT_COLORS, supportColor } from '../map/colors';
+import { allocationColor, SUPPORT_COLORS, supportColor } from '../map/colors';
 import { SUPPORT_TITLE } from '../map/legend';
 import type { Pop } from '../engine/types';
 import { ALLOC_BADGE, ALLOC_CLEAR, mountApp, SKIP_TO_YEAR, sourceHtml, type AppHandle } from './app';
@@ -495,7 +495,7 @@ describe('allocation overlay on the map', () => {
     const after = [...svg.querySelectorAll('path.area')];
     expect(after).toEqual(before); // no DOM rebuild
     expect(wakayama.getAttribute('fill')).toBe(allocationColor(10, 10));
-    expect(wakayama.getAttribute('fill')).toBe(changeColor(RATIO_MAX));
+    expect(wakayama.getAttribute('fill')).toBe('#376daf'); // the blue end of the diverging scale (theme.css --growth), none of the nine population classes
     expect(wakayama.getAttribute('fill')).not.toBe(ratioFill);
     const legend = root.querySelector('.legend')!;
     expect(legend.textContent).toContain('割り振りによる人口の変化（%）');
@@ -673,7 +673,7 @@ describe('allocation overlay on the map', () => {
     clear.click();
     expect(store.get().allocation).toBeUndefined();
     expect(wakayama.getAttribute('fill')).toBe(ratioFill);
-    expect(root.querySelector('.legend')!.textContent).toContain('2020年の人口との比');
+    expect(root.querySelector('.legend')!.textContent).toContain('2020年の人口に対して');
     expect(root.querySelector<HTMLElement>('.alloc-bar')!.hidden).toBe(true);
     expect(root.querySelector('.map-headline-num [class^="badge-"]')!.textContent).toBe('試算');
     expect(root.querySelector('.map-headline-num .badge-alloc')).toBeNull();
@@ -889,7 +889,7 @@ describe('allocation overlay on the map', () => {
     store.set({ scenario: { cwrMult: 1.2, migMode: 'hold', migScale: 1, infraStrength: 0 } });
     expect(store.get().allocation).toBeUndefined();
     expect(root.querySelector<HTMLElement>('.alloc-bar')!.hidden).toBe(true);
-    expect(root.querySelector('.legend')!.textContent).toContain('2020年の人口との比');
+    expect(root.querySelector('.legend')!.textContent).toContain('2020年の人口に対して');
   });
 });
 
@@ -947,7 +947,7 @@ describe('the map colour mode: the change since 2020 or the support ratio', () =
     const legend = root.querySelector<HTMLElement>('.legend')!;
     expect(legend.dataset.mode).toBe('support');
     expect(legend.querySelector('.legend-title')!.textContent).toBe(SUPPORT_TITLE);
-    expect(SUPPORT_TITLE).toBe('色は高齢者1人を支える人数（濃いほど多い）');
+    expect(SUPPORT_TITLE).toBe('色は高齢者1人を支える人数（黒に近いほど少なく、大変）');
     expect([...legend.querySelectorAll('.legend-tick')].map((t) => t.textContent)).toEqual(['0.8人', '1人', '1.5人', '2人', '3人']);
     expect([...legend.querySelectorAll('.legend-tick')].some((t) => (t as HTMLElement).dataset.edge)).toBe(false); // all between classes
     expect(legend.getAttribute('aria-label')).toBe(`${SUPPORT_TITLE}。左から 0.8人未満、0.8〜1人、1〜1.5人、1.5〜2人、2〜3人、3人以上。`);
@@ -958,7 +958,7 @@ describe('the map colour mode: the change since 2020 or the support ratio', () =
     expect(pressed(root)).toEqual(['true', 'false']);
     expect(svg.querySelector('path.area[data-code="30"]')!.getAttribute('fill')).toBe(changeFill);
     expect(legend.dataset.mode).toBe('ratio');
-    expect(legend.textContent).toContain('2020年の人口との比');
+    expect(legend.textContent).toContain('2020年の人口に対して');
   });
 
   test('the headline shows the national ratio, with 2020 and the year\'s mark; the labels and the tooltip say the area\'s ratio', async () => {

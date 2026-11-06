@@ -5,33 +5,38 @@
 // Population relative to 2020 (decided 2026-11-06 with the owner; see src/ui/DESIGN.md):
 // - One hue, the app's indigo (--accent #2b4c7e), by lightness alone: the fewer people remain, the paler the area
 //   (almost the paper); an area that kept its 2020 population is dark; an area that grew is the darkest of all.
-// - Hard classes, not a gradient: the owner asked for steps that read at a glance even on the pale end. Eight classes,
-//   their lower bounds 1/16, 1/8, 1/4, 1/2, 0.7, 0.85 and "more than 1" (CHANGE_BREAKS). The four halvings resolve the
-//   towns of 2100 (median 0.25, 5th percentile 0.055, default scenario) and the two breaks inside 1/2 .. 1 resolve the
-//   prefectures of 2050 (0.58 .. 1.03): Tohoku and Shikoku in 1/2 .. 0.7, most of the country in 0.7 .. 0.85, the
-//   Kanto core, Aichi, Fukuoka and Okinawa in 0.85 .. 1, Tokyo above 1.
-// - The colours are --accent mixed into --paper in OKLab at 12, 26.7, 41.4, 56.1, 70.9, 85.6, 100 and 115 %: even steps
-//   of 0.08 in OKLab lightness (WCAG 1.30 .. 1.41 between neighbours), the palest 1.22:1 against the paper (almost
-//   paper, as asked; the map's lines make the shape), the "same as 2020" class the accent itself, the "grew" class the
-//   same hue a step darker (115 % extrapolates the mix).
+// - Hard classes, not a gradient: the owner asked for steps that read at a glance even on the pale end. Nine classes,
+//   their lower bounds 1/16, 1/8, 1/4, 0.4, 1/2, 0.7, 0.85 and "more than 1" (CHANGE_BREAKS). Counted on the default
+//   scenario (2026-11-06): the four steps from 1/16 to 1/4 and 1/2 resolve the towns of 2100 (median 0.25, 5th percentile
+//   0.055: 123 / 324 / 482 / 351 / 156 / 294 / 104 / 41 / 9 towns per class); 0.4 splits the 1/4 .. 1/2 block that held 35
+//   of the 47 prefectures of 2100 (now 4 / 20 / 15 / 7 / 1 over five classes; 2075: 3 / 10 / 27 / 6 / 1); the two breaks
+//   inside 1/2 .. 1 resolve the prefectures of 2050 (0.58 .. 1.03: 11 / 28 / 7 / 1): Tohoku and Shikoku in 1/2 .. 0.7, most
+//   of the country in 0.7 .. 0.85, the Kanto core, Aichi, Fukuoka and Okinawa in 0.85 .. 1, Tokyo above 1.
+// - The colours are --accent mixed into --paper in OKLab at 12, 24.6, 37.1, 49.7, 62.3, 74.9, 87.4, 100 and 115 %: even
+//   steps of 0.07 in OKLab lightness from the palest to the "same" class (WCAG 1.26 .. 1.41 between neighbours), the
+//   palest 1.22:1 against the paper (almost paper, as asked; the map's lines make the shape), the "same as 2020" class
+//   the accent itself, the "grew" class the same hue a step darker (115 % extrapolates the mix).
 // Values beyond the domain (including +-Infinity) fall into the end classes; NaN (no data) is the neutral grey.
 
-/** Lower bounds of the classes above the first: < 1/16, 1/16 .. 1/8, 1/8 .. 1/4, 1/4 .. 1/2, 1/2 .. 0.7, 0.7 .. 0.85, 0.85 .. 1 (same), > 1 (grew). */
-export const CHANGE_BREAKS: readonly number[] = [1 / 16, 1 / 8, 1 / 4, 1 / 2, 0.7, 0.85];
+/**
+ * Lower bounds of the classes above the first: < 1/16, 1/16 .. 1/8, 1/8 .. 1/4, 1/4 .. 0.4, 0.4 .. 1/2, 1/2 .. 0.7,
+ * 0.7 .. 0.85, 0.85 .. 1 (same), > 1 (grew).
+ */
+export const CHANGE_BREAKS: readonly number[] = [1 / 16, 1 / 8, 1 / 4, 0.4, 1 / 2, 0.7, 0.85];
 export const RATIO_MIN = CHANGE_BREAKS[0];
 export const NEUTRAL_RATIO = 1;
 
 /**
- * One colour per class, palest to darkest (theme.css --change-1 ... --change-8 mirror these). The OKLab mix of
+ * One colour per class, palest to darkest (theme.css --change-1 ... --change-9 mirror these). The OKLab mix of
  * --accent (#2b4c7e) into --paper (#f6f5f0) at 12 .. 115 % in even steps of lightness (see the header).
  */
-export const CHANGE_COLORS: readonly string[] = ['#dce0e2', '#bcc6d2', '#9dacc1', '#7f94b1', '#627ba0', '#46638f', '#2b4c7e', '#0d346c'];
+export const CHANGE_COLORS: readonly string[] = ['#dce0e2', '#c1c9d4', '#a6b4c6', '#8c9eb8', '#7389a9', '#5b759b', '#43608d', '#2b4c7e', '#0d346c'];
 
 /** The map's neutral grey (theme.css --map-neutral): no data, and the fill before the first data arrives. */
 export const MAP_NEUTRAL = '#d0c9c4';
 
 /**
- * Class index 0..7 of a ratio to 2020, or -1 for NaN. The lower bounds are inclusive; the last class is strictly
+ * Class index 0..8 of a ratio to 2020, or -1 for NaN. The lower bounds are inclusive; the last class is strictly
  * more than 1 (an area with exactly its 2020 population is "same", not "grew").
  */
 export function changeClass(ratioTo2020: number): number {
@@ -61,7 +66,7 @@ export interface LegendStop {
 }
 
 /**
- * Ticks for the population legend over eight equal blocks: the first block's label on the left end, the labelled
+ * Ticks for the population legend over nine equal blocks: the first block's label on the left end, the labelled
  * breaks at the borders between blocks, the last block's label on the right end. Only the breaks the owner named are
  * labelled (16分の1以下 / 4分の1 / 半分 / 同じ / 増えた所は一番濃い); the block edges show the other borders. Two labels
  * drop a row so that none touches its neighbour on a legend as narrow as 280px (the desktop column).
@@ -70,9 +75,9 @@ export function legendStops(): LegendStop[] {
   const n = CHANGE_COLORS.length;
   return [
     { ratio: RATIO_MIN, offset: 0, color: CHANGE_COLORS[0], label: '16分の1以下' },
-    { ratio: 1 / 4, offset: 3 / n, color: CHANGE_COLORS[3], label: '4分の1', row: 2 }, // one block from 半分: a row down
-    { ratio: 1 / 2, offset: 4 / n, color: CHANGE_COLORS[4], label: '半分' },
-    { ratio: NEUTRAL_RATIO, offset: 7 / n, color: CHANGE_COLORS[6], label: '同じ' },
+    { ratio: 1 / 4, offset: 3 / n, color: CHANGE_COLORS[3], label: '4分の1', row: 2 }, // close to the first label: a row down
+    { ratio: 1 / 2, offset: 5 / n, color: CHANGE_COLORS[5], label: '半分' },
+    { ratio: NEUTRAL_RATIO, offset: 8 / n, color: CHANGE_COLORS[7], label: '同じ' },
     { ratio: Infinity, offset: 1, color: CHANGE_COLORS[n - 1], label: '増えた所は一番濃い', row: 2 }, // wider than its block
   ];
 }

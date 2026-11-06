@@ -5,8 +5,14 @@ import {
   allocationLegendRamp,
   allocationLegendStops,
   allocationScale,
+  CHANGE_BREAKS,
+  CHANGE_COLORS,
+  changeClass,
   changeColor,
+  DIVERGING_NEUTRAL,
+  legendRamp,
   legendStops,
+  MAP_NEUTRAL,
   NEUTRAL_RATIO,
   RATIO_MAX,
   RATIO_MIN,
@@ -35,56 +41,103 @@ function luminance(hex: string): number {
   return 0.2126 * ch(1) + 0.7152 * ch(3) + 0.0722 * ch(5);
 }
 
-describe('changeColor', () => {
-  test('returns lowercase #rrggbb strings', () => {
-    for (const r of [0, 0.1, 0.5, 1, 1.3, 2, 5]) expect(changeColor(r)).toMatch(HEX);
+const lin = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+/** sRGB hex -> OKLab (Björn Ottosson's matrices), written here independently of colors.ts. */
+function oklab(hex: string): [number, number, number] {
+  const [r, g, b] = [1, 3, 5].map((i) => lin(parseInt(hex.slice(i, i + 2), 16) / 255));
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
+}
+const contrast = (a: string, b: string) => {
+  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+};
+const PAPER = '#f6f5f0';
+const ACCENT = '#2b4c7e';
+const theme = readFileSync(repoPath('src/ui/theme.css'), 'utf8');
+
+// -----------------------------------------------------------------------------------------------------------------
+// Population relative to 2020: nine classes of one indigo, the fewer remain the paler
+// -----------------------------------------------------------------------------------------------------------------
+
+describe('changeClass and changeColor (population relative to 2020)', () => {
+  test('nine classes, split at 1/16, 1/8, 1/4, 0.4, 1/2, 0.7 and 0.85, with "more than 1" as the last', () => {
+    expect(CHANGE_BREAKS).toEqual([1 / 16, 1 / 8, 1 / 4, 0.4, 1 / 2, 0.7, 0.85]);
+    expect(CHANGE_COLORS).toHaveLength(CHANGE_BREAKS.length + 2);
+    expect(RATIO_MIN).toBe(1 / 16);
+    const cases: Array<[number, number]> = [
+      [-3, 0], [0, 0], [0.001, 0], [0.06, 0], // less than 1/16 remains
+      [1 / 16, 1], [0.1, 1], // the lower bound belongs to its class
+      [1 / 8, 2], [0.2, 2],
+      [1 / 4, 3], [0.39, 3],
+      [0.4, 4], [0.49, 4],
+      [1 / 2, 5], [0.69, 5],
+      [0.7, 6], [0.84, 6],
+      [0.85, 7], [0.95, 7], [1, 7], // exactly the 2020 population is "same", not "grew"
+      [1.0001, 8], [1.5, 8], [10, 8], [Infinity, 8],
+    ];
+    for (const [v, k] of cases) expect(changeClass(v), String(v)).toBe(k);
+    expect(changeClass(NaN)).toBe(-1);
   });
 
-  test('ratio 1 is the neutral midpoint: light and nearly grey', () => {
-    const c = changeColor(1);
-    expect(c).toBe(changeColor(NEUTRAL_RATIO));
-    const r = parseInt(c.slice(1, 3), 16);
-    const g = parseInt(c.slice(3, 5), 16);
-    const b = parseInt(c.slice(5, 7), 16);
-    expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThan(20); // low chroma
-    expect(luminance(c)).toBeGreaterThan(0.55); // light
+  test('every class has its own lowercase #rrggbb colour; the fewer remain, the paler', () => {
+    CHANGE_COLORS.forEach((c) => expect(c).toMatch(HEX));
+    expect(new Set(CHANGE_COLORS).size).toBe(CHANGE_COLORS.length);
+    const lums = CHANGE_COLORS.map(luminance);
+    for (let k = 1; k < lums.length; k++) expect(lums[k], `class ${k}`).toBeLessThan(lums[k - 1]);
+    // the colour of a ratio is the colour of its class, at the ends too
+    expect(changeColor(0)).toBe(CHANGE_COLORS[0]);
+    expect(changeColor(0.001)).toBe(CHANGE_COLORS[0]);
+    expect(changeColor(-3)).toBe(CHANGE_COLORS[0]);
+    expect(changeColor(0.3)).toBe(CHANGE_COLORS[3]);
+    expect(changeColor(1)).toBe(changeColor(NEUTRAL_RATIO));
+    expect(changeColor(1)).toBe(CHANGE_COLORS[7]);
+    expect(changeColor(1.3)).toBe(CHANGE_COLORS[8]);
+    expect(changeColor(Infinity)).toBe(CHANGE_COLORS[8]);
   });
 
-  test('decline and growth of the same magnitude are different hues', () => {
-    expect(changeColor(0.3)).not.toBe(changeColor(1.7));
-    const d = changeColor(0.5);
-    const g = changeColor(1.5);
-    // decline is warm (red channel dominates), growth is cool (blue channel dominates)
-    expect(parseInt(d.slice(1, 3), 16)).toBeGreaterThan(parseInt(d.slice(5, 7), 16));
-    expect(parseInt(g.slice(5, 7), 16)).toBeGreaterThan(parseInt(g.slice(1, 3), 16));
+  test('a ratio never seen as growth is not coloured as growth: only more than 1 gets the darkest class', () => {
+    expect(changeColor(1)).not.toBe(changeColor(1.0001));
+    expect(changeColor(0.99)).toBe(changeColor(1));
   });
 
-  test('values beyond the domain clamp to the ends', () => {
-    expect(changeColor(0)).toBe(changeColor(RATIO_MIN));
-    expect(changeColor(0.001)).toBe(changeColor(RATIO_MIN));
-    expect(changeColor(-3)).toBe(changeColor(RATIO_MIN));
-    expect(changeColor(2)).toBe(changeColor(RATIO_MAX));
-    expect(changeColor(10)).toBe(changeColor(RATIO_MAX));
-    expect(changeColor(Infinity)).toBe(changeColor(RATIO_MAX));
+  test('no data (NaN) is the map\'s neutral grey, which no class uses', () => {
+    expect(changeColor(NaN)).toBe(MAP_NEUTRAL);
+    expect(CHANGE_COLORS).not.toContain(MAP_NEUTRAL);
+    expect(theme).toMatch(new RegExp(`--map-neutral:\\s*${MAP_NEUTRAL};`));
   });
 
-  test('non-finite ratios fall back to the neutral colour', () => {
-    expect(changeColor(NaN)).toBe(changeColor(1));
+  test('the colours are the accent mixed into the paper in OKLab: 12 .. 100 % in even steps, then 115 % for "grew"', () => {
+    const p = oklab(PAPER);
+    const a = oklab(ACCENT);
+    const shares = [0.12, 0.246, 0.371, 0.497, 0.623, 0.749, 0.874, 1, 1.15];
+    shares.forEach((share, k) => {
+      const want = p.map((v, i) => v + (a[i] - v) * share);
+      const got = oklab(CHANGE_COLORS[k]);
+      const dE = Math.hypot(...got.map((v, i) => v - want[i]));
+      expect(dE, `class ${k + 1}`).toBeLessThan(0.004); // within the 8-bit rounding of the hex
+    });
+    expect(CHANGE_COLORS[7]).toBe(ACCENT); // "same as 2020" is the app's accent itself
   });
 
-  test('the decline arm darkens monotonically as the ratio falls', () => {
-    const ratios = [1, 0.8, 0.6, 0.45, 0.3, 0.2, 0.12, RATIO_MIN];
-    const lums = ratios.map((r) => luminance(changeColor(r)));
-    for (let i = 1; i < lums.length; i++) expect(lums[i]).toBeLessThan(lums[i - 1]);
+  test('neighbouring classes can be told apart, the palest is almost paper but not paper, the darkest is dark', () => {
+    for (let k = 1; k < CHANGE_COLORS.length; k++) {
+      expect(oklab(CHANGE_COLORS[k - 1])[0] - oklab(CHANGE_COLORS[k])[0], `ΔL ${k}`).toBeGreaterThanOrEqual(0.065);
+      expect(contrast(CHANGE_COLORS[k - 1], CHANGE_COLORS[k]), `contrast ${k}`).toBeGreaterThanOrEqual(1.25);
+    }
+    expect(contrast(CHANGE_COLORS[0], PAPER)).toBeGreaterThan(1.15); // a place with almost nobody left still shows
+    expect(CHANGE_COLORS[0]).not.toBe(PAPER);
+    expect(contrast(CHANGE_COLORS[8], PAPER)).toBeGreaterThan(9);
   });
 
-  test('the growth arm darkens monotonically as the ratio rises', () => {
-    const ratios = [1, 1.1, 1.25, 1.4, RATIO_MAX];
-    const lums = ratios.map((r) => luminance(changeColor(r)));
-    for (let i = 1; i < lums.length; i++) expect(lums[i]).toBeLessThan(lums[i - 1]);
+  test('theme.css mirrors the classes as --change-1 ... --change-9', () => {
+    CHANGE_COLORS.forEach((c, k) => expect(theme).toMatch(new RegExp(`--change-${k + 1}:\\s*${c};`)));
+    expect(theme).not.toMatch(/--change-10:/);
   });
 
-  test('the scale is logarithmic: each halving moves the same distance', () => {
+  test('the diverging scale (kept for the allocation) is logarithmic: each halving moves the same distance', () => {
     expect(ratioToT(1)).toBe(0);
     expect(ratioToT(0.5)).toBeCloseTo(-1);
     expect(ratioToT(0.25)).toBeCloseTo(-2);
@@ -93,13 +146,20 @@ describe('changeColor', () => {
 });
 
 describe('allocation scale (change in percent, centred on 0)', () => {
-  test('0 is the same neutral as ratio 1; negative is rust, positive is blue', () => {
-    expect(allocationColor(0, 10)).toBe(changeColor(1));
+  test('0 is the neutral; negative is rust, positive is blue', () => {
+    expect(allocationColor(0, 10)).toBe(DIVERGING_NEUTRAL);
     const minus = allocationColor(-10, 10);
     const plus = allocationColor(10, 10);
-    expect(minus).toBe(changeColor(RATIO_MIN)); // full rust arm
-    expect(plus).toBe(changeColor(RATIO_MAX)); // full blue arm
     expect(minus).not.toBe(plus);
+    // rust: the red channel dominates; blue: the blue channel dominates
+    expect(parseInt(minus.slice(1, 3), 16)).toBeGreaterThan(parseInt(minus.slice(5, 7), 16));
+    expect(parseInt(plus.slice(5, 7), 16)).toBeGreaterThan(parseInt(plus.slice(1, 3), 16));
+    expect(RATIO_MAX).toBe(1.5);
+  });
+
+  test('the neutral is not any of the population classes (a reallocation reads as another map)', () => {
+    expect(CHANGE_COLORS).not.toContain(DIVERGING_NEUTRAL);
+    expect(DIVERGING_NEUTRAL).toMatch(HEX);
   });
 
   test('clamps beyond the domain and darkens monotonically on both sides', () => {
@@ -117,7 +177,7 @@ describe('allocation scale (change in percent, centred on 0)', () => {
     const tiny = allocationColor(-0.04, 10);
     const channel = (hex: string, i: number) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
     for (let i = 0; i < 3; i++) expect(Math.abs(channel(tiny, i) - channel(neutral, i))).toBeLessThanOrEqual(2);
-    expect(allocationColor(Number.NaN, 10)).toBe(changeColor(1));
+    expect(allocationColor(Number.NaN, 10)).toBe(DIVERGING_NEUTRAL);
   });
 
   test('allocationScale picks a round half-width at or above the largest change, never below the minimum', () => {
@@ -141,58 +201,52 @@ describe('allocation scale (change in percent, centred on 0)', () => {
     const stops = allocationLegendStops(10);
     expect(stops.map((s) => s.label)).toEqual(['−10%', '−5%', '0', '+5%', '+10%']);
     expect(stops.map((s) => s.offset)).toEqual([0, 0.25, 0.5, 0.75, 1]);
-    expect(stops[2].color).toBe(changeColor(1));
+    expect(stops[2].color).toBe(DIVERGING_NEUTRAL);
     const ramp = allocationLegendRamp(10, 4);
     expect(ramp.map((r) => r.offset)).toEqual([0, 0.25, 0.5, 0.75, 1]);
-    expect(ramp[2].color).toBe(changeColor(1));
+    expect(ramp[2].color).toBe(DIVERGING_NEUTRAL);
   });
 });
 
-describe('legendStops', () => {
-  test('is ordered from the strongest decline to the strongest growth', () => {
+describe('legendStops and legendRamp (population relative to 2020)', () => {
+  test('five labelled ticks, from the fewest remaining to the growth end, in the owner\'s words', () => {
     const stops = legendStops();
-    expect(stops.length).toBeGreaterThanOrEqual(5);
-    expect(stops[0].ratio).toBe(RATIO_MIN);
-    expect(stops[stops.length - 1].ratio).toBe(RATIO_MAX);
+    expect(stops.map((s) => s.label)).toEqual(['16分の1以下', '4分の1', '半分', '同じ', '増えた所は一番濃い']);
+    expect(stops.map((s) => s.ratio)).toEqual([RATIO_MIN, 1 / 4, 1 / 2, NEUTRAL_RATIO, Infinity]);
     for (let i = 1; i < stops.length; i++) expect(stops[i].ratio).toBeGreaterThan(stops[i - 1].ratio);
   });
 
-  test('offsets are monotone in [0,1] and the colours match changeColor', () => {
+  test('the ticks sit on block edges of the nine equal blocks, the two ends on the bar\'s ends', () => {
     const stops = legendStops();
-    expect(stops[0].offset).toBe(0);
-    expect(stops[stops.length - 1].offset).toBe(1);
+    expect(stops.map((s) => s.offset)).toEqual([0, 3 / 9, 5 / 9, 8 / 9, 1]);
     for (let i = 1; i < stops.length; i++) expect(stops[i].offset).toBeGreaterThan(stops[i - 1].offset);
-    for (const s of stops) expect(s.color).toBe(changeColor(s.ratio));
   });
 
-  test('includes the neutral stop with a label and labels every stop in Japanese', () => {
+  test('each tick carries the colour of the class it names (the first is the left-end block)', () => {
     const stops = legendStops();
-    const neutral = stops.find((s) => s.ratio === 1);
-    expect(neutral).toBeDefined();
-    expect(neutral!.label).toBeTruthy();
-    for (const s of stops) expect(typeof s.label).toBe('string');
+    expect(stops[0].color).toBe(CHANGE_COLORS[0]);
+    for (const s of stops.slice(1)) expect(s.color, s.label).toBe(changeColor(s.ratio));
+  });
+
+  test('two labels ask for the second row: the ones that would touch their neighbours on a 280px bar', () => {
+    const stops = legendStops();
+    expect(stops.filter((s) => s.row === 2).map((s) => s.label)).toEqual(['4分の1', '増えた所は一番濃い']);
+  });
+
+  test('the bar is one hard-edged block per class: 18 stops, equal widths, palest to darkest', () => {
+    const ramp = legendRamp();
+    const n = CHANGE_COLORS.length;
+    expect(ramp).toHaveLength(2 * n);
+    CHANGE_COLORS.forEach((c, k) => {
+      expect(ramp[2 * k]).toEqual({ offset: k / n, color: c });
+      expect(ramp[2 * k + 1]).toEqual({ offset: (k + 1) / n, color: c });
+    });
   });
 });
 
 // -----------------------------------------------------------------------------------------------------------------
-// Support ratio classes
+// Support ratio classes: grey to near black, the harder, the darker
 // -----------------------------------------------------------------------------------------------------------------
-
-const lin = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
-/** sRGB hex -> OKLab (Björn Ottosson's matrices), written here independently of colors.ts. */
-function oklab(hex: string): [number, number, number] {
-  const [r, g, b] = [1, 3, 5].map((i) => lin(parseInt(hex.slice(i, i + 2), 16) / 255));
-  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-  return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
-}
-const contrast = (a: string, b: string) => {
-  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
-  return (x + 0.05) / (y + 0.05);
-};
-const PAPER = '#f6f5f0';
-const ACCENT = '#2b4c7e';
 
 describe('support ratio classes', () => {
   test('six classes split at 0.8, 1, 1.5, 2 and 3 people per person aged 65+', () => {
@@ -230,40 +284,44 @@ describe('support ratio classes', () => {
       expect(supportClass(v)).toBe(-1);
       expect(supportColor(v)).toBe(SUPPORT_NO_DATA);
     }
-    expect(SUPPORT_NO_DATA).toBe(changeColor(1));
+    expect(SUPPORT_NO_DATA).toBe(MAP_NEUTRAL);
     expect(SUPPORT_COLORS).not.toContain(SUPPORT_NO_DATA);
   });
 
-  test('the ramp is the accent mixed into the paper in OKLab at 40, 52, 64, 76, 88 and 100 %', () => {
+  test('the harder (the fewer people per older person), the closer to black: the first class is the darkest, the last the palest', () => {
+    const lums = SUPPORT_COLORS.map(luminance);
+    for (let k = 1; k < lums.length; k++) expect(lums[k], `class ${k}`).toBeGreaterThan(lums[k - 1]);
+    expect(SUPPORT_COLORS[0]).toBe('#14181f'); // the darkest the owner allows
+    expect(contrast(SUPPORT_COLORS[0], PAPER)).toBeGreaterThan(14);
+  });
+
+  test('the ramp is #14181f mixed into the paper in OKLab at 100, 83, 66, 49, 32 and 15 %', () => {
     const p = oklab(PAPER);
-    const a = oklab(ACCENT);
-    [0.4, 0.52, 0.64, 0.76, 0.88, 1].forEach((share, k) => {
+    const a = oklab('#14181f');
+    [1, 0.83, 0.66, 0.49, 0.32, 0.15].forEach((share, k) => {
       const want = p.map((v, i) => v + (a[i] - v) * share);
       const got = oklab(SUPPORT_COLORS[k]);
       const dE = Math.hypot(...got.map((v, i) => v - want[i]));
       expect(dE, `step ${k + 1}`).toBeLessThan(0.004); // within the 8-bit rounding of the hex
     });
-    expect(SUPPORT_COLORS[5]).toBe(ACCENT);
   });
 
-  test('light to dark in even steps that neighbours can tell apart, the palest clear of the paper, one hue', () => {
+  test('neighbouring classes can be told apart in even steps, and the palest is not the paper', () => {
     const L = SUPPORT_COLORS.map((c) => oklab(c)[0]);
     for (let k = 1; k < L.length; k++) {
-      expect(L[k - 1] - L[k], `ΔL ${k}`).toBeGreaterThanOrEqual(0.06);
-      expect(contrast(SUPPORT_COLORS[k - 1], SUPPORT_COLORS[k]), `contrast ${k}`).toBeGreaterThanOrEqual(1.25);
+      expect(L[k] - L[k - 1], `ΔL ${k}`).toBeGreaterThanOrEqual(0.1);
+      expect(contrast(SUPPORT_COLORS[k - 1], SUPPORT_COLORS[k]), `contrast ${k}`).toBeGreaterThanOrEqual(1.45);
     }
-    expect(contrast(SUPPORT_COLORS[0], PAPER)).toBeGreaterThanOrEqual(2); // the palest class never reads as sea
-    expect(contrast(SUPPORT_COLORS[0], changeColor(1))).toBeGreaterThan(1.3); // nor as the no-data grey
-    const hues = SUPPORT_COLORS.map((c) => {
+    expect(contrast(SUPPORT_COLORS[5], PAPER)).toBeGreaterThanOrEqual(1.35); // a greyed paper, never the sea
+    // a grey ramp: every class has almost no chroma
+    for (const c of SUPPORT_COLORS) {
       const [, x, y] = oklab(c);
-      return (Math.atan2(y, x) * 180) / Math.PI;
-    });
-    expect(Math.max(...hues) - Math.min(...hues)).toBeLessThan(10);
+      expect(Math.hypot(x, y), c).toBeLessThan(0.02);
+    }
   });
 
   test('theme.css mirrors the ramp as --support-1 ... --support-6', () => {
-    const css = readFileSync(repoPath('src/ui/theme.css'), 'utf8');
-    SUPPORT_COLORS.forEach((c, k) => expect(css).toMatch(new RegExp(`--support-${k + 1}:\\s*${c};`)));
+    SUPPORT_COLORS.forEach((c, k) => expect(theme).toMatch(new RegExp(`--support-${k + 1}:\\s*${c};`)));
   });
 
   test('the legend: one even block per class with hard edges, a tick at each break, the classes in words', () => {
