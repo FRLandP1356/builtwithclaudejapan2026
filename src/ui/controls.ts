@@ -8,8 +8,10 @@
 import './controlsPanel.css';
 import { isScenarioError, sanitizeScenario, SCENARIO_LIMITS, scenarioKey } from '../data/runner';
 import { DEFAULT_SCENARIO, type Scenario } from '../engine/types';
+import { birthBlock, infraBlock, marksIntro, migModeBlock, migrationBlock, type MarksBlock } from './barMarks';
 import { deriveTotals, yearIndex, type Totals } from './derive';
 import { formatPct, formatPop } from './format';
+import { phraseNodes } from './phrases';
 import { ESTIMATE_BADGE } from './sources';
 import type { AppState, PanelContext } from './state';
 
@@ -119,17 +121,17 @@ const TEMPLATE = `
   <div class="controls-groups">
     <div class="field" data-group="birth">
       <label class="field-label" for="ctl-cwr"><span>子どもの生まれやすさ</span><span class="field-value" id="ctl-cwr-value"></span></label>
-      <input class="range" id="ctl-cwr" type="range" min="${LIMITS.cwrMult[0]}" max="${LIMITS.cwrMult[1]}" step="0.05" aria-describedby="ctl-cwr-help" />
+      <input class="range" id="ctl-cwr" type="range" min="${LIMITS.cwrMult[0]}" max="${LIMITS.cwrMult[1]}" step="0.05" aria-describedby="ctl-cwr-marks ctl-cwr-help" />
       <p class="field-help" id="ctl-cwr-help">2050年の水準を1.0とした倍率です（子ども女性比）。</p>
     </div>
     <div class="field" data-group="migration">
       <span class="field-label" id="ctl-mig-title"><span>人口の移動</span></span>
-      <div class="choice choice-stack" role="group" aria-labelledby="ctl-mig-title">
+      <div class="choice choice-stack" role="group" aria-labelledby="ctl-mig-title" aria-describedby="ctl-migmode-marks">
         <button type="button" data-mig="hold" aria-pressed="false">2050年ごろの傾向を続ける</button>
         <button type="button" data-mig="fade" aria-pressed="false">2100年に向けて少しずつ止まる</button>
       </div>
       <label class="field-label" for="ctl-migscale"><span>移動の強さ</span><span class="field-value" id="ctl-migscale-value"></span></label>
-      <input class="range" id="ctl-migscale" type="range" min="${LIMITS.migScale[0]}" max="${LIMITS.migScale[1]}" step="0.1" aria-describedby="ctl-migscale-help" />
+      <input class="range" id="ctl-migscale" type="range" min="${LIMITS.migScale[0]}" max="${LIMITS.migScale[1]}" step="0.1" aria-describedby="ctl-migscale-marks ctl-migscale-help" />
       <p class="field-help" id="ctl-migscale-help">1.0が2050年ごろの強さ、0なら人口の移動はなくなります。</p>
     </div>
     <div class="field" data-group="infra">
@@ -137,7 +139,7 @@ const TEMPLATE = `
         <span>インフラ連動の過疎の加速</span>
         <span class="field-tags"><span class="tag">仮定</span><span class="tag">公式の方法にはない要素</span></span>
       </span>
-      <div class="choice choice-wide" role="group" aria-labelledby="ctl-infra-title">
+      <div class="choice choice-wide" role="group" aria-labelledby="ctl-infra-title" aria-describedby="ctl-infra-marks">
         <button type="button" data-infra="none" aria-pressed="false">なし</button>
         <button type="button" data-infra="weak" aria-pressed="false">弱い</button>
         <button type="button" data-infra="strong" aria-pressed="false">強い</button>
@@ -167,6 +169,39 @@ function nextFrame(fn: () => void): { cancel(): void } {
   }
   const id = setTimeout(fn, 16);
   return { cancel: () => clearTimeout(id) };
+}
+
+/**
+ * The guidance block under a control: the estimate badge and a title, then position and national 2100 total as a
+ * definition list, then (bars only) the one derived sentence. Plain text: no focus stop, nothing a script updates.
+ */
+function marksElement(b: MarksBlock): HTMLElement {
+  const root = document.createElement('div');
+  root.className = 'bar-marks';
+  root.id = b.id;
+  const title = document.createElement('p');
+  title.className = 'note bar-marks-title';
+  const badge = document.createElement('span');
+  badge.className = 'badge-estimate';
+  badge.textContent = ESTIMATE_BADGE;
+  title.append(badge, ' ', ...phraseNodes(b.title));
+  const list = document.createElement('dl');
+  list.className = 'bar-marks-list';
+  for (const row of b.rows) {
+    const at = document.createElement('dt');
+    at.textContent = row.at;
+    const people = document.createElement('dd');
+    people.textContent = row.people;
+    list.append(at, people);
+  }
+  root.append(title, list);
+  if (b.fact !== undefined) {
+    const fact = document.createElement('p');
+    fact.className = 'note bar-marks-fact';
+    fact.append(...phraseNodes(b.fact));
+    root.append(fact);
+  }
+  return root;
 }
 
 /** Write text into a live region only when it differs, so a screen reader is not told the same thing again. */
@@ -202,6 +237,16 @@ export function mountControls(el: HTMLElement, ctx: PanelContext): () => void {
     title.append(' ', badge);
   }
   el.insertAdjacentHTML('beforeend', TEMPLATE); // static text only: nothing from data is interpolated
+
+  // The guidance marks (barMarks.ts): fixed text, one block under each control; they describe the control, not its value.
+  const intro = document.createElement('p');
+  intro.className = 'note bar-marks-intro';
+  intro.append(...phraseNodes(marksIntro()));
+  el.querySelector('.controls-groups')!.before(intro);
+  el.querySelector('#ctl-cwr')!.after(marksElement(birthBlock(DEFAULT_SCENARIO.cwrMult)));
+  el.querySelector('[data-group="migration"] .choice')!.after(marksElement(migModeBlock()));
+  el.querySelector('#ctl-migscale')!.after(marksElement(migrationBlock(DEFAULT_SCENARIO.migScale)));
+  el.querySelector('[data-group="infra"] .notice')!.before(marksElement(infraBlock()));
 
   const q = <T extends Element>(sel: string) => el.querySelector<T>(sel)!;
   const cwr = q<HTMLInputElement>('#ctl-cwr');
