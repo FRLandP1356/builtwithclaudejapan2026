@@ -2,7 +2,7 @@
 
 画面は質問を、ビルドのときに環境変数 `VITE_CHAT_ENDPOINT` で決めた Worker の URL に送ります（例: `VITE_CHAT_ENDPOINT=https://example.workers.dev/api/chat npm run build`。未設定なら同じ出どころの `/api/chat`）。ビルドで文字列に埋め込まれるので、変えたら作り直します。
 
-公開ページ（https://japan2100.pages.dev）は、`VITE_CHAT_ENDPOINT=https://town-2100-api.your-account.workers.dev/api/chat` を付けて作ったものです（2026-11-06 に公開）。この Worker の `ALLOWED_ORIGINS` は、公開ページの出どころ `https://japan2100.pages.dev` だけです。画面と Worker は別の出どころなので、ブラウザは Worker の CORS の許可を見ます。
+公開ページ（https://japan2100.pages.dev）は、`VITE_CHAT_ENDPOINT=/api/chat` を付けて作ったものです（2026-11-06 に公開。同日、Worker の個別の住所から、同じ出どころの `/api/chat` に替えた）。この `/api/chat` は Cloudflare Pages の Function（`functions/api/chat.ts`）で、サービスバインディング `CHAT_API`（ルートの `wrangler.jsonc`）を通して Worker を内部から呼びます。Worker は公開の住所を持ちません。Worker の `ALLOWED_ORIGINS` は、公開ページの出どころ `https://japan2100.pages.dev` だけです。同じ出どころの POST にも、ブラウザは `Origin` を付けるので、Worker はそれを `ALLOWED_ORIGINS` と照らします。
 
 ビルドが接続先を決めたと数えるのは、`VITE_CHAT_ENDPOINT` が空白でないとき（`/api/chat` と書いた場合も数えます）、または画面を組み込む側が接続先を引数で渡したときです。未設定（または空白）のビルドは、質問の送り先は同じ出どころの `/api/chat` ですが、接続先は決めていないものとして扱います。この違いは、「AIに質問」の最初の説明文に出ます。
 - 接続先を決めていない（手元の `npm run dev` など。公開ページはこちらではありません）：最初の説明文が、先に「このバージョンでは、AIへの質問は使えません（AIの接続先がまだ用意されていません）。地図、数値、前提の調整、人口の割り振りはそのまま使えます。」と言います。質問の例のボタンと入力欄はその下に出ます。質問の例のボタンは、保存済みの答え（確認済みのもの）を、中継を呼ばずに出します。それ以外の質問は、同じ文のカードが出るだけで、答えは出ません。同じ出どころに Worker を置いた場合は、最初の本物の答え（保存済みの答えではないもの）が返ったあとで、説明文が下の文に切り替わります。

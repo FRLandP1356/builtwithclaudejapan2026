@@ -29,7 +29,7 @@ src/ai/tools.ts（9つの道具。同じ engine を呼ぶ）◀── src/ai/cli
 | 部品 | 内容 |
 |---|---|
 | 画面 | Cloudflare Pages のプロジェクト `japan2100`（https://japan2100.pages.dev）。`npm run build` で作った `dist/` を、直接アップロードで置いてある。ビルドのときに `VITE_CHAT_ENDPOINT` で中継の URL を埋め込む（`docs/ai-endpoint.md`）。`public/_headers` で、検索エンジンに載せない設定（`X-Robots-Tag: noindex, nofollow`）と、`nosniff`・`Referrer-Policy` を付けている |
-| 中継 | Cloudflare Worker `town-2100-api`（https://town-2100-api.your-account.workers.dev ）。呼び出してよい出どころは、`ALLOWED_ORIGINS` で公開ページだけ |
+| 中継 | Cloudflare Worker `town-2100-api`（公開の住所は持たない。公開ページの `/api/chat`＝`functions/api/chat.ts` の Function が、サービスバインディング `CHAT_API` で内部から呼ぶ）。呼び出してよい出どころは、`ALLOWED_ORIGINS` で公開ページだけ |
 | 中継の設定 | KV `RATE_KV`（名前空間 `town-2100-rate`）、Rate Limiting `IP_LIMITER`（60 秒に 20 回）、秘密 `ANTHROPIC_API_KEY`・`IP_HASH_SECRET`、変数 `ALLOWED_ORIGINS`。値は `worker/wrangler.jsonc`（秘密は含まない）。1日の上限の標準は、1人60回、全体400回 |
 | Anthropic 側 | この中継専用のワークスペース。月の利用上限 100 ドル、25 ドルでのメール通知、毎分の上限。API キーは Worker の秘密にだけ置き（作成のとき、作成画面を操作したブラウザの一時ファイルに値が写り、削除した。[dev-log.md](dev-log.md) の 6.2）、期限は 2026-12-06 |
 | 保存済みの答え | `public/data/cached_answers.json`。5件、すべて作者が全文を読んで承認した確認済み（`verified`、2026-11-06）。画面は、質問の例のボタンを押したときに中継を呼ばずに出し、AI に接続できないときにも、同じ質問の答えがあれば出す。`pending` の答えは出さない。既知の限界が1つ（田辺市の答えの「公式 42,311 人」）あり、ファイルの note に書いてある。和歌山県の答えは、減る地域の一覧（`largestDecreases`）を使えるようにしたあとに作り直した（2026-11-06 午後、作者が承認） |

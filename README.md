@@ -8,7 +8,7 @@
 
 作者の見解：全国の地方が同時に創生すると、人口の面では成り立たない、と作者は考えています。このアプリはその見解の証明ではなく、確かめるための材料を並べたものです。（この文は、作者の発言をもとに Claude が書いたもので、文言は作者の確認待ちです。）
 
-- 試す：https://japan2100.pages.dev （Cloudflare Pages。検索エンジンには載せない設定です）。AIへの質問は、AIの中継（Cloudflare Worker、https://town-2100-api.your-account.workers.dev ）を通して、本物のモデル（Claude Sonnet 5.5）が答えます。AIの呼び出しには回数の上限があり（1人1日60回、全体で1日400回。上流への呼び出しの回数で、確かめた質問は1つにつき平均2.43回で、全体の400回は約165問分です。日付は UTC で、日本時間の午前9時に切り替わります）、中継の API キーは 2026年12月6日に期限が切れます。
+- 試す：https://japan2100.pages.dev （Cloudflare Pages。検索エンジンには載せない設定です）。AIへの質問は、AIの中継（Cloudflare Worker。公開の住所は持たず、公開ページ自身の `/api/chat` から内部で呼ばれます）を通して、本物のモデル（Claude Sonnet 5.5）が答えます。AIの呼び出しには回数の上限があり（1人1日60回、全体で1日400回。上流への呼び出しの回数で、確かめた質問は1つにつき平均2.43回で、全体の400回は約165問分です。日付は UTC で、日本時間の午前9時に切り替わります）、中継の API キーは 2026年12月6日に期限が切れます。
 - 状態：ハッカソンの提出前。画面と AI の中継は 2026年11月6日に公開し、本物のモデルで動くことを確かめました（結果と、確かめていないことは[限界と未完了](#限界と未完了)と [docs/ai-live-check.md](docs/ai-live-check.md)）。AIの保存済みの答え5件は、作者が全文を読んで承認しました（`verified`、2026年11月6日）。画面は、質問の例のボタンを押したときと、AIに接続できないときに、これを出します。この文書の数字（コミットの数、テストの件数など）は、コミット a15e934（2026-11-06）の時点のものです。
 - リポジトリ：提出まで非公開です。提出の時点で公開にします。
 - デモ動画：提出フォームにリンクを書きます（置き場所は未定。約3分、日本語、合成音声のナレーションと字幕。公開ページを録画したもので、このリポジトリには入っていません）。
@@ -176,7 +176,7 @@ bash pipeline/build_geometry.sh       # 境界の TopoJSON（public/data/geo）�
 python3 -m pipeline.check_codes       # 社人研の地域と境界のコードの突き合わせ
 ```
 
-AI の中継（Worker）：作りと設定は [worker/README.md](worker/README.md)、画面から Worker への接続は [docs/ai-endpoint.md](docs/ai-endpoint.md)。公開ページは、2026年11月6日に公開した Worker（`town-2100-api`）を `VITE_CHAT_ENDPOINT=https://town-2100-api.your-account.workers.dev/api/chat` で指定してビルドし、そのファイルを Cloudflare Pages のプロジェクト `japan2100` に置いたものです。自分の環境に同じ構成を作る場合は、Anthropic の API キー（専用のワークスペースを作り、利用上限を設定してから作ります）、Cloudflare の KV と Rate Limiting の設定、Worker の秘密の登録が要ります。手順は worker/README.md のチェックリストです（キーはコードにも設定ファイルにも書きません）。Worker を同じ出どころに置いて公開する場合は、`VITE_CHAT_ENDPOINT=/api/chat` を付けてビルドすると、「AIに質問」の最初の説明文が、最初から動く場合の文になります（付けないと、接続先を決めていないものとして、使えない旨を先に言います）。
+AI の中継（Worker）：作りと設定は [worker/README.md](worker/README.md)、画面から Worker への接続は [docs/ai-endpoint.md](docs/ai-endpoint.md)。公開ページは、`VITE_CHAT_ENDPOINT=/api/chat` でビルドし、Cloudflare Pages のプロジェクト `japan2100` に置いたものです。ページの `/api/chat`（`functions/api/chat.ts`）が、2026年11月6日に公開した Worker（`town-2100-api`）へ、サービスバインディングで内部から渡します。Worker は公開の住所（workers.dev）を持ちません。自分の環境に同じ構成を作る場合は、Anthropic の API キー（専用のワークスペースを作り、利用上限を設定してから作ります）、Cloudflare の KV と Rate Limiting の設定、Worker の秘密の登録が要ります。手順は worker/README.md のチェックリストです（キーはコードにも設定ファイルにも書きません）。ページの `/api/chat` から Worker を呼ぶ形にした場合は、`VITE_CHAT_ENDPOINT=/api/chat` を付けてビルドすると、「AIに質問」の最初の説明文が、最初から動く場合の文になります（付けないと、接続先を決めていないものとして、使えない旨を先に言います）。
 
 ### リポジトリの構成
 

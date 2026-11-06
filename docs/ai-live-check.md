@@ -1,6 +1,6 @@
 # 公開済み Worker の実機確認（scripts/ai_live_check.ts）
 
-公開済みの Worker（`https://town-2100-api.your-account.workers.dev/api/chat`）を、画面と同じ `ask()`（`src/ai/client.ts`）で呼び、本物のモデルが道具・長い会話・キャッシュ・トークン数で期待どおりに動くかを確かめる道具です。保存済みの答え（`public/data/cached_answers.json`）の作成も兼ねます。秘密は読まず、書かず、表示しません（API キーは Worker の中にだけあります）。
+公開済みの Worker を、公開ページの `/api/chat`（`https://japan2100.pages.dev/api/chat`。Worker は公開の住所を持たず、この入口から内部で呼ばれる）経由で、画面と同じ `ask()`（`src/ai/client.ts`）で呼び、本物のモデルが道具・長い会話・キャッシュ・トークン数で期待どおりに動くかを確かめる道具です。保存済みの答え（`public/data/cached_answers.json`）の作成も兼ねます。秘密は読まず、書かず、表示しません（API キーは Worker の中にだけあります）。
 
 ## 実行方法
 

@@ -2,7 +2,7 @@
 
 画面からの質問を Anthropic の Messages API に中継する小さな Worker です。API キーを画面側に置かないために使います。
 
-公開先は https://town-2100-api.your-account.workers.dev （2026-11-06 に公開）。呼び出してよい出どころは、公開ページの https://japan2100.pages.dev だけです。
+公開先は、公開ページ自身の `/api/chat`（https://japan2100.pages.dev/api/chat）です。この Worker は公開の住所（workers.dev）を持たず（`workers_dev: false`）、公開ページの Cloudflare Pages Function（`functions/api/chat.ts`）が、サービスバインディング `CHAT_API`（リポジトリのルートの `wrangler.jsonc`）で内部から呼びます（2026-11-06 に公開し、同日に今の形にした）。呼び出してよい出どころは、公開ページの https://japan2100.pages.dev だけです。
 
 ## できること
 
@@ -199,7 +199,7 @@ Workers の有料プランに含まれる量（KV の読み取り月 1,000 万�
 | 5. 秘密の登録 | 済 | `IP_HASH_SECRET`（ランダムな文字列）と `ANTHROPIC_API_KEY`。キーは、使う直前に作り、リポジトリにも会話にも出さず、Worker の秘密として直接登録した（作成画面を操作したときのブラウザの一時ファイルに値が写った分は、削除した。経緯は [docs/dev-log.md](../docs/dev-log.md) の6）。最初に作った 1 本は使わずに無効にし、登録したのは 2 本目（有効期限 2026-12-06）。 |
 | 6. `ALLOWED_ORIGINS` | 済 | `https://japan2100.pages.dev` だけ。 |
 | 7. Worker のデプロイ | 済 | `town-2100-api`。出力に、本物の KV の id、`IP_LIMITER`（20 回 / 60 秒）、`ALLOWED_ORIGINS` が載った。 |
-| 8. 画面のビルドと公開 | 済 | `VITE_CHAT_ENDPOINT` に Worker の URL を指定してビルドし、Cloudflare Pages の `japan2100` に直接アップロードした（検索エンジンには載せない設定）。質問の例の入れ替えのあとと、保存済みの答えを承認（`verified`）したあとにも、もう一度公開した。 |
+| 8. 画面のビルドと公開 | 済 | `VITE_CHAT_ENDPOINT=/api/chat` を指定してビルドし、Function とサービスバインディングを含めて、Cloudflare Pages の `japan2100` に直接アップロードした（検索エンジンには載せない設定）。質問の例の入れ替えのあとと、保存済みの答えを承認（`verified`）したあとにも、もう一度公開した。 |
 | 9. 実際の API での確認 | 一部済 | 下の「手順 9 の結果」。 |
 | 10. イベントのあと | 未了 | キーの有効期限は 2026-12-06。それより前に止めるなら、キーを失効させるか、`DAILY_TOTAL_LIMIT` を `0` にする。 |
 
@@ -233,9 +233,9 @@ Workers の有料プランに含まれる量（KV の読み取り月 1,000 万�
 4. レート制限の `namespace_id`: `worker/wrangler.jsonc` の `ratelimits[0].namespace_id`（既定 `"21001"` は仮の番号）を、**6 桁のランダムな正の整数**に書き換える（例: `python3 -c 'import random; print(random.randint(100000, 999999))'`）。同じ番号のバインディングは数えを共有してしまうが、アカウント内の番号を一覧するコマンドは無く、「未使用を確かめる」ことはできないので、ランダムな 6 桁にして偶然の重なりを避ける。`limit` 20・`period` 60 はそのまま（`wranglerConfig.test.ts` が固定しています）。
 5. 秘密を登録する（コードにも設定ファイルにも書かない）: `npx wrangler secret put ANTHROPIC_API_KEY -c worker/wrangler.jsonc`（手順 1 の専用ワークスペースのキー）と、`npx wrangler secret put IP_HASH_SECRET -c worker/wrangler.jsonc`（長いランダムな文字列）。まだデプロイしていない Worker に初めて秘密を入れるとき、wrangler が「その名前の Worker は無い。新しく作って秘密を足すか」と聞くので、**はい（y）**と答える（中身は手順 7 のデプロイで入る）。
 6. `ALLOWED_ORIGINS` を、公開ページの出どころだけにする。Pages のプロジェクトは手順 8 で作るので、ここでは**予定のプロジェクト名から決まる出どころ** `https://<プロジェクト名>.pages.dev` を入れる。**末尾の `/` は付けない**、完全一致、`http://localhost:5173` は外す。複数ならカンマ区切り。名前が使われていて末尾に文字が付くなどして、手順 8 でできた本物の出どころがこれと違ったら、ここを直して手順 7 をもう一度行う。
-7. **Worker をデプロイする**: `npx wrangler deploy -c worker/wrangler.jsonc`。出力の Worker の URL を控える（手順 8 で使う）。出力の一覧に、`env.RATE_KV` が**本物の id**で、`env.IP_LIMITER (20 requests/60s)` と、本番の `ALLOWED_ORIGINS` が載っていることを確かめる。
-8. **画面を、手順 7 の Worker の URL を指定して作り、公開する**: `VITE_CHAT_ENDPOINT=https://<Worker の URL>/api/chat npm run build`（ビルドに埋め込まれるので、変えたら作り直す。Worker を同じ出どころにルーティングするなら、`VITE_CHAT_ENDPOINT=/api/chat` と書いて作る。書かないと、画面は接続先を決めていないものとして、「AIに質問」の最初の説明文で使えない旨を先に言う。`docs/ai-endpoint.md`）。できたサイトを、手順 6 で予定した名前の Pages プロジェクトを作って公開する。公開後の本物の出どころが `ALLOWED_ORIGINS` と一致していることを確かめる。
-9. **実際の API で確かめる**（専用のキーで、本人の承認を得てから。モックでは確かめられない）。公開ページを開いてブラウザの開発者ツール（ネットワーク）で応答を見るか、`curl -H 'Origin: <公開ページの出どころ>' -H 'content-type: application/json' -d '{"messages":[…]}' https://<Worker の URL>/api/chat` で応答の JSON を読む。確かめている間は、`npx wrangler tail -c worker/wrangler.jsonc`（または Workers Logs）も見る。`rate limit store unavailable` や `burst limiter unavailable` が出ていないか（出ていれば、その要求は 503 で断られている）。`IP_LIMITER` は 1 人あたり 60 秒に 20 回までで、さらに同じ人の呼び出しを 1 秒以内に 2 回送ると 2 回目が 503 で断られる（同じカウンターへの 1 秒以内の 2 回目の書き込みが断られるため）ので、続けて送るときは 1 秒以上、20 回を超えそうなら 60 秒まで間を空ける。この順に行う:
+7. **Worker をデプロイする**: `npx wrangler deploy -c worker/wrangler.jsonc`。この Worker は公開の住所を持たない（`workers_dev: false`）ので、出力に URL は出ない。手順 8 の Function が、サービスバインディングで呼ぶ。出力の一覧に、`env.RATE_KV` が**本物の id**で、`env.IP_LIMITER (20 requests/60s)` と、本番の `ALLOWED_ORIGINS` が載っていることを確かめる。
+8. **画面を、同じ出どころの `/api/chat` から Worker を呼ぶ形で作り、公開する**: `VITE_CHAT_ENDPOINT=/api/chat npm run build`（ビルドに埋め込まれるので、変えたら作り直す。書かないと、画面は接続先を決めていないものとして、「AIに質問」の最初の説明文で使えない旨を先に言う。`docs/ai-endpoint.md`）。できたサイトを、手順 6 で予定した名前の Pages プロジェクトに、リポジトリのルートから `npx wrangler@4.103.0 pages deploy dist --project-name japan2100 --branch main` で公開する（ルートの `wrangler.jsonc` のサービスバインディング `CHAT_API` と、`functions/api/chat.ts` の Function が一緒に上がる。バインディングの `service` は、Worker の `name` と同じにする）。公開後の本物の出どころが `ALLOWED_ORIGINS` と一致していることを確かめる。
+9. **実際の API で確かめる**（専用のキーで、本人の承認を得てから。モックでは確かめられない）。公開ページを開いてブラウザの開発者ツール（ネットワーク）で応答を見るか、`curl -H 'Origin: <公開ページの出どころ>' -H 'content-type: application/json' -d '{"messages":[…]}' https://<公開ページの出どころ>/api/chat` で応答の JSON を読む。確かめている間は、`npx wrangler tail -c worker/wrangler.jsonc`（または Workers Logs）も見る。`rate limit store unavailable` や `burst limiter unavailable` が出ていないか（出ていれば、その要求は 503 で断られている）。`IP_LIMITER` は 1 人あたり 60 秒に 20 回までで、さらに同じ人の呼び出しを 1 秒以内に 2 回送ると 2 回目が 503 で断られる（同じカウンターへの 1 秒以内の 2 回目の書き込みが断られるため）ので、続けて送るときは 1 秒以上、20 回を超えそうなら 60 秒まで間を空ける。この順に行う:
    - **まず 429 の経路**（確かめる人の回数がまだ 0 のうちに行う。先に他の確認をすると、その回数が 1 日の数に入っていて、`DAILY_IP_LIMIT` を 3 にしても最初の呼び出しから断られる）: `npx wrangler deploy -c worker/wrangler.jsonc --var DAILY_IP_LIMIT:3` で一時的に 3 にして、3 回は通り、4 回目で 429 になることを確かめる。画面は、その質問に確認済みの保存済みの答えがあれば保存済みの答えに切り替わり、無ければ「いまはAIに接続できません。保存済みの質問を試してください。」と、保存済みの質問のボタンが出る。質問の例は、保存済みの答えが中継を呼ばずに出るので、この確認には質問の例ではない質問を使う。**確かめたら、`--var` なしでもう一度 `npx wrangler deploy -c worker/wrangler.jsonc` する**（`--var` なしのデプロイは、設定ファイルに無い変数を消すので、`DAILY_IP_LIMIT` は既定の 60 に戻る）。戻ったことは、続けて 4 回以上呼んでも 429 にならないことで確かめる。この人の 1 日の回数は、ここまでの分が引かれて残る（60 − 3 − …）ので、以降の確認が足りなければ、別のアドレスから行うか、翌日（00:00 UTC のあと）に行う。
    - 9 つの道具の定義すべてが API に受け付けられる（400 にならない）。9 つ目の `get_age_groups` を足した分は、この確認がまだ（下の「手順 9 の結果」の 8 つは、足す前の通しの結果）。
    - 道具を 1 回呼ぶやり取り（`tool_use` → `tool_result` → 答え）が通る。
