@@ -32,7 +32,7 @@ src/ai/tools.ts（8つの道具。同じ engine を呼ぶ）◀── src/ai/cli
 | 中継 | Cloudflare Worker `town-2100-api`（https://town-2100-api.your-account.workers.dev ）。呼び出してよい出どころは、`ALLOWED_ORIGINS` で公開ページだけ |
 | 中継の設定 | KV `RATE_KV`（名前空間 `town-2100-rate`）、Rate Limiting `IP_LIMITER`（60 秒に 20 回）、秘密 `ANTHROPIC_API_KEY`・`IP_HASH_SECRET`、変数 `ALLOWED_ORIGINS`。値は `worker/wrangler.jsonc`（秘密は含まない）。1日の上限の標準は、1人60回、全体400回 |
 | Anthropic 側 | この中継専用のワークスペース。月の利用上限 100 ドル、25 ドルでのメール通知、毎分の上限。API キーは Worker の秘密にだけ置き（作成のとき、作成画面を操作したブラウザの一時ファイルに値が写り、削除した。[dev-log.md](dev-log.md) の 6.2）、期限は 2026-12-06 |
-| 保存済みの答え | `public/data/cached_answers.json`。5件、すべて作者の確認前（`pending`）。ファイルは公開ページが配るが、画面は `pending` を出さない |
+| 保存済みの答え | `public/data/cached_answers.json`。5件、すべて作者が全文を読んで承認した確認済み（`verified`、2026-11-06）。画面は、質問の例のボタンを押したときに中継を呼ばずに出し、AI に接続できないときにも、同じ質問の答えがあれば出す。`pending` の答えは出さない。既知の限界が2つ（田辺市の答えの「公式 42,311 人」、和歌山県の答えは減る地域を答えられない）あり、ファイルの note に書いてある |
 | リポジトリ | GitHub の `main`。公開の状況は、README の冒頭の「リポジトリ」の行のとおり |
 
 ## モジュール
@@ -45,7 +45,7 @@ src/ai/tools.ts（8つの道具。同じ engine を呼ぶ）◀── src/ai/cli
 | `src/map` | 日本・県の地図、色（2020年比の対数。割り振りを表示する時は人口の変化）、凡例、キーボードの操作（`keyboard.ts`。地図ごとに Tab の停止位置は1つで、矢印・PageUp/PageDown・Home/End で移る） |
 | `src/ui` | 骨組み `app.ts`（地図へのスキップリンク、Esc で割り振りを消す）、共有の状態 `state.ts`（選択、年、前提、割り振りの地図表示 `allocation`）、パネル 4つ（町の詳細、前提、割り振り、AI）。割り振りを地図に出す部分は `allocationOverlay.ts`・`allocationView.ts`・`allocationCore.ts`。見た目の決まりは `DESIGN.md` と `theme.css` |
 | `src/ai` | `toolDefs`（道具の定義。データだけ）、`tools`（道具の実装）、`numberCheck`（答えの数字の検査）、`client`（Worker とのやり取りと道具のループ）、`cached`（保存済みの答え） |
-| `worker` | `index`（`POST /api/chat`。上流への要求の本体とヘッダーは定数と検査済みの `messages` と道具の定義だけから作る）、`validate`（本文の検査と作り直し）、`rateLimit`（IP ごとの1日の回数と、16個のキーに分けた全体の1日の回数。短時間の連続の制限 `IP_LIMITER` は `index` が呼ぶ。読み出しも書き込みも、失敗したら止める（503。上流は呼ばない））、`systemPrompt`。すべての応答に `nosniff`、想定外の失敗は同じ形の 500、ログは固定の文字列だけ |
+| `worker` | `index`（`POST /api/chat`。上流への要求の本体とヘッダーは定数と検査済みの `messages` と道具の定義だけから作る）、`validate`（本文の検査と作り直し）、`rateLimit`（IP ごとの1日の回数と、16個のキーに分けた全体の1日の回数。短時間の連続の制限 `IP_LIMITER` は `index` が呼ぶ。読み出しも書き込みも、失敗したら止める（503。上流は呼ばない））、`systemPrompt`（モデルへの決まり。勧めない、「予測」と書かない、に加えて、画面は文字をそのまま表示するので、表・太字や斜体の記号・見出しの記号を使わせない規則を含む）。すべての応答に `nosniff`、想定外の失敗は同じ形の 500、ログは固定の文字列だけ |
 
 ## 守っている4つの約束
 
