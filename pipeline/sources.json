@@ -325,5 +325,29 @@
         "sha256": "3e77d316a01819f958d80616c832e2b161dcd475b862a7984df29bd963a1cdb4"
       }
     ]
+  },
+  "finance": {
+    "note": "Municipal expenditure per resident. The Excel workbooks are NOT committed: pipeline/build_finance.py downloads them to data/raw/finance (git-ignored) and checks the SHA256 below. Run `python3 -m pipeline.build_finance --record` after a deliberate source update.",
+    "publisher": "Ministry of Internal Affairs and Communications (MIC)",
+    "title": "Reiwa 6 (FY2024) Municipal Settlement Overview (市町村別決算状況調), overview workbooks",
+    "license": "MIC site terms: Public Data License 1.0 (PDL1.0) unless a rights notice says otherwise; cite the source and state that the data was processed. See docs/sources.md.",
+    "landing_page": "https://www.soumu.go.jp/iken/zaisei/r06_shichouson.html",
+    "terms_page": "https://www.soumu.go.jp/menu_kyotsuu/policy/tyosaku.html",
+    "sources": [
+      {
+        "file": "r06_city_overview.xlsx",
+        "url": "https://www.soumu.go.jp/main_content/001061669.xlsx",
+        "description": "令和6年度 市町村別決算状況調 1 都市別 (1) 概況",
+        "bytes": 280977,
+        "sha256": "700fc73e7547cc7b0afafd597004489f7d9b1472667b7b576188350052eef96f"
+      },
+      {
+        "file": "r06_town_overview.xlsx",
+        "url": "https://www.soumu.go.jp/main_content/001061674.xlsx",
+        "description": "令和6年度 市町村別決算状況調 2 町村別 (1) 概況",
+        "bytes": 303130,
+        "sha256": "dbd2306e0814524e3127137001853403e210920aa7446e21db57283b541226dd"
+      }
+    ]
   }
 }
