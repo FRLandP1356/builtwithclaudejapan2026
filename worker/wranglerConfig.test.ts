@@ -50,6 +50,7 @@ interface WranglerConfig {
   };
   kv_namespaces?: Array<{ binding?: string; id?: string }>;
   ratelimits?: Array<{ name?: string; namespace_id?: string; simple?: { limit?: number; period?: number } }>;
+  limits?: { cpu_ms?: number; subrequests?: number };
   vars?: Record<string, unknown>;
 }
 
@@ -95,6 +96,14 @@ describe('worker/wrangler.jsonc', () => {
     expect(names).toEqual(['ALLOWED_ORIGINS']);
     expect(names.filter((name) => name.startsWith('DAILY_'))).toEqual([]);
     expect(JSON.stringify(config)).not.toMatch(/ANTHROPIC_API_KEY|IP_HASH_SECRET|sk-ant/);
+  });
+
+  it('caps what one invocation may use (a guard against runaway bills); a normal call needs about 21 subrequests and a few ms of CPU', () => {
+    // Cloudflare has no spending cap, so the per-invocation caps are one of the few levers that exist. They must stay
+    // present and above what a normal call needs (1 upstream call + 17 KV reads + 2 KV writes + the burst limiter),
+    // otherwise real questions would start failing.
+    expect(config.limits).toStrictEqual({ cpu_ms: 100, subrequests: 60 });
+    expect(config.limits!.subrequests!).toBeGreaterThanOrEqual(21);
   });
 
   it('records the Worker\'s console lines only: logs on, invocation logs off, no traces', () => {

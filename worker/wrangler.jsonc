@@ -17,6 +17,14 @@
       "head_sampling_rate": 1
     }
   },
+  // Caps what ONE invocation may use, a guard against runaway bills ("denial of wallet"; Cloudflare's own wording for
+  // this setting). A normal call needs a few ms of CPU and about 21 subrequests (1 upstream call, 17 KV reads, 2 KV
+  // writes, the burst limiter), so these are generous. Needs the Workers Paid plan. This is not a spending cap:
+  // Cloudflare has none; see "請求の安全" in worker/README.md.
+  "limits": {
+    "cpu_ms": 100,
+    "subrequests": 60
+  },
   "kv_namespaces": [
     {
       "binding": "RATE_KV",
