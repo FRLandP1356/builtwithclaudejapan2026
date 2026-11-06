@@ -5,7 +5,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'worker/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'worker/**/*.test.ts', 'functions/**/*.test.ts'],
     // The default 5 s was hit once by the engine tests that run all 1,884 areas (about 1 s alone, several times that under load).
     testTimeout: 15000,
   },

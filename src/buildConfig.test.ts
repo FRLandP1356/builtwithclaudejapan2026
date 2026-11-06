@@ -16,7 +16,7 @@ describe('vite build', () => {
 describe('vitest', () => {
   test('a test has 15 s, not the 5 s default (the engine tests run all 1,884 areas)', () => {
     expect(vitestConfig.test?.testTimeout).toBe(15000);
-    expect(vitestConfig.test?.include).toEqual(['src/**/*.test.ts', 'worker/**/*.test.ts']);
+    expect(vitestConfig.test?.include).toEqual(['src/**/*.test.ts', 'worker/**/*.test.ts', 'functions/**/*.test.ts']);
   });
 });
 

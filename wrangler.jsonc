@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // The Cloudflare Pages project of the public page (direct upload):
+  //   npx wrangler@4.103.0 pages deploy dist --project-name japan2100 --branch main
+  // The Worker itself is deployed from worker/wrangler.jsonc (`-c worker/wrangler.jsonc`), not from this file.
+  "name": "japan2100",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-11-01",
+  // The page's /api/chat (functions/api/chat.ts) calls the Worker through this binding. The service name must be the
+  // Worker's `name` in worker/wrangler.jsonc (pinned by functions/pagesConfig.test.ts).
+  "services": [
+    {
+      "binding": "CHAT_API",
+      "service": "town-2100-api"
+    }
+  ]
+}

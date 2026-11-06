@@ -36,8 +36,9 @@ import type { Area, Facility, Groups, Scenario, Series } from '../src/engine/typ
 // Constants
 // ---------------------------------------------------------------------------------------------------------------
 
-const WORKER_URL = 'https://town-2100-api.your-account.workers.dev/api/chat';
 const PAGE_ORIGIN = 'https://japan2100.pages.dev';
+// The Worker has no public address of its own: the page's /api/chat (functions/api/chat.ts) hands the call to it.
+const WORKER_URL = `${PAGE_ORIGIN}/api/chat`;
 const PACE_MS = 4000; // least gap between two requests (end of one to start of the next)
 const RETRY_WAIT_MS = 30_000; // pause before retrying a 429 or 503
 const MAX_RETRIES = 3;
