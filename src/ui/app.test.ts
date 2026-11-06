@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { loadSampleAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
 import { loadFinance } from '../../test/helpers/loadFinance';
 import { makeTopology } from '../../test/helpers/makeTopology';
+import { repoPath } from '../../test/helpers/paths';
 import { allocationColor, SUPPORT_COLORS, supportColor } from '../map/colors';
 import { SUPPORT_TITLE } from '../map/legend';
 import type { Pop } from '../engine/types';
@@ -51,6 +53,7 @@ function makeFetch(control: Control) {
     }
     if (url.endsWith('facilities.json')) return Promise.resolve(json(loadFacilities()));
     if (url.endsWith('finance.json')) return Promise.resolve(json(loadFinance()));
+    if (url.endsWith('landmarks.json')) return Promise.resolve(json(JSON.parse(readFileSync(repoPath('public/data/landmarks.json'), 'utf8'))));
     if (url.endsWith('japan.topo.json')) return Promise.resolve(json(control.brokenNational ? { objects: {} } : japanTopo));
     return Promise.resolve(json('not found', 404));
   });

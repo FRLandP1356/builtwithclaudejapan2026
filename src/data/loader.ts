@@ -1,8 +1,10 @@
-// Loads the static data files Vite serves from public/ (areas, groups, facilities, boundaries).
+// Loads the static data files Vite serves from public/ (areas, groups, facilities, boundaries, spending). The landmarks
+// file is the one optional file: when it is missing or unreadable the app starts without it (a console.warn says so).
 // All URLs are relative to import.meta.env.BASE_URL so the app works at any mount path.
 import type { Topology } from 'topojson-specification';
 import type { Area, Facility, Groups } from '../engine/types';
 import { parseFinance, type Finance } from './finance';
+import { parseLandmarks, type Landmark } from './landmarks';
 
 export interface AppData {
   /** All 1,884 areas, in prefecture-file order. */
@@ -15,6 +17,11 @@ export interface AppData {
   japanTopo: Topology;
   /** Prefecture code -> name, taken from the areas. */
   prefNames: Map<string, string>;
+  /**
+   * Famous places and things by town (landmarks.json), kept to the towns in `areas`. Undefined when the file is absent
+   * or not in shape: the panels that list them show nothing, everything else runs as before.
+   */
+  landmarks?: Landmark[];
 }
 
 /** The 47 prefecture codes, "01".."47". */
@@ -90,18 +97,28 @@ function resolveFetch(opts: LoadOptions): typeof fetch {
   return opts.fetch ?? ((input, init) => fetch(input, init));
 }
 
-/** Load everything the app needs to start: 47 area files, groups, facilities, spending per resident and the national boundaries, in parallel. */
+export const LANDMARKS_PATH = 'data/landmarks.json';
+
+/**
+ * Load everything the app needs to start: 47 area files, groups, facilities, spending per resident and the national
+ * boundaries, in parallel. The landmarks file is fetched with them but never fails the load.
+ */
 export async function loadAll(opts: LoadOptions = {}): Promise<AppData> {
   const f = resolveFetch(opts);
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const url = (p: string) => (opts.base === undefined ? dataUrl(p) : dataUrl(p, opts.base));
 
   const areaFiles = PREF_CODES.map((pp) => fetchJson<Area[]>(url(`data/areas/${pp}.json`), f, timeoutMs));
-  const [groups, facilities, financeRaw, japanTopo, ...areaLists] = await Promise.all([
+  const landmarksFile = fetchJson<unknown>(url(LANDMARKS_PATH), f, timeoutMs).catch((e: unknown) => {
+    console.warn(`${LANDMARKS_PATH} could not be loaded; the list of famous places is left out`, e);
+    return undefined;
+  });
+  const [groups, facilities, financeRaw, japanTopo, landmarksRaw, ...areaLists] = await Promise.all([
     fetchJson<Groups>(url('data/groups.json'), f, timeoutMs),
     fetchJson<Facility[]>(url('data/facilities.json'), f, timeoutMs),
     fetchJson<unknown>(url('data/finance.json'), f, timeoutMs),
     fetchJson<Topology>(url('data/geo/japan.topo.json'), f, timeoutMs),
+    landmarksFile,
     ...areaFiles,
   ]);
 
@@ -123,7 +140,16 @@ export async function loadAll(opts: LoadOptions = {}): Promise<AppData> {
   } catch (e) {
     throw new DataLoadError(url('data/finance.json'), 'shape', undefined, e);
   }
-  return { areas, groups, facilities, finance, japanTopo, prefNames };
+  const data: AppData = { areas, groups, facilities, finance, japanTopo, prefNames };
+  if (landmarksRaw !== undefined) {
+    const codes = new Set(areas.map((a) => a.code));
+    try {
+      data.landmarks = parseLandmarks(landmarksRaw, (c) => codes.has(c));
+    } catch (e) {
+      console.warn(`${LANDMARKS_PATH} is not in shape; the list of famous places is left out`, e);
+    }
+  }
+  return data;
 }
 
 export interface PrefGeoOptions extends LoadOptions {

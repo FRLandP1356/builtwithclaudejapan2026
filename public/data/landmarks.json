@@ -1,0 +1,2206 @@
+{
+  "version": 1,
+  "note": "各都道府県の有名なものの例。完全な一覧ではない。その町にあるものの事実を示すだけで、今後の見込みは示さない。",
+  "items": [
+    {
+      "id": "sapporo-clock-tower",
+      "name": "札幌市時計台",
+      "kind": "観光地",
+      "prefCode": "01",
+      "areaCode": "01101",
+      "summary": "札幌市中央区にある旧札幌農学校演武場。国指定の重要文化財。",
+      "source": "https://sapporoshi-tokeidai.jp/",
+      "sourceLabel": "札幌市時計台 公式サイト"
+    },
+    {
+      "id": "goryokaku",
+      "name": "五稜郭",
+      "kind": "城",
+      "prefCode": "01",
+      "areaCode": "01202",
+      "summary": "函館市五稜郭町にある城郭跡。国の特別史跡に指定されている。",
+      "source": "https://kunishitei.bunka.go.jp/heritage/detail/401/7",
+      "sourceLabel": "文化庁 国指定文化財等データベース"
+    },
+    {
+      "id": "otaru-canal",
+      "name": "小樽運河",
+      "kind": "観光地",
+      "prefCode": "01",
+      "areaCode": "01203",
+      "summary": "小樽市にある運河。大正12年に完成し、全長は1140m。",
+      "source": "https://www.city.otaru.lg.jp/docs/2020100900367/",
+      "sourceLabel": "小樽市 公式サイト（小樽運河）"
+    },
+    {
+      "id": "asahiyama-zoo",
+      "name": "旭山動物園",
+      "kind": "観光地",
+      "prefCode": "01",
+      "areaCode": "01204",
+      "summary": "旭川市東旭川町倉沼にある、旭川市の動物園。",
+      "source": "https://www.city.asahikawa.hokkaido.jp/asahiyamazoo/",
+      "sourceLabel": "旭川市旭山動物園 公式サイト（旭川市公式サイト内）"
+    },
+    {
+      "id": "noboribetsu-onsen",
+      "name": "登別温泉",
+      "kind": "温泉地",
+      "prefCode": "01",
+      "areaCode": "01230",
+      "summary": "登別市の温泉地。地獄谷から硫黄泉、明ばん泉、鉄泉などの湯が湧く。",
+      "source": "https://www.city.noboribetsu.lg.jp/docs/2013031200132/",
+      "sourceLabel": "登別市 公式サイト（地獄谷の紹介）"
+    },
+    {
+      "id": "aomori-nebuta",
+      "name": "青森ねぶた祭",
+      "kind": "祭り・伝統",
+      "prefCode": "02",
+      "areaCode": "02201",
+      "summary": "青森市で毎年8月2日から7日に行われる祭り。国の重要無形民俗文化財。",
+      "source": "https://www.city.aomori.aomori.jp/bunka_sports_kankou/kankou/1005222/1005223.html",
+      "sourceLabel": "青森市 公式サイト（青森ねぶた祭）"
+    },
+    {
+      "id": "sannai-maruyama",
+      "name": "三内丸山遺跡",
+      "kind": "世界遺産",
+      "prefCode": "02",
+      "areaCode": "02201",
+      "summary": "青森市の縄文時代の遺跡。「北海道・北東北の縄文遺跡群」の構成資産。",
+      "source": "https://sannaimaruyama.pref.aomori.jp/",
+      "sourceLabel": "三内丸山遺跡 公式サイト（青森県）"
+    },
+    {
+      "id": "hirosaki-castle",
+      "name": "弘前城",
+      "kind": "城",
+      "prefCode": "02",
+      "areaCode": "02202",
+      "summary": "弘前市の弘前公園にある城。江戸時代の天守が国の重要文化財。",
+      "source": "https://www.city.hirosaki.aomori.jp/gaiyou/shisetsu/2014-1206-1528-48.html",
+      "sourceLabel": "弘前市 公式サイト（弘前公園）"
+    },
+    {
+      "id": "oirase-keiryu",
+      "name": "奥入瀬渓流",
+      "kind": "自然",
+      "prefCode": "02",
+      "areaCode": "02206",
+      "summary": "十和田湖から流れ出る唯一の河川、奥入瀬川が削ったU字型の渓谷。",
+      "source": "https://www.env.go.jp/nature/nationalparks/list/towada-hachimantai/spot/",
+      "sourceLabel": "環境省 十和田八幡平国立公園 見どころ・施設"
+    },
+    {
+      "id": "morioka-sansa",
+      "name": "盛岡さんさ踊り",
+      "kind": "祭り・伝統",
+      "prefCode": "03",
+      "areaCode": "03201",
+      "summary": "盛岡市中央通を主会場とする踊りの祭り。",
+      "source": "https://sansaodori.jp/info/",
+      "sourceLabel": "盛岡さんさ踊り 公式ホームページ"
+    },
+    {
+      "id": "jodogahama",
+      "name": "浄土ヶ浜",
+      "kind": "自然",
+      "prefCode": "03",
+      "areaCode": "03202",
+      "summary": "宮古市日立浜町の海岸にある景勝地。国指定の名勝。",
+      "source": "https://www.city.miyako.iwate.jp/gyosei/soshiki/kanko/4/8/2/1/1154.html",
+      "sourceLabel": "宮古市 公式サイト（浄土ヶ浜）"
+    },
+    {
+      "id": "chusonji",
+      "name": "中尊寺",
+      "kind": "世界遺産",
+      "prefCode": "03",
+      "areaCode": "03402",
+      "summary": "「平泉－仏国土（浄土）を表す建築・庭園及び考古学的遺跡群－」の構成資産。",
+      "source": "https://www.town.hiraizumi.iwate.jp/heritage/about/index.html",
+      "sourceLabel": "平泉町 公式サイト（平泉の文化遺産）"
+    },
+    {
+      "id": "ryusendo",
+      "name": "龍泉洞",
+      "kind": "自然",
+      "prefCode": "03",
+      "areaCode": "03483",
+      "summary": "岩泉町にある鍾乳洞。洞内のコウモリとともに国の天然記念物。",
+      "source": "https://www.iwate-ryusendo.jp/",
+      "sourceLabel": "龍泉洞 公式サイト"
+    },
+    {
+      "id": "sendai-castle",
+      "name": "仙台城跡",
+      "kind": "城",
+      "prefCode": "04",
+      "areaCode": "04101",
+      "summary": "仙台市青葉区にある城跡。国の史跡に指定されている。",
+      "source": "https://kunishitei.bunka.go.jp/heritage/detail/401/3371",
+      "sourceLabel": "文化庁 国指定文化財等データベース"
+    },
+    {
+      "id": "shiogama-jinja",
+      "name": "鹽竈神社",
+      "kind": "神社",
+      "prefCode": "04",
+      "areaCode": "04203",
+      "summary": "塩竈市一森山にある神社。安産守護の神として信仰されている。",
+      "source": "https://www.shiogamajinja.jp/about/access.html",
+      "sourceLabel": "鹽竈神社 公式サイト（アクセスガイド）"
+    },
+    {
+      "id": "naruko-onsen",
+      "name": "鳴子温泉郷",
+      "kind": "温泉地",
+      "prefCode": "04",
+      "areaCode": "04215",
+      "summary": "大崎市の温泉郷。鳴子・中山平・東鳴子・川渡・鬼首の五つの温泉地がある。",
+      "source": "https://www.city.osaki.miyagi.jp/shisei/soshikikarasagasu/narukosogoushisho/chiikishinkoka/4/1/3078.html",
+      "sourceLabel": "大崎市 公式サイト（鳴子温泉郷）"
+    },
+    {
+      "id": "zuiganji",
+      "name": "瑞巌寺",
+      "kind": "寺院",
+      "prefCode": "04",
+      "areaCode": "04401",
+      "summary": "松島町にある臨済宗妙心寺派の寺院。本堂と庫裡が国宝。",
+      "source": "https://zuiganji.or.jp/guide/",
+      "sourceLabel": "瑞巌寺 公式サイト（拝観案内）"
+    },
+    {
+      "id": "akita-kanto",
+      "name": "秋田竿燈まつり",
+      "kind": "祭り・伝統",
+      "prefCode": "05",
+      "areaCode": "05201",
+      "summary": "秋田市の竿燈大通りで毎年8月3日から6日に開かれる祭り。",
+      "source": "https://www.kantou.gr.jp/faq/",
+      "sourceLabel": "秋田竿燈まつり 公式ホームページ"
+    },
+    {
+      "id": "oga-namahage",
+      "name": "男鹿のナマハゲ",
+      "kind": "祭り・伝統",
+      "prefCode": "05",
+      "areaCode": "05206",
+      "summary": "大晦日の晩に男鹿半島で行われる行事。ユネスコ無形文化遺産に登録。",
+      "source": "https://www.city.oga.akita.jp/soshik/bunkasportska/bunkazai/2/1518.html",
+      "sourceLabel": "男鹿市 公式サイト（男鹿のナマハゲ）"
+    },
+    {
+      "id": "omagari-fireworks",
+      "name": "大曲の花火",
+      "kind": "祭り・伝統",
+      "prefCode": "05",
+      "areaCode": "05212",
+      "summary": "大仙市の雄物川河川敷で開かれる全国花火競技大会。",
+      "source": "https://www.city.daisen.lg.jp/archive/contents-6940",
+      "sourceLabel": "大仙市 公式サイト（大曲の花火ポータルサイト）"
+    },
+    {
+      "id": "kakunodate-buke-yashiki",
+      "name": "角館の武家屋敷",
+      "kind": "観光地",
+      "prefCode": "05",
+      "areaCode": "05215",
+      "summary": "仙北市角館町の重要伝統的建造物群保存地区。武家屋敷が並ぶ。",
+      "source": "https://www.city.semboku.akita.jp/citizens/12_07kuni.html",
+      "sourceLabel": "仙北市 公式サイト（国指定文化財一覧）"
+    },
+    {
+      "id": "yamadera-risshakuji",
+      "name": "山寺（立石寺）",
+      "kind": "寺院",
+      "prefCode": "06",
+      "areaCode": "06201",
+      "summary": "天台宗の寺院。正式には宝珠山立石寺で、通称「山寺」と呼ばれる。",
+      "source": "https://rissyakuji.jp/access/",
+      "sourceLabel": "立石寺 公式サイト（アクセス）"
+    },
+    {
+      "id": "dewa-sanzan-jinja",
+      "name": "出羽三山神社",
+      "kind": "神社",
+      "prefCode": "06",
+      "areaCode": "06203",
+      "summary": "羽黒山頂の三神合祭殿は国の重要文化財。鶴岡市羽黒町にある。",
+      "source": "https://kunishitei.bunka.go.jp/heritage/detail/102/3675",
+      "sourceLabel": "文化庁 国指定文化財等データベース"
+    },
+    {
+      "id": "ginzan-onsen",
+      "name": "銀山温泉",
+      "kind": "温泉地",
+      "prefCode": "06",
+      "areaCode": "06212",
+      "summary": "尾花沢市大字銀山新畑にある温泉地。",
+      "source": "https://www.ginzanonsen.jp/ginzan/component.html",
+      "sourceLabel": "銀山温泉 公式サイト"
+    },
+    {
+      "id": "tsurugajo",
+      "name": "鶴ヶ城",
+      "kind": "城",
+      "prefCode": "07",
+      "areaCode": "07202",
+      "summary": "会津若松市追手町にある城。正式には若松城と呼ばれる。",
+      "source": "https://www.tsurugajo.com/",
+      "sourceLabel": "鶴ヶ城 公式サイト"
+    },
+    {
+      "id": "ouchijuku",
+      "name": "大内宿",
+      "kind": "観光地",
+      "prefCode": "07",
+      "areaCode": "07362",
+      "summary": "下郷町大字大内にある集落。昭和56年に国の重要伝統的建造物群保存地区に選定。",
+      "source": "https://ouchi-juku.com/",
+      "sourceLabel": "大内宿観光協会 公式サイト"
+    },
+    {
+      "id": "goshikinuma",
+      "name": "五色沼",
+      "kind": "自然",
+      "prefCode": "07",
+      "areaCode": "07402",
+      "summary": "北塩原村の裏磐梯にある湖沼群。毘沙門沼・赤沼・青沼などから成る。",
+      "source": "https://www.env.go.jp/nature/nationalparks/list/bandai-asahi/spot/",
+      "sourceLabel": "環境省 磐梯朝日国立公園 見どころ・施設"
+    },
+    {
+      "id": "miharu-takizakura",
+      "name": "三春滝桜",
+      "kind": "自然",
+      "prefCode": "07",
+      "areaCode": "07521",
+      "summary": "三春町大字滝にある桜の木。大正11年に国の天然記念物に指定された。",
+      "source": "https://www.town.miharu.fukushima.jp/soshiki/7/02-0101setumei1.html",
+      "sourceLabel": "三春町 公式サイト（三春滝桜とは）"
+    },
+    {
+      "id": "kairakuen",
+      "name": "偕楽園",
+      "kind": "観光地",
+      "prefCode": "08",
+      "areaCode": "08201",
+      "summary": "水戸市にある公園。日本三名園のひとつ。",
+      "source": "https://ibaraki-kairakuen.jp/",
+      "sourceLabel": "偕楽園公園 公式サイト"
+    },
+    {
+      "id": "jaxa-tsukuba",
+      "name": "筑波宇宙センター",
+      "kind": "大学・研究",
+      "prefCode": "08",
+      "areaCode": "08220",
+      "summary": "つくば市千現にあるJAXAの施設。",
+      "source": "https://visit-tsukuba.jaxa.jp/",
+      "sourceLabel": "筑波宇宙センター 公式サイト（JAXA）"
+    },
+    {
+      "id": "tsukuba-jinja",
+      "name": "筑波山神社",
+      "kind": "神社",
+      "prefCode": "08",
+      "areaCode": "08220",
+      "summary": "つくば市筑波にある神社。",
+      "source": "https://www.tsukubasanjinja.jp/",
+      "sourceLabel": "筑波山神社 公式サイト"
+    },
+    {
+      "id": "hitachi-seaside-park",
+      "name": "国営ひたち海浜公園",
+      "kind": "観光地",
+      "prefCode": "08",
+      "areaCode": "08221",
+      "summary": "ひたちなか市馬渡にある国営の公園。",
+      "source": "https://hitachikaihin.jp/",
+      "sourceLabel": "国営ひたち海浜公園 公式サイト"
+    },
+    {
+      "id": "kashima-jingu",
+      "name": "鹿島神宮",
+      "kind": "神社",
+      "prefCode": "08",
+      "areaCode": "08222",
+      "summary": "鹿嶋市宮中にある神社。",
+      "source": "https://kashimajingu.jp/",
+      "sourceLabel": "鹿島神宮 公式サイト"
+    },
+    {
+      "id": "ashikaga-gakko",
+      "name": "史跡足利学校",
+      "kind": "観光地",
+      "prefCode": "09",
+      "areaCode": "09202",
+      "summary": "足利市昌平町にある史跡。",
+      "source": "https://www.city.ashikaga.tochigi.jp/office/000011/000067/000068/index.html",
+      "sourceLabel": "足利市 公式サイト（史跡足利学校事務所）"
+    },
+    {
+      "id": "nikko-toshogu",
+      "name": "日光東照宮",
+      "kind": "世界遺産",
+      "prefCode": "09",
+      "areaCode": "09206",
+      "summary": "世界遺産「日光の社寺」の構成資産で、日光山内にある神社。",
+      "source": "https://www.toshogu.jp/",
+      "sourceLabel": "日光東照宮 公式サイト"
+    },
+    {
+      "id": "mashiko-yaki",
+      "name": "益子焼",
+      "kind": "産業・名産",
+      "prefCode": "09",
+      "areaCode": "09342",
+      "summary": "益子町の陶器。江戸時代末期に窯が築かれたことに始まるとされる。",
+      "source": "https://www.town.mashiko.lg.jp/page/page000115.html",
+      "sourceLabel": "益子町 公式サイト（益子焼について）"
+    },
+    {
+      "id": "haruna-jinja",
+      "name": "榛名神社",
+      "kind": "神社",
+      "prefCode": "10",
+      "areaCode": "10202",
+      "summary": "高崎市榛名山町にある神社。",
+      "source": "https://www.city.takasaki.gunma.jp/site/cultural-assets/4631.html",
+      "sourceLabel": "高崎市 公式サイト（文化財情報）"
+    },
+    {
+      "id": "ikaho-onsen",
+      "name": "伊香保温泉",
+      "kind": "温泉地",
+      "prefCode": "10",
+      "areaCode": "10208",
+      "summary": "渋川市の温泉地。「黄金の湯」と「白銀の湯」の2種類の源泉がある。",
+      "source": "https://www.ikaho-kankou.com/",
+      "sourceLabel": "渋川伊香保温泉観光協会 公式サイト"
+    },
+    {
+      "id": "tomioka-silk-mill",
+      "name": "富岡製糸場",
+      "kind": "世界遺産",
+      "prefCode": "10",
+      "areaCode": "10210",
+      "summary": "富岡市にある製糸場。「富岡製糸場と絹産業遺産群」として世界遺産。",
+      "source": "https://worldheritage.pref.gunma.jp/tomikinu/index.php/tomiokasilkmill/",
+      "sourceLabel": "群馬県 世界遺産サイト（富岡製糸場）"
+    },
+    {
+      "id": "kusatsu-onsen",
+      "name": "草津温泉",
+      "kind": "温泉地",
+      "prefCode": "10",
+      "areaCode": "10426",
+      "summary": "草津町の温泉地。温泉街の中央に湯畑がある。",
+      "source": "https://www.town.kusatsu.gunma.jp/www/contents/1485303527539/index.html",
+      "sourceLabel": "草津町 公式サイト（湯畑）"
+    },
+    {
+      "id": "railway-museum",
+      "name": "鉄道博物館",
+      "kind": "美術館・博物館",
+      "prefCode": "11",
+      "areaCode": "11103",
+      "summary": "さいたま市大宮区大成町にある鉄道の博物館。",
+      "source": "https://www.railway-museum.jp/contact/",
+      "sourceLabel": "鉄道博物館 公式サイト"
+    },
+    {
+      "id": "kawagoe-kurazukuri",
+      "name": "川越の蔵造りの町並み",
+      "kind": "観光地",
+      "prefCode": "11",
+      "areaCode": "11201",
+      "summary": "川越市の蔵造りの町並み。国の重要伝統的建造物群保存地区。",
+      "source": "https://www.city.kawagoe.saitama.jp/shisei/toshikei/1010554/1010635/1010636/1004111.html",
+      "sourceLabel": "川越市 公式サイト（重要伝統的建造物群保存地区）"
+    },
+    {
+      "id": "chichibu-jinja",
+      "name": "秩父神社",
+      "kind": "神社",
+      "prefCode": "11",
+      "areaCode": "11207",
+      "summary": "秩父市番場町にある神社。",
+      "source": "https://www.chichibu-jinja.or.jp/",
+      "sourceLabel": "秩父神社 公式サイト"
+    },
+    {
+      "id": "nagatoro",
+      "name": "長瀞",
+      "kind": "自然",
+      "prefCode": "11",
+      "areaCode": "11363",
+      "summary": "長瀞町の荒川沿いの地域。町全体が県立長瀞玉淀自然公園に指定。",
+      "source": "https://www.nagatoro.gr.jp/",
+      "sourceLabel": "長瀞町観光協会 公式サイト"
+    },
+    {
+      "id": "inubosaki-lighthouse",
+      "name": "犬吠埼灯台",
+      "kind": "観光地",
+      "prefCode": "12",
+      "areaCode": "12202",
+      "summary": "銚子市犬吠埼にある灯台。国の重要文化財に指定されている。",
+      "source": "https://online.bunka.go.jp/heritages/detail/588190",
+      "sourceLabel": "文化庁 文化遺産オンライン"
+    },
+    {
+      "id": "naritasan-shinshoji",
+      "name": "成田山新勝寺",
+      "kind": "寺院",
+      "prefCode": "12",
+      "areaCode": "12211",
+      "summary": "成田市成田にある寺院。建造物が国の重要文化財に指定されている。",
+      "source": "https://www.naritasan.or.jp/contact/",
+      "sourceLabel": "成田山新勝寺 公式サイト"
+    },
+    {
+      "id": "kamogawa-seaworld",
+      "name": "鴨川シーワールド",
+      "kind": "テーマパーク",
+      "prefCode": "12",
+      "areaCode": "12223",
+      "summary": "鴨川市東町にある水族館テーマパーク。",
+      "source": "https://www.kamogawa-seaworld.jp/",
+      "sourceLabel": "鴨川シーワールド 公式サイト"
+    },
+    {
+      "id": "tokyo-disney-resort",
+      "name": "東京ディズニーリゾート",
+      "kind": "テーマパーク",
+      "prefCode": "12",
+      "areaCode": "12227",
+      "summary": "浦安市舞浜にあるリゾート。東京ディズニーランドと東京ディズニーシーがある。",
+      "source": "https://www.city.urayasu.lg.jp/shisei/profile/oideyo/resort/1001513.html",
+      "sourceLabel": "浦安市 公式サイト（アーバンリゾートゾーン）"
+    },
+    {
+      "id": "katori-jingu",
+      "name": "香取神宮",
+      "kind": "神社",
+      "prefCode": "12",
+      "areaCode": "12236",
+      "summary": "香取市香取にある神社。",
+      "source": "https://www.city.katori.lg.jp/sightseeing/meisho/rekishi/s_katori.html",
+      "sourceLabel": "香取市 公式サイト"
+    },
+    {
+      "id": "senso-ji",
+      "name": "浅草寺",
+      "kind": "寺院",
+      "prefCode": "13",
+      "areaCode": "13106",
+      "summary": "台東区浅草にある聖観音宗の寺院。",
+      "source": "https://www.senso-ji.jp/",
+      "sourceLabel": "浅草寺 公式サイト"
+    },
+    {
+      "id": "tokyo-skytree",
+      "name": "東京スカイツリー",
+      "kind": "観光地",
+      "prefCode": "13",
+      "areaCode": "13107",
+      "summary": "墨田区押上にある塔。最高高さは634m。",
+      "source": "https://www.tokyo-skytree.jp/",
+      "sourceLabel": "東京スカイツリー 公式サイト"
+    },
+    {
+      "id": "haneda-airport",
+      "name": "東京国際空港（羽田空港）",
+      "kind": "空港・港・鉄道・橋（インフラ）",
+      "prefCode": "13",
+      "areaCode": "13111",
+      "summary": "大田区にある空港。正式名称は東京国際空港。",
+      "source": "https://www.pa.ktr.mlit.go.jp/haneda/haneda/04-jimusyo/index.html",
+      "sourceLabel": "国土交通省 関東地方整備局 東京空港整備事務所"
+    },
+    {
+      "id": "meiji-jingu",
+      "name": "明治神宮",
+      "kind": "神社",
+      "prefCode": "13",
+      "areaCode": "13113",
+      "summary": "渋谷区代々木神園町にある神社。",
+      "source": "https://www.meijijingu.or.jp/",
+      "sourceLabel": "明治神宮 公式サイト"
+    },
+    {
+      "id": "mt-takao",
+      "name": "高尾山",
+      "kind": "自然",
+      "prefCode": "13",
+      "areaCode": "13201",
+      "summary": "八王子市高尾町にある山。山頂の標高は599m。",
+      "source": "https://www.gotokyo.org/jp/spot/38/index.html",
+      "sourceLabel": "GO TOKYO（東京都の観光公式サイト）"
+    },
+    {
+      "id": "yokohama-chinatown",
+      "name": "横浜中華街",
+      "kind": "観光地",
+      "prefCode": "14",
+      "areaCode": "14104",
+      "summary": "横浜市中区山下町にある中華街。",
+      "source": "https://www.chinatown.or.jp/hattenkai/",
+      "sourceLabel": "横浜中華街 公式サイト（発展会協同組合）"
+    },
+    {
+      "id": "tsurugaoka-hachimangu",
+      "name": "鶴岡八幡宮",
+      "kind": "神社",
+      "prefCode": "14",
+      "areaCode": "14204",
+      "summary": "鎌倉市雪ノ下にある神社。",
+      "source": "https://www.city.kamakura.kanagawa.jp/keikan/100sen/rekisi/40.html",
+      "sourceLabel": "鎌倉市 公式サイト（景観百選）"
+    },
+    {
+      "id": "enoshima",
+      "name": "江の島",
+      "kind": "観光地",
+      "prefCode": "14",
+      "areaCode": "14205",
+      "summary": "藤沢市江の島にある島。島内に江島神社がある。",
+      "source": "https://www.fujisawa-kanko.jp/info/tourist_Information.html",
+      "sourceLabel": "藤沢市観光協会 公式サイト"
+    },
+    {
+      "id": "odawara-castle",
+      "name": "小田原城",
+      "kind": "城",
+      "prefCode": "14",
+      "areaCode": "14206",
+      "summary": "小田原市城内にある城。",
+      "source": "https://odawaracastle.com/",
+      "sourceLabel": "小田原城 公式サイト"
+    },
+    {
+      "id": "hakone-onsen",
+      "name": "箱根温泉",
+      "kind": "温泉地",
+      "prefCode": "14",
+      "areaCode": "14382",
+      "summary": "箱根町の温泉地。「箱根十七湯」と呼ばれる。",
+      "source": "https://www.town.hakone.kanagawa.jp/www/contents/1100000001018/index.html",
+      "sourceLabel": "箱根町 公式サイト（温泉）"
+    },
+    {
+      "id": "nagaoka-fireworks",
+      "name": "長岡まつり大花火大会",
+      "kind": "祭り・伝統",
+      "prefCode": "15",
+      "areaCode": "15202",
+      "summary": "長岡市の信濃川河川敷で開かれる花火大会。",
+      "source": "https://nagaoka-navi.or.jp/event/2441",
+      "sourceLabel": "長岡観光ナビ（長岡市の観光公式サイト）"
+    },
+    {
+      "id": "kasugayama-castle",
+      "name": "春日山城跡",
+      "kind": "城",
+      "prefCode": "15",
+      "areaCode": "15222",
+      "summary": "上越市にある城跡。国指定文化財。",
+      "source": "https://online.bunka.go.jp/heritages/detail/205153",
+      "sourceLabel": "文化遺産オンライン（文化庁）春日山城跡"
+    },
+    {
+      "id": "sado-gold-mine",
+      "name": "佐渡島の金山",
+      "kind": "世界遺産",
+      "prefCode": "15",
+      "areaCode": "15224",
+      "summary": "佐渡市にある鉱山遺跡。2024年7月に世界遺産に登録された。",
+      "source": "https://online.bunka.go.jp/special_content/hlinkL",
+      "sourceLabel": "文化遺産オンライン（文化庁）世界遺産「佐渡島の金山」"
+    },
+    {
+      "id": "yahiko-jinja",
+      "name": "弥彦神社",
+      "kind": "神社",
+      "prefCode": "15",
+      "areaCode": "15342",
+      "summary": "弥彦山の麓に鎮座する神社。",
+      "source": "https://niigata-kankou.or.jp/spot/detail_11600.html",
+      "sourceLabel": "にいがた観光ナビ（新潟県観光協会）彌彦神社"
+    },
+    {
+      "id": "echigo-yuzawa-onsen",
+      "name": "越後湯沢温泉",
+      "kind": "温泉地",
+      "prefCode": "15",
+      "areaCode": "15461",
+      "summary": "南魚沼郡湯沢町の温泉地。",
+      "source": "https://niigata-kankou.or.jp/spot/detail_14353.html",
+      "sourceLabel": "にいがた観光ナビ（新潟県観光協会）越後湯沢温泉"
+    },
+    {
+      "id": "owara-kaze-no-bon",
+      "name": "おわら風の盆",
+      "kind": "祭り・伝統",
+      "prefCode": "16",
+      "areaCode": "16201",
+      "summary": "富山市八尾町（八尾地区・福島地区）で行われる行事。",
+      "source": "https://www.city.toyama.lg.jp/bunka/kanko/1010540/1005747.html",
+      "sourceLabel": "富山市 公式サイト 越中八尾おわら風の盆"
+    },
+    {
+      "id": "zuiryuji",
+      "name": "瑞龍寺",
+      "kind": "寺院",
+      "prefCode": "16",
+      "areaCode": "16202",
+      "summary": "山門・仏殿・法堂が国宝に指定されている寺院。",
+      "source": "https://zuiryuji.jp/",
+      "sourceLabel": "瑞龍寺 公式サイト"
+    },
+    {
+      "id": "unazuki-onsen",
+      "name": "宇奈月温泉",
+      "kind": "温泉地",
+      "prefCode": "16",
+      "areaCode": "16207",
+      "summary": "黒部市の温泉地。黒薙温泉を源泉とする。",
+      "source": "https://www.kurobe-unazuki.jp/tourism_list/onsen/onsen_unazuki/",
+      "sourceLabel": "黒部・宇奈月温泉観光局 公式サイト"
+    },
+    {
+      "id": "gokayama",
+      "name": "五箇山の合掌造り集落",
+      "kind": "世界遺産",
+      "prefCode": "16",
+      "areaCode": "16210",
+      "summary": "相倉・菅沼の集落。「白川郷・五箇山の合掌造り集落」として世界遺産。",
+      "source": "https://culture-archives.city.nanto.toyama.jp/heritages/sekai0001/",
+      "sourceLabel": "南砺市文化芸術アーカイブズ（南砺市）五箇山合掌造り集落"
+    },
+    {
+      "id": "kurobe-dam",
+      "name": "黒部ダム",
+      "kind": "空港・港・鉄道・橋（インフラ）",
+      "prefCode": "16",
+      "areaCode": "16323",
+      "summary": "立山町芦峅寺にあるアーチ式ダム。高さ186m、1963年完成。",
+      "source": "https://www.info-toyama.com/attractions/31038",
+      "sourceLabel": "とやま観光ナビ（富山県の公式観光サイト）黒部ダム"
+    },
+    {
+      "id": "kanazawa-21st-century-museum",
+      "name": "金沢21世紀美術館",
+      "kind": "美術館・博物館",
+      "prefCode": "17",
+      "areaCode": "17201",
+      "summary": "金沢市広坂にある美術館。",
+      "source": "https://www.kanazawa21.jp/data_list.php?g=7&d=1",
+      "sourceLabel": "金沢21世紀美術館 公式サイト 来館のご案内"
+    },
+    {
+      "id": "kenrokuen",
+      "name": "兼六園",
+      "kind": "観光地",
+      "prefCode": "17",
+      "areaCode": "17201",
+      "summary": "日本三名園のひとつで、国の特別名勝。",
+      "source": "https://www.kanazawa-kankoukyoukai.or.jp/spot/detail_10106.html",
+      "sourceLabel": "金沢市観光協会 公式サイト（金沢旅物語）兼六園"
+    },
+    {
+      "id": "yamashiro-onsen",
+      "name": "山代温泉",
+      "kind": "温泉地",
+      "prefCode": "17",
+      "areaCode": "17206",
+      "summary": "加賀市の温泉地。総湯と古総湯がある。",
+      "source": "https://yamashiro-spa.or.jp/spa/",
+      "sourceLabel": "山代温泉観光協会 公式サイト"
+    },
+    {
+      "id": "shirayama-hime-jinja",
+      "name": "白山比咩神社",
+      "kind": "神社",
+      "prefCode": "17",
+      "areaCode": "17210",
+      "summary": "全国に三千余社ある白山神社の総本宮。加賀の国の一ノ宮。",
+      "source": "https://www.shirayama.or.jp/access/",
+      "sourceLabel": "白山比咩神社 公式サイト"
+    },
+    {
+      "id": "fukui-dinosaur-museum",
+      "name": "福井県立恐竜博物館",
+      "kind": "美術館・博物館",
+      "prefCode": "18",
+      "areaCode": "18206",
+      "summary": "勝山市のかつやま恐竜の森内にある県立の博物館。",
+      "source": "https://www.dinosaur.pref.fukui.jp/museum/",
+      "sourceLabel": "福井県立恐竜博物館 公式サイト"
+    },
+    {
+      "id": "sabae-glasses",
+      "name": "鯖江の眼鏡",
+      "kind": "産業・名産",
+      "prefCode": "18",
+      "areaCode": "18207",
+      "summary": "鯖江市の眼鏡産業。市がメガネフレームの産地として紹介している。",
+      "source": "https://www.city.sabae.fukui.jp/kanko/about/mono.html",
+      "sourceLabel": "鯖江市 公式サイト ものづくり"
+    },
+    {
+      "id": "tojinbo",
+      "name": "東尋坊",
+      "kind": "自然",
+      "prefCode": "18",
+      "areaCode": "18210",
+      "summary": "坂井市三国町にある。国の天然記念物で、日本の地質百選に選ばれている。",
+      "source": "https://www.fuku-e.com/spot/detail_1476.html",
+      "sourceLabel": "ふくいドットコム（福井県の公式観光サイト）東尋坊"
+    },
+    {
+      "id": "eiheiji",
+      "name": "永平寺",
+      "kind": "寺院",
+      "prefCode": "18",
+      "areaCode": "18322",
+      "summary": "永平寺町志比にある大本山の寺院。",
+      "source": "https://daihonzan-eiheiji.com/",
+      "sourceLabel": "大本山永平寺 公式サイト"
+    },
+    {
+      "id": "fuji-q-highland",
+      "name": "富士急ハイランド",
+      "kind": "テーマパーク",
+      "prefCode": "19",
+      "areaCode": "19202",
+      "summary": "富士吉田市新西原にあるテーマパーク。",
+      "source": "https://www.yamanashi-kankou.jp/kankou/spot/p2_3008.html",
+      "sourceLabel": "富士の国やまなし観光ネット（山梨県公式観光情報）富士急ハイランド"
+    },
+    {
+      "id": "katsunuma-wine",
+      "name": "勝沼のワイン",
+      "kind": "産業・名産",
+      "prefCode": "19",
+      "areaCode": "19213",
+      "summary": "甲州市勝沼町に30軒ほどのワイナリーがある。",
+      "source": "https://www.yamanashi-kankou.jp/special/winery_meguri2019.html",
+      "sourceLabel": "富士の国やまなし観光ネット（山梨県公式観光情報）"
+    },
+    {
+      "id": "minobusan-kuonji",
+      "name": "身延山久遠寺",
+      "kind": "寺院",
+      "prefCode": "19",
+      "areaCode": "19365",
+      "summary": "日蓮宗の総本山。",
+      "source": "https://www.kuonji.jp/",
+      "sourceLabel": "身延山久遠寺 公式サイト"
+    },
+    {
+      "id": "oshino-hakkai",
+      "name": "忍野八海",
+      "kind": "世界遺産",
+      "prefCode": "19",
+      "areaCode": "19424",
+      "summary": "富士山の伏流水を水源とする湧水池。世界遺産「富士山」の構成資産。",
+      "source": "https://www.vill.oshino.lg.jp/site/kanko/1587.html",
+      "sourceLabel": "忍野村 公式サイト（観光産業課）忍野八海"
+    },
+    {
+      "id": "zenkoji",
+      "name": "善光寺",
+      "kind": "寺院",
+      "prefCode": "20",
+      "areaCode": "20201",
+      "summary": "長野市にある寺院。本堂は国宝に指定されている。",
+      "source": "https://www.zenkoji.jp/",
+      "sourceLabel": "善光寺 公式サイト"
+    },
+    {
+      "id": "kamikochi",
+      "name": "上高地",
+      "kind": "自然",
+      "prefCode": "20",
+      "areaCode": "20202",
+      "summary": "松本市安曇にある。国の特別名勝・特別天然記念物。",
+      "source": "https://www.city.matsumoto.nagano.jp/soshiki/134/3768.html",
+      "sourceLabel": "松本市 公式サイト 上高地（特別名勝及び特別天然記念物）"
+    },
+    {
+      "id": "matsumoto-castle",
+      "name": "松本城",
+      "kind": "城",
+      "prefCode": "20",
+      "areaCode": "20202",
+      "summary": "天守が国宝に指定されている城。",
+      "source": "https://www.city.matsumoto.nagano.jp/soshiki/134/3771.html",
+      "sourceLabel": "松本市 公式サイト 松本城天守"
+    },
+    {
+      "id": "tsumago-juku",
+      "name": "妻籠宿",
+      "kind": "観光地",
+      "prefCode": "20",
+      "areaCode": "20423",
+      "summary": "木曽郡南木曽町の宿場。国の重要伝統的建造物群保存地区。",
+      "source": "https://online.bunka.go.jp/heritages/detail/125327",
+      "sourceLabel": "文化遺産オンライン（文化庁）南木曽町妻籠宿"
+    },
+    {
+      "id": "jigokudani-monkey-park",
+      "name": "地獄谷野猿公苑",
+      "kind": "観光地",
+      "prefCode": "20",
+      "areaCode": "20561",
+      "summary": "山ノ内町大字平穏にある野猿公苑。",
+      "source": "https://jigokudani-yaenkoen.co.jp/access/",
+      "sourceLabel": "地獄谷野猿公苑 公式サイト"
+    },
+    {
+      "id": "gifu-castle",
+      "name": "岐阜城",
+      "kind": "城",
+      "prefCode": "21",
+      "areaCode": "21201",
+      "summary": "金華山にある城。「岐阜城跡」として国の史跡。",
+      "source": "https://www.city.gifu.lg.jp/info/shisetsu/1009631/1010709.html",
+      "sourceLabel": "岐阜市 公式サイト 岐阜城天守閣"
+    },
+    {
+      "id": "super-kamiokande",
+      "name": "スーパーカミオカンデ",
+      "kind": "大学・研究",
+      "prefCode": "21",
+      "areaCode": "21217",
+      "summary": "神岡町の池ノ山の地下1000mにある実験装置。",
+      "source": "https://www.city.hida.gifu.jp/site/kamiokalab/11798.html",
+      "sourceLabel": "飛騨市 公式サイト 東京大学宇宙線研究所 神岡宇宙素粒子研究施設の紹介"
+    },
+    {
+      "id": "gujo-odori",
+      "name": "郡上おどり",
+      "kind": "祭り・伝統",
+      "prefCode": "21",
+      "areaCode": "21219",
+      "summary": "郡上八幡の城下町で踊られる。国の重要無形民俗文化財。",
+      "source": "https://www.city.gujo.gifu.jp/admin/detail/7180.html",
+      "sourceLabel": "郡上市 公式サイト 郡上おどり"
+    },
+    {
+      "id": "gero-onsen",
+      "name": "下呂温泉",
+      "kind": "温泉地",
+      "prefCode": "21",
+      "areaCode": "21220",
+      "summary": "下呂市の温泉地。林羅山が有馬・草津とともに「天下の三名泉」と称した。",
+      "source": "https://www.city.gero.lg.jp/site/kanko/1258.html",
+      "sourceLabel": "下呂市 公式サイト 下呂温泉の紹介"
+    },
+    {
+      "id": "shirakawago",
+      "name": "白川郷",
+      "kind": "世界遺産",
+      "prefCode": "21",
+      "areaCode": "21604",
+      "summary": "荻町地区の合掌造り集落。「白川郷・五箇山の合掌造り集落」として世界遺産。",
+      "source": "https://shirakawa-go.gr.jp/",
+      "sourceLabel": "白川郷観光協会 公式サイト"
+    },
+    {
+      "id": "kunozan-toshogu",
+      "name": "久能山東照宮",
+      "kind": "神社",
+      "prefCode": "22",
+      "areaCode": "22102",
+      "summary": "徳川家康を祀る神社。社殿が国宝に指定されている。",
+      "source": "https://www.toshogu.or.jp/",
+      "sourceLabel": "久能山東照宮 公式サイト"
+    },
+    {
+      "id": "miho-no-matsubara",
+      "name": "三保松原",
+      "kind": "世界遺産",
+      "prefCode": "22",
+      "areaCode": "22103",
+      "summary": "砂嘴に広がる松原で国の名勝。世界遺産「富士山-信仰の対象と芸術の源泉」の構成資産。",
+      "source": "https://www.city.shizuoka.lg.jp/documents/51351/2shou_220ppi.pdf",
+      "sourceLabel": "静岡市 名勝三保松原保存活用計画（第2章）"
+    },
+    {
+      "id": "atami-onsen",
+      "name": "熱海温泉",
+      "kind": "温泉地",
+      "prefCode": "22",
+      "areaCode": "22205",
+      "summary": "熱海市の温泉地。市が温泉事業を運営している。",
+      "source": "https://www.city.atami.lg.jp/kanko/onsen/1001820.html",
+      "sourceLabel": "熱海市 公式ウェブサイト「熱海の温泉」"
+    },
+    {
+      "id": "mishima-taisha",
+      "name": "三嶋大社",
+      "kind": "神社",
+      "prefCode": "22",
+      "areaCode": "22206",
+      "summary": "大山祇命と積羽八重事代主神の二柱を三嶋大明神として祀る神社。",
+      "source": "https://mishimataisha.or.jp/",
+      "sourceLabel": "三嶋大社 公式サイト"
+    },
+    {
+      "id": "nirayama-reverberatory-furnace",
+      "name": "韮山反射炉",
+      "kind": "世界遺産",
+      "prefCode": "22",
+      "areaCode": "22225",
+      "summary": "国指定史跡の反射炉。「明治日本の産業革命遺産」として世界遺産に登録。",
+      "source": "https://www.city.izunokuni.shizuoka.jp/bunka_bunkazai/shisetsu/kyoiku/003.html",
+      "sourceLabel": "伊豆の国市 公式ウェブサイト「韮山反射炉」"
+    },
+    {
+      "id": "nagoya-castle",
+      "name": "名古屋城",
+      "kind": "城",
+      "prefCode": "23",
+      "areaCode": "23106",
+      "summary": "徳川家康によって建てられた城。",
+      "source": "https://www.nagoyajo.city.nagoya.jp/",
+      "sourceLabel": "名古屋城 公式サイト"
+    },
+    {
+      "id": "atsuta-jingu",
+      "name": "熱田神宮",
+      "kind": "神社",
+      "prefCode": "23",
+      "areaCode": "23109",
+      "summary": "三種の神器の一つ、草薙神剣を祀る神社。",
+      "source": "https://www.nagoya-info.jp/spot/detail/11/",
+      "sourceLabel": "名古屋コンシェルジュ（名古屋観光コンベンションビューロー）熱田神宮"
+    },
+    {
+      "id": "inuyama-castle",
+      "name": "犬山城",
+      "kind": "城",
+      "prefCode": "23",
+      "areaCode": "23215",
+      "summary": "国宝に指定されている城。",
+      "source": "https://inuyama-castle.jp/",
+      "sourceLabel": "国宝 犬山城 公式サイト"
+    },
+    {
+      "id": "centrair",
+      "name": "中部国際空港（セントレア）",
+      "kind": "空港・港・鉄道・橋（インフラ）",
+      "prefCode": "23",
+      "areaCode": "23216",
+      "summary": "常滑市沖の伊勢湾の人工島にある国際空港。",
+      "source": "https://aichinow.pref.aichi.jp/spots/detail/34/",
+      "sourceLabel": "愛知県公式観光サイト Aichi Now「中部国際空港 セントレア」"
+    },
+    {
+      "id": "ghibli-park",
+      "name": "ジブリパーク",
+      "kind": "テーマパーク",
+      "prefCode": "23",
+      "areaCode": "23238",
+      "summary": "愛・地球博記念公園内にある、スタジオジブリ作品の世界観を表現した公園施設。",
+      "source": "https://www.aichinow.pref.aichi.jp/spots/detail/3657/",
+      "sourceLabel": "愛知県公式観光サイト Aichi Now「ジブリパーク」"
+    },
+    {
+      "id": "ise-jingu",
+      "name": "伊勢神宮（内宮・外宮）",
+      "kind": "神社",
+      "prefCode": "24",
+      "areaCode": "24203",
+      "summary": "天照大御神を祀る内宮と、豊受大御神を祀る外宮を中心とする神社。",
+      "source": "https://www.isejingu.or.jp/access/",
+      "sourceLabel": "伊勢神宮 公式サイト（交通アクセス）"
+    },
+    {
+      "id": "nagashima-spa-land",
+      "name": "ナガシマスパーランド",
+      "kind": "テーマパーク",
+      "prefCode": "24",
+      "areaCode": "24205",
+      "summary": "桑名市長島町にある遊園地。",
+      "source": "https://www.nagashima-onsen.co.jp/resort/access/index.html",
+      "sourceLabel": "ナガシマリゾート 公式サイト（アクセス）"
+    },
+    {
+      "id": "suzuka-circuit",
+      "name": "鈴鹿サーキット",
+      "kind": "観光地",
+      "prefCode": "24",
+      "areaCode": "24207",
+      "summary": "F1日本グランプリが開かれるサーキット。",
+      "source": "https://www.suzukacircuit.jp/access_s/",
+      "sourceLabel": "鈴鹿サーキット 公式サイト（アクセス）"
+    },
+    {
+      "id": "hananoiwaya-jinja",
+      "name": "花の窟神社",
+      "kind": "神社",
+      "prefCode": "24",
+      "areaCode": "24212",
+      "summary": "巨岩を御神体とする神社。「紀伊山地の霊場と参詣道」の一部として世界遺産。",
+      "source": "https://kumano-kankou.com/?cat=5",
+      "sourceLabel": "熊野市観光公社「観光のご案内」"
+    },
+    {
+      "id": "enryakuji",
+      "name": "比叡山延暦寺",
+      "kind": "世界遺産",
+      "prefCode": "25",
+      "areaCode": "25201",
+      "summary": "最澄が創建した比叡山の寺院。1994年にユネスコ世界文化遺産に登録。",
+      "source": "https://www.hieizan.or.jp/",
+      "sourceLabel": "比叡山延暦寺 公式サイト"
+    },
+    {
+      "id": "hikone-castle",
+      "name": "彦根城",
+      "kind": "城",
+      "prefCode": "25",
+      "areaCode": "25202",
+      "summary": "天守が国宝に指定された城。城跡は特別史跡。",
+      "source": "https://hikonecastle.com/",
+      "sourceLabel": "国宝 彦根城 公式サイト"
+    },
+    {
+      "id": "shigaraki-yaki",
+      "name": "信楽焼",
+      "kind": "産業・名産",
+      "prefCode": "25",
+      "areaCode": "25209",
+      "summary": "甲賀市の焼き物。日本遺産「きっと恋する六古窯」の構成文化財の一つ。",
+      "source": "https://japan-heritage.bunka.go.jp/ja/culturalproperties/result/3311/",
+      "sourceLabel": "文化庁 日本遺産ポータルサイト「信楽焼」"
+    },
+    {
+      "id": "taga-taisha",
+      "name": "多賀大社",
+      "kind": "神社",
+      "prefCode": "25",
+      "areaCode": "25443",
+      "summary": "伊邪那岐大神と伊邪那美大神を祀る神社。",
+      "source": "https://www.tagataisya.or.jp/",
+      "sourceLabel": "多賀大社 公式サイト"
+    },
+    {
+      "id": "nijo-castle",
+      "name": "二条城",
+      "kind": "城",
+      "prefCode": "26",
+      "areaCode": "26104",
+      "summary": "徳川家康が1603年に築いた城。二の丸御殿が国宝で、世界遺産に登録。",
+      "source": "https://nijo-jocastle.city.kyoto.lg.jp/",
+      "sourceLabel": "京都市 元離宮二条城 公式サイト"
+    },
+    {
+      "id": "kiyomizudera",
+      "name": "清水寺",
+      "kind": "寺院",
+      "prefCode": "26",
+      "areaCode": "26105",
+      "summary": "778年に開創された寺院。本尊は十一面千手観世音菩薩。",
+      "source": "https://www.kiyomizudera.or.jp/",
+      "sourceLabel": "清水寺 公式サイト"
+    },
+    {
+      "id": "fushimi-inari-taisha",
+      "name": "伏見稲荷大社",
+      "kind": "神社",
+      "prefCode": "26",
+      "areaCode": "26109",
+      "summary": "全国の稲荷神社の総本宮。",
+      "source": "https://inari.jp/",
+      "sourceLabel": "伏見稲荷大社 公式サイト"
+    },
+    {
+      "id": "byodoin",
+      "name": "平等院",
+      "kind": "世界遺産",
+      "prefCode": "26",
+      "areaCode": "26204",
+      "summary": "宇治市にある寺院。世界遺産に登録されている。",
+      "source": "https://www.byodoin.or.jp/guide/access/",
+      "sourceLabel": "世界遺産 平等院 公式サイト（アクセス）"
+    },
+    {
+      "id": "amanohashidate",
+      "name": "天橋立",
+      "kind": "自然",
+      "prefCode": "26",
+      "areaCode": "26205",
+      "summary": "宮津湾に延びる砂嘴。日本三景の一つとして知られる。",
+      "source": "https://online.bunka.go.jp/db/heritages/detail/138867",
+      "sourceLabel": "文化庁 文化遺産オンライン「天橋立」"
+    },
+    {
+      "id": "universal-studios-japan",
+      "name": "ユニバーサル・スタジオ・ジャパン",
+      "kind": "テーマパーク",
+      "prefCode": "27",
+      "areaCode": "27104",
+      "summary": "大阪市此花区にあるテーマパーク。",
+      "source": "https://s.usj.co.jp/faq/access/00008.html",
+      "sourceLabel": "ユニバーサル・スタジオ・ジャパン 公式サイト（よくあるご質問）"
+    },
+    {
+      "id": "sumiyoshi-taisha",
+      "name": "住吉大社",
+      "kind": "神社",
+      "prefCode": "27",
+      "areaCode": "27120",
+      "summary": "全国の住吉神社の総本社。",
+      "source": "https://www.sumiyoshitaisha.net/",
+      "sourceLabel": "住吉大社 公式サイト"
+    },
+    {
+      "id": "osaka-castle",
+      "name": "大阪城",
+      "kind": "城",
+      "prefCode": "27",
+      "areaCode": "27128",
+      "summary": "大阪城天守閣がある城。",
+      "source": "https://www.osakacastle.net/guide/",
+      "sourceLabel": "大阪城天守閣 公式サイト"
+    },
+    {
+      "id": "daisen-kofun",
+      "name": "仁徳天皇陵古墳（大山古墳）",
+      "kind": "世界遺産",
+      "prefCode": "27",
+      "areaCode": "27141",
+      "summary": "世界文化遺産の構成資産である前方後円墳。",
+      "source": "https://www.city.sakai.lg.jp/kanko/rekishi/dkofun/database/nintokutenno.html",
+      "sourceLabel": "堺市 公式ホームページ「仁徳天皇陵古墳（大山古墳）」"
+    },
+    {
+      "id": "kishiwada-danjiri",
+      "name": "岸和田だんじり祭",
+      "kind": "祭り・伝統",
+      "prefCode": "27",
+      "areaCode": "27202",
+      "summary": "岸和田市で毎年9月と10月に行われるだんじり祭。",
+      "source": "https://osaka-info.jp/event/kishiwadadanjirimaturi/",
+      "sourceLabel": "大阪観光局 公式観光サイト「岸和田だんじり祭」"
+    },
+    {
+      "id": "arima-onsen",
+      "name": "有馬温泉",
+      "kind": "温泉地",
+      "prefCode": "28",
+      "areaCode": "28109",
+      "summary": "神戸市北区有馬町を中心とする温泉地。",
+      "source": "https://www.city.kobe.lg.jp/kuyakusho/hokushin/shokai/arima.html",
+      "sourceLabel": "神戸市 北神区役所「有馬町の紹介」"
+    },
+    {
+      "id": "himeji-castle",
+      "name": "姫路城",
+      "kind": "城",
+      "prefCode": "28",
+      "areaCode": "28201",
+      "summary": "世界文化遺産に登録され、国宝に指定されている城。",
+      "source": "https://www.himejicastle.jp/",
+      "sourceLabel": "姫路城 公式サイト"
+    },
+    {
+      "id": "koshien-stadium",
+      "name": "阪神甲子園球場",
+      "kind": "観光地",
+      "prefCode": "28",
+      "areaCode": "28204",
+      "summary": "西宮市甲子園町にある野球場。",
+      "source": "https://koshien.hanshin.co.jp/access/",
+      "sourceLabel": "阪神甲子園球場 公式サイト（アクセス）"
+    },
+    {
+      "id": "kinosaki-onsen",
+      "name": "城崎温泉",
+      "kind": "温泉地",
+      "prefCode": "28",
+      "areaCode": "28209",
+      "summary": "豊岡市城崎町の温泉地。複数の外湯を巡る外湯めぐりがある。",
+      "source": "https://www.hyogo-tourism.jp/spot/detail_6486.html",
+      "sourceLabel": "ひょうご観光本部 兵庫県観光サイト「城崎温泉」"
+    },
+    {
+      "id": "takeda-castle",
+      "name": "竹田城跡",
+      "kind": "城",
+      "prefCode": "28",
+      "areaCode": "28225",
+      "summary": "国指定史跡に指定されている城跡。",
+      "source": "https://kunishitei.bunka.go.jp/heritage/detail/401/1874",
+      "sourceLabel": "文化庁 国指定文化財等データベース「竹田城跡」"
+    },
+    {
+      "id": "todaiji",
+      "name": "東大寺",
+      "kind": "寺院",
+      "prefCode": "29",
+      "areaCode": "29201",
+      "summary": "奈良市雑司町にある寺院。世界遺産「古都奈良の文化財」の構成資産のひとつ。",
+      "source": "https://www.todaiji.or.jp/",
+      "sourceLabel": "東大寺 公式サイト"
+    },
+    {
+      "id": "kashihara-jingu",
+      "name": "橿原神宮",
+      "kind": "神社",
+      "prefCode": "29",
+      "areaCode": "29205",
+      "summary": "橿原市にある神社。神武天皇と媛蹈鞴五十鈴媛皇后を祀る。",
+      "source": "https://www.kashiharajingu.or.jp/",
+      "sourceLabel": "橿原神宮 公式サイト"
+    },
+    {
+      "id": "horyuji",
+      "name": "法隆寺",
+      "kind": "世界遺産",
+      "prefCode": "29",
+      "areaCode": "29344",
+      "summary": "斑鳩町にある寺院。「法隆寺地域の仏教建造物」として世界遺産。",
+      "source": "https://www.pref.nara.lg.jp/ikasu-nara/bunkashigen/main00055.html",
+      "sourceLabel": "奈良県 公式サイト（法隆寺）"
+    },
+    {
+      "id": "ishibutai-kofun",
+      "name": "石舞台古墳",
+      "kind": "観光地",
+      "prefCode": "29",
+      "areaCode": "29402",
+      "summary": "明日香村にある、一辺約50メートルの大方墳。国の特別史跡。",
+      "source": "https://www.asukamura.jp/gyosei_bunkazai_shitei_5.html",
+      "sourceLabel": "明日香村 公式サイト"
+    },
+    {
+      "id": "yoshinoyama",
+      "name": "吉野山",
+      "kind": "自然",
+      "prefCode": "29",
+      "areaCode": "29441",
+      "summary": "吉野町にある山で、国の史跡・名勝。世界遺産「紀伊山地の霊場と参詣道」に含まれる。",
+      "source": "https://online.bunka.go.jp/heritages/detail/191352",
+      "sourceLabel": "文化庁 文化遺産オンライン（吉野山）"
+    },
+    {
+      "id": "wakayama-castle",
+      "name": "和歌山城",
+      "kind": "城",
+      "prefCode": "30",
+      "areaCode": "30201",
+      "summary": "和歌山市にある城。虎伏山に天守閣が建ち、国の史跡に指定されている。",
+      "source": "https://kunishitei.bunka.go.jp/heritage/detail/401/2067",
+      "sourceLabel": "文化庁 国指定文化財等データベース"
+    },
+    {
+      "id": "kumano-hongu-taisha",
+      "name": "熊野本宮大社",
+      "kind": "神社",
+      "prefCode": "30",
+      "areaCode": "30206",
+      "summary": "田辺市本宮町にある神社。「紀伊山地の霊場と参詣道」として世界遺産。",
+      "source": "https://www.hongutaisha.jp/",
+      "sourceLabel": "熊野本宮大社 公式サイト"
+    },
+    {
+      "id": "takijiri-oji",
+      "name": "滝尻王子",
+      "kind": "観光地",
+      "prefCode": "30",
+      "areaCode": "30206",
+      "summary": "田辺市中辺路町にある、熊野古道 中辺路の王子社。",
+      "source": "https://www.pref.wakayama.lg.jp/prefg/081300/d00215430.html",
+      "sourceLabel": "和歌山県 熊野古道館のページ"
+    },
+    {
+      "id": "koyasan-kongobuji",
+      "name": "高野山 金剛峯寺",
+      "kind": "寺院",
+      "prefCode": "30",
+      "areaCode": "30344",
+      "summary": "高野町にある高野山真言宗の総本山。「紀伊山地の霊場と参詣道」の構成資産。",
+      "source": "https://www.koyasan.or.jp/",
+      "sourceLabel": "総本山金剛峯寺 公式サイト"
+    },
+    {
+      "id": "adventure-world",
+      "name": "アドベンチャーワールド",
+      "kind": "テーマパーク",
+      "prefCode": "30",
+      "areaCode": "30401",
+      "summary": "白浜町にあるテーマパーク。サファリワールドやマリンワールドなどがある。",
+      "source": "https://www.wakayama-kanko.or.jp/spots/detail_666.html",
+      "sourceLabel": "和歌山県公式観光サイト"
+    },
+    {
+      "id": "shirahama-onsen",
+      "name": "白浜温泉",
+      "kind": "温泉地",
+      "prefCode": "30",
+      "areaCode": "30401",
+      "summary": "白浜町にある温泉地。崎の湯・牟婁の湯・白良湯などの公衆浴場がある。",
+      "source": "https://www.town.shirahama.wakayama.jp/soshiki/kanko/koen/shisetsu/pubric_spa/1450338115191.html",
+      "sourceLabel": "白浜町 公式サイト（白浜温泉 崎の湯）"
+    },
+    {
+      "id": "kumano-nachi-taisha",
+      "name": "熊野那智大社",
+      "kind": "神社",
+      "prefCode": "30",
+      "areaCode": "30421",
+      "summary": "那智勝浦町那智山にある神社。世界遺産「紀伊山地の霊場と参詣道」に含まれる。",
+      "source": "https://www.kumanonachitaisha.or.jp/",
+      "sourceLabel": "熊野那智大社 公式サイト"
+    },
+    {
+      "id": "nachi-falls",
+      "name": "那智の滝",
+      "kind": "自然",
+      "prefCode": "30",
+      "areaCode": "30421",
+      "summary": "那智勝浦町にある滝。高さ133メートルで、国の名勝・世界遺産に含まれる。",
+      "source": "https://kumanonachitaisha.or.jp/pavilion/waterfall/",
+      "sourceLabel": "熊野那智大社 公式サイト（飛瀧神社 那智御瀧）"
+    },
+    {
+      "id": "tottori-sand-dunes",
+      "name": "鳥取砂丘",
+      "kind": "自然",
+      "prefCode": "31",
+      "areaCode": "31201",
+      "summary": "鳥取市の日本海沿いに広がる海岸砂丘。国の天然記念物。",
+      "source": "https://www.pref.tottori.lg.jp/153169.htm",
+      "sourceLabel": "鳥取県 公式サイト"
+    },
+    {
+      "id": "mizuki-shigeru-road",
+      "name": "水木しげるロード",
+      "kind": "観光地",
+      "prefCode": "31",
+      "areaCode": "31204",
+      "summary": "境港市のJR境港駅から約800メートル続く通りに、妖怪のブロンズ像が並ぶ。",
+      "source": "https://mizuki.sakaiminato.net/road/",
+      "sourceLabel": "水木しげるロード 公式サイト"
+    },
+    {
+      "id": "mitokusan-nageiredo",
+      "name": "三徳山三佛寺 投入堂",
+      "kind": "寺院",
+      "prefCode": "31",
+      "areaCode": "31364",
+      "summary": "三朝町にある三佛寺の奥院。投入堂は国宝に指定されている。",
+      "source": "https://www.mitokusan.jp/",
+      "sourceLabel": "三徳山 公式ホームページ"
+    },
+    {
+      "id": "daisenji",
+      "name": "大山寺",
+      "kind": "寺院",
+      "prefCode": "31",
+      "areaCode": "31386",
+      "summary": "大山町にある天台宗別格本山の寺院。",
+      "source": "https://daisenji.jp/pages/3/",
+      "sourceLabel": "大山寺 公式サイト"
+    },
+    {
+      "id": "matsue-castle",
+      "name": "松江城",
+      "kind": "城",
+      "prefCode": "32",
+      "areaCode": "32201",
+      "summary": "松江市にある城。全国に現存する12天守のひとつで、国宝。",
+      "source": "https://www.matsue-castle.jp/",
+      "sourceLabel": "松江城 公式サイト"
+    },
+    {
+      "id": "izumo-taisha",
+      "name": "出雲大社",
+      "kind": "神社",
+      "prefCode": "32",
+      "areaCode": "32203",
+      "summary": "出雲市大社町にある神社。",
+      "source": "https://izumooyashiro.or.jp/",
+      "sourceLabel": "出雲大社 公式サイト"
+    },
+    {
+      "id": "iwami-ginzan",
+      "name": "石見銀山遺跡",
+      "kind": "世界遺産",
+      "prefCode": "32",
+      "areaCode": "32205",
+      "summary": "大田市にある鉱山遺跡。「石見銀山遺跡とその文化的景観」として世界遺産。",
+      "source": "https://www.pref.shimane.lg.jp/life/bunka/bunkazai/ginzan/outline.html",
+      "sourceLabel": "島根県 公式サイト（石見銀山遺跡とその文化的景観の概要）"
+    },
+    {
+      "id": "adachi-museum",
+      "name": "足立美術館",
+      "kind": "美術館・博物館",
+      "prefCode": "32",
+      "areaCode": "32206",
+      "summary": "安来市にある美術館。庭園と、日本画・陶芸などの作品がある。",
+      "source": "https://www.adachi-museum.or.jp/",
+      "sourceLabel": "足立美術館 公式サイト"
+    },
+    {
+      "id": "tsuwano",
+      "name": "津和野の町並み",
+      "kind": "観光地",
+      "prefCode": "32",
+      "areaCode": "32501",
+      "summary": "津和野町津和野の区域が、国の重要伝統的建造物群保存地区に選定されている。",
+      "source": "https://www.pref.shimane.lg.jp/life/bunka/bunkazai/shimane/denken.html",
+      "sourceLabel": "島根県 公式サイト（国選定文化財 重要伝統的建造物群保存地区）"
+    },
+    {
+      "id": "okayama-korakuen",
+      "name": "岡山後楽園",
+      "kind": "観光地",
+      "prefCode": "33",
+      "areaCode": "33101",
+      "summary": "岡山市北区にある庭園。国の特別名勝。",
+      "source": "https://okayama-korakuen.jp/index.html",
+      "sourceLabel": "岡山後楽園 公式サイト"
+    },
+    {
+      "id": "kurashiki-bikan",
+      "name": "倉敷美観地区",
+      "kind": "観光地",
+      "prefCode": "33",
+      "areaCode": "33202",
+      "summary": "倉敷市本町・東町ほかの地区。国の重要伝統的建造物群保存地区。",
+      "source": "https://www.city.kurashiki.okayama.jp/5585.htm",
+      "sourceLabel": "倉敷市 公式サイト"
+    },
+    {
+      "id": "seto-ohashi-kurashiki",
+      "name": "瀬戸大橋（倉敷市側）",
+      "kind": "空港・港・鉄道・橋（インフラ）",
+      "prefCode": "33",
+      "areaCode": "33202",
+      "summary": "岡山県倉敷市と香川県坂出市を結ぶ、道路と鉄道の併用橋。",
+      "source": "https://www.mlit.go.jp/sogoseisaku/region/infratourism/infralist/kagawa/index01.html",
+      "sourceLabel": "国土交通省 インフラツーリズム ポータルサイト（瀬戸大橋）"
+    },
+    {
+      "id": "bitchu-matsuyama-castle",
+      "name": "備中松山城",
+      "kind": "城",
+      "prefCode": "33",
+      "areaCode": "33209",
+      "summary": "高梁市の臥牛山にある山城。天守は国の重要文化財。",
+      "source": "https://www.city.takahashi.lg.jp/soshiki/9/shiro4240131.html",
+      "sourceLabel": "高梁市 公式サイト"
+    },
+    {
+      "id": "shizutani-school",
+      "name": "旧閑谷学校",
+      "kind": "観光地",
+      "prefCode": "33",
+      "areaCode": "33211",
+      "summary": "備前市にある特別史跡。国宝を有し、1670年に岡山藩主が学校を設けた地。",
+      "source": "https://shizutani.jp/access/",
+      "sourceLabel": "特別史跡 旧閑谷学校 公式サイト"
+    },
+    {
+      "id": "genbaku-dome",
+      "name": "原爆ドーム",
+      "kind": "世界遺産",
+      "prefCode": "34",
+      "areaCode": "34101",
+      "summary": "広島市中区にある建物の遺構。1996年に世界遺産に登録された。",
+      "source": "https://www.city.hiroshima.lg.jp/atomicbomb-peace/fukko/1021101/1026920/1026921/1020866.html",
+      "sourceLabel": "広島市 公式サイト（原爆ドーム（広島県産業奨励館））"
+    },
+    {
+      "id": "yamato-museum",
+      "name": "大和ミュージアム",
+      "kind": "美術館・博物館",
+      "prefCode": "34",
+      "areaCode": "34202",
+      "summary": "呉市宝町にある博物館。正式名称は呉市海事歴史科学館。",
+      "source": "https://yamato-museum.com/",
+      "sourceLabel": "大和ミュージアム 公式サイト"
+    },
+    {
+      "id": "senkoji",
+      "name": "千光寺",
+      "kind": "寺院",
+      "prefCode": "34",
+      "areaCode": "34205",
+      "summary": "尾道市の千光寺山の中腹にある寺院。",
+      "source": "https://www.ononavi.jp/sightseeing/temple/detail.html?detail_id=9",
+      "sourceLabel": "尾道市の観光情報 おのなび（千光寺）"
+    },
+    {
+      "id": "tomonoura",
+      "name": "鞆の浦",
+      "kind": "観光地",
+      "prefCode": "34",
+      "areaCode": "34207",
+      "summary": "福山市鞆町の港町。国の名勝「鞆公園」と重要伝統的建造物群保存地区がある。",
+      "source": "https://online.bunka.go.jp/heritages/detail/217369",
+      "sourceLabel": "文化庁 文化遺産オンライン（鞆公園）"
+    },
+    {
+      "id": "itsukushima-jinja",
+      "name": "厳島神社",
+      "kind": "世界遺産",
+      "prefCode": "34",
+      "areaCode": "34213",
+      "summary": "廿日市市宮島町にある神社。1996年に世界遺産に登録された。",
+      "source": "https://www.itsukushimajinja.jp/",
+      "sourceLabel": "嚴島神社 公式サイト"
+    },
+    {
+      "id": "tsunoshima-ohashi",
+      "name": "角島大橋",
+      "kind": "空港・港・鉄道・橋（インフラ）",
+      "prefCode": "35",
+      "areaCode": "35201",
+      "summary": "下関市豊北町の神田と角島を結ぶ橋。長さは1,780メートル。",
+      "source": "https://yamaguchi-tourism.jp/spot/detail_11030.html",
+      "sourceLabel": "山口県観光/旅行サイト おいでませ山口へ（角島大橋）"
+    },
+    {
+      "id": "shokasonjuku",
+      "name": "松下村塾",
+      "kind": "世界遺産",
+      "prefCode": "35",
+      "areaCode": "35204",
+      "summary": "萩市椿東の松陰神社内にある私塾の建物。「明治日本の産業革命遺産」の構成資産。",
+      "source": "https://www.city.hagi.lg.jp/site/sekaiisan/h6081.html",
+      "sourceLabel": "萩市 公式サイト（松下村塾）"
+    },
+    {
+      "id": "kintaikyo",
+      "name": "錦帯橋",
+      "kind": "空港・港・鉄道・橋（インフラ）",
+      "prefCode": "35",
+      "areaCode": "35208",
+      "summary": "岩国市にある橋。国の名勝に指定されている。",
+      "source": "https://online.bunka.go.jp/heritages/detail/202626",
+      "sourceLabel": "文化庁 文化遺産オンライン（錦帯橋）"
+    },
+    {
+      "id": "motonosumi-inari",
+      "name": "元乃隅神社",
+      "kind": "神社",
+      "prefCode": "35",
+      "areaCode": "35211",
+      "summary": "長門市油谷にある神社。123基の鳥居が海に向かって連なる。",
+      "source": "https://yamaguchi-tourism.jp/spot/detail_17060.html",
+      "sourceLabel": "山口県観光/旅行サイト おいでませ山口へ（元乃隅神社）"
+    },
+    {
+      "id": "akiyoshido",
+      "name": "秋芳洞",
+      "kind": "自然",
+      "prefCode": "35",
+      "areaCode": "35213",
+      "summary": "美祢市秋芳町にある鍾乳洞。国の特別天然記念物に指定されている。",
+      "source": "https://www2.city.mine.lg.jp/soshiki/kyoiku/hogoka/bunkazai/bunkazai/kunishitei/tokubetsu/1537.html",
+      "sourceLabel": "美祢市 公式サイト（秋芳洞）"
+    },
+    {
+      "id": "awa-odori",
+      "name": "阿波おどり",
+      "kind": "祭り・伝統",
+      "prefCode": "36",
+      "areaCode": "36201",
+      "summary": "徳島市で毎年8月11日から15日に開かれる、伝統芸能の踊り。",
+      "source": "https://www.city.tokushima.tokushima.jp/kankou/awaodori/",
+      "sourceLabel": "徳島市 公式サイト（阿波おどり）"
+    },
+    {
+      "id": "onaruto-bridge",
+      "name": "大鳴門橋",
+      "kind": "空港・港・鉄道・橋（インフラ）",
+      "prefCode": "36",
+      "areaCode": "36202",
+      "summary": "徳島県鳴門市と兵庫県南あわじ市を結ぶ橋。",
+      "source": "https://web.pref.hyogo.lg.jp/ks08/ohnaruto.html",
+      "sourceLabel": "兵庫県 公式サイト（大鳴門橋）"
+    },
+    {
+      "id": "otsuka-museum",
+      "name": "大塚国際美術館",
+      "kind": "美術館・博物館",
+      "prefCode": "36",
+      "areaCode": "36202",
+      "summary": "鳴門公園内の美術館。西洋名画を陶板で原寸大に再現して展示している。",
+      "source": "https://o-museum.or.jp/",
+      "sourceLabel": "大塚国際美術館 公式サイト"
+    },
+    {
+      "id": "iya-kazurabashi",
+      "name": "祖谷のかずら橋",
+      "kind": "観光地",
+      "prefCode": "36",
+      "areaCode": "36208",
+      "summary": "三好市西祖谷山村にある橋。国の重要有形民俗文化財に指定されている。",
+      "source": "https://miyoshi-tourism.jp/spot/iyanokazurabashi/",
+      "sourceLabel": "三好市 観光サイト（祖谷のかずら橋）"
+    },
+    {
+      "id": "tokushima-awaodori-airport",
+      "name": "徳島阿波おどり空港",
+      "kind": "空港・港・鉄道・橋（インフラ）",
+      "prefCode": "36",
+      "areaCode": "36401",
+      "summary": "徳島県板野郡松茂町にある空港。",
+      "source": "https://www.tokushima-airport.co.jp/",
+      "sourceLabel": "徳島空港ビル 公式サイト"
+    },
+    {
+      "id": "ritsurin-garden",
+      "name": "栗林公園",
+      "kind": "観光地",
+      "prefCode": "37",
+      "areaCode": "37201",
+      "summary": "高松市にある庭園。国の特別名勝に指定されている。",
+      "source": "https://kunishitei.bunka.go.jp/heritage/detail/401/2502",
+      "sourceLabel": "文化庁 国指定文化財等データベース"
+    },
+    {
+      "id": "takamatsu-airport",
+      "name": "高松空港",
+      "kind": "空港・港・鉄道・橋（インフラ）",
+      "prefCode": "37",
+      "areaCode": "37201",
+      "summary": "香川県高松市香南町にある空港。",
+      "source": "https://www.takamatsu-airport.com/company/",
+      "sourceLabel": "高松空港株式会社 公式サイト"
+    },
+    {
+      "id": "seto-ohashi-sakaide",
+      "name": "瀬戸大橋（坂出市側）",
+      "kind": "空港・港・鉄道・橋（インフラ）",
+      "prefCode": "37",
+      "areaCode": "37203",
+      "summary": "岡山県倉敷市と香川県坂出市を結ぶ、道路と鉄道の橋。",
+      "source": "https://www.okayama-kanko.jp/spot/detail_10351.html",
+      "sourceLabel": "岡山観光WEB（公益社団法人 岡山県観光連盟）"
+    },
+    {
+      "id": "chichu-art-museum",
+      "name": "地中美術館",
+      "kind": "美術館・博物館",
+      "prefCode": "37",
+      "areaCode": "37364",
+      "summary": "直島町にある美術館。2004年に設立された。",
+      "source": "https://benesse-artsite.jp/art/chichu.html",
+      "sourceLabel": "ベネッセアートサイト直島 公式サイト（地中美術館）"
+    },
+    {
+      "id": "kotohira-gu",
+      "name": "金刀比羅宮",
+      "kind": "神社",
+      "prefCode": "37",
+      "areaCode": "37403",
+      "summary": "琴平町の象頭山にある神社。「こんぴらさん」の名で呼ばれる。",
+      "source": "https://www.konpira.or.jp/",
+      "sourceLabel": "金刀比羅宮 公式サイト"
+    },
+    {
+      "id": "dogo-onsen",
+      "name": "道後温泉",
+      "kind": "温泉地",
+      "prefCode": "38",
+      "areaCode": "38201",
+      "summary": "松山市の温泉。道後温泉本館は国の重要文化財に指定されている。",
+      "source": "https://www.dogo.jp/",
+      "sourceLabel": "道後温泉 公式サイト"
+    },
+    {
+      "id": "matsuyama-airport",
+      "name": "松山空港",
+      "kind": "空港・港・鉄道・橋（インフラ）",
+      "prefCode": "38",
+      "areaCode": "38201",
+      "summary": "愛媛県松山市南吉田町にある空港。",
+      "source": "https://www.matsuyama-airport.co.jp/company/",
+      "sourceLabel": "松山空港ビル 公式サイト"
+    },
+    {
+      "id": "matsuyama-castle",
+      "name": "松山城",
+      "kind": "城",
+      "prefCode": "38",
+      "areaCode": "38201",
+      "summary": "松山市にある城。天守は現存12天守のひとつで、重要文化財。",
+      "source": "https://www.matsuyamajo.jp/guide/matsuyamacastle.html",
+      "sourceLabel": "松山城 公式サイト"
+    },
+    {
+      "id": "kurushima-kaikyo-bridge",
+      "name": "来島海峡大橋",
+      "kind": "空港・港・鉄道・橋（インフラ）",
+      "prefCode": "38",
+      "areaCode": "38202",
+      "summary": "愛媛県今治市にある、大島と今治の間の来島海峡に架かる橋。",
+      "source": "https://www.mlit.go.jp/sogoseisaku/region/infratourism/pickup/kurushima/index01.html",
+      "sourceLabel": "国土交通省 公式サイト（来島海峡大橋）"
+    },
+    {
+      "id": "oyamazumi-jinja",
+      "name": "大山祇神社",
+      "kind": "神社",
+      "prefCode": "38",
+      "areaCode": "38202",
+      "summary": "今治市大三島町にある神社。境内に樹齢約2,600年の大楠がある。",
+      "source": "https://www.city.imabari.ehime.jp/kanko/spot/?a=226",
+      "sourceLabel": "今治市 公式サイト（大山祇神社）"
+    },
+    {
+      "id": "katsurahama",
+      "name": "桂浜",
+      "kind": "自然",
+      "prefCode": "39",
+      "areaCode": "39201",
+      "summary": "高知市浦戸にある、太平洋に面した海岸。",
+      "source": "https://www.city.kochi.kochi.jp/site/kanko/katsurahamakouen.html",
+      "sourceLabel": "高知市 観光情報サイト（桂浜公園）"
+    },
+    {
+      "id": "kochi-castle",
+      "name": "高知城",
+      "kind": "城",
+      "prefCode": "39",
+      "areaCode": "39201",
+      "summary": "高知市の城。江戸時代に建てられた天守や本丸御殿が現存する。",
+      "source": "https://kochipark.jp/kochijyo/",
+      "sourceLabel": "高知城 公式サイト"
+    },
+    {
+      "id": "yosakoi-matsuri",
+      "name": "高知よさこい祭り",
+      "kind": "祭り・伝統",
+      "prefCode": "39",
+      "areaCode": "39201",
+      "summary": "毎年8月、高知市の追手筋ほかで開かれる祭り。昭和29年に始まった。",
+      "source": "https://www.city.kochi.kochi.jp/site/kanko/yosakoimatsuri.html",
+      "sourceLabel": "高知市 観光情報サイト（よさこい祭り）"
+    },
+    {
+      "id": "muroto-misaki",
+      "name": "室戸岬",
+      "kind": "自然",
+      "prefCode": "39",
+      "areaCode": "39202",
+      "summary": "室戸市室戸岬町にある岬。室戸阿南海岸国定公園の指定を受けている。",
+      "source": "https://kochi-tabi.jp/search_spot_sightseeing.html?id=703",
+      "sourceLabel": "こうち旅ネット（高知県観光コンベンション協会）"
+    },
+    {
+      "id": "kochi-ryoma-airport",
+      "name": "高知龍馬空港",
+      "kind": "空港・港・鉄道・橋（インフラ）",
+      "prefCode": "39",
+      "areaCode": "39204",
+      "summary": "高知県南国市にある空港。",
+      "source": "https://www.kochiap.co.jp/",
+      "sourceLabel": "高知龍馬空港 公式サイト"
+    },
+    {
+      "id": "moji-retro",
+      "name": "門司港レトロ",
+      "kind": "観光地",
+      "prefCode": "40",
+      "areaCode": "40101",
+      "summary": "北九州市門司区にある、明治から昭和初期の建物が残る地区。",
+      "source": "https://www.mojiko.info/about/access.html",
+      "sourceLabel": "門司港レトロインフォメーション"
+    },
+    {
+      "id": "yawata-steel-works",
+      "name": "官営八幡製鐵所 旧本事務所",
+      "kind": "世界遺産",
+      "prefCode": "40",
+      "areaCode": "40108",
+      "summary": "八幡東区にある、世界遺産「明治日本の産業革命遺産」の構成資産の建物。",
+      "source": "https://www.city.kitakyushu.lg.jp/yahatahigashi/file_0052_00005.html",
+      "sourceLabel": "北九州市 公式サイト（八幡東区）"
+    },
+    {
+      "id": "yanagawa-kawakudari",
+      "name": "柳川の川下り",
+      "kind": "観光地",
+      "prefCode": "40",
+      "areaCode": "40207",
+      "summary": "柳川市の掘割をどんこ舟で巡る川下り。",
+      "source": "https://www.city.yanagawa.fukuoka.jp/kanko/kawakudari/kawakudari_kawakudari.html",
+      "sourceLabel": "柳川市 公式サイト（川下り（お堀めぐり））"
+    },
+    {
+      "id": "dazaifu-tenmangu",
+      "name": "太宰府天満宮",
+      "kind": "神社",
+      "prefCode": "40",
+      "areaCode": "40221",
+      "summary": "太宰府市にある神社。菅原道真公の御墓所の上に社殿がある。",
+      "source": "https://www.dazaifutenmangu.or.jp/access/",
+      "sourceLabel": "太宰府天満宮 公式サイト"
+    },
+    {
+      "id": "saga-balloon-fiesta",
+      "name": "佐賀インターナショナルバルーンフェスタ",
+      "kind": "祭り・伝統",
+      "prefCode": "41",
+      "areaCode": "41201",
+      "summary": "佐賀市の嘉瀬川河川敷をメイン会場に開かれる、熱気球の大会。",
+      "source": "https://www.sibf.jp/visitors/overview.html",
+      "sourceLabel": "佐賀インターナショナルバルーンフェスタ 公式サイト"
+    },
+    {
+      "id": "karatsu-castle",
+      "name": "唐津城",
+      "kind": "城",
+      "prefCode": "41",
+      "areaCode": "41202",
+      "summary": "唐津市にある城。慶長7年（1602年）から7年かけて完成した。",
+      "source": "https://karatsujo.com/access",
+      "sourceLabel": "唐津城 公式サイト"
+    },
+    {
+      "id": "takeo-onsen",
+      "name": "武雄温泉",
+      "kind": "温泉地",
+      "prefCode": "41",
+      "areaCode": "41206",
+      "summary": "武雄市武雄町の温泉。楼門は国の重要文化財に指定されている。",
+      "source": "https://www.takeo-kk.net/sightseeing/001373.php",
+      "sourceLabel": "武雄市観光協会 公式サイト（武雄温泉楼門）"
+    },
+    {
+      "id": "yutoku-inari",
+      "name": "祐徳稲荷神社",
+      "kind": "神社",
+      "prefCode": "41",
+      "areaCode": "41207",
+      "summary": "鹿島市古枝にある稲荷神社。貞享4年（1687年）に勧請された。",
+      "source": "https://www.yutokusan.jp/about/access/",
+      "sourceLabel": "祐徳稲荷神社 公式サイト"
+    },
+    {
+      "id": "arita-ware",
+      "name": "有田焼",
+      "kind": "産業・名産",
+      "prefCode": "41",
+      "areaCode": "41401",
+      "summary": "佐賀県有田町とその周辺で作られる磁器。",
+      "source": "https://www.arita.jp/aritaware/",
+      "sourceLabel": "有田観光協会 公式サイト"
+    },
+    {
+      "id": "hashima",
+      "name": "端島（軍艦島）",
+      "kind": "世界遺産",
+      "prefCode": "42",
+      "areaCode": "42201",
+      "summary": "長崎市高島町にある島。世界文化遺産「明治日本の産業革命遺産」に含まれる。",
+      "source": "https://www.nagasaki-tabinet.com/guide/51797",
+      "sourceLabel": "ながさき旅ネット 端島（軍艦島）"
+    },
+    {
+      "id": "oura-church",
+      "name": "大浦天主堂",
+      "kind": "世界遺産",
+      "prefCode": "42",
+      "areaCode": "42201",
+      "summary": "長崎市南山手町にある教会。国宝で、「長崎と天草地方の潜伏キリシタン関連遺産」に含まれる。",
+      "source": "https://www.nagasaki-tabinet.com/junrei/102",
+      "sourceLabel": "ながさき旅ネット 大浦天主堂"
+    },
+    {
+      "id": "huis-ten-bosch",
+      "name": "ハウステンボス",
+      "kind": "テーマパーク",
+      "prefCode": "42",
+      "areaCode": "42202",
+      "summary": "佐世保市ハウステンボス町にあるテーマパーク。",
+      "source": "https://www.huistenbosch.co.jp/access/car/parking.html",
+      "sourceLabel": "ハウステンボス 公式サイト（駐車場のご案内）"
+    },
+    {
+      "id": "shimabara-castle",
+      "name": "島原城",
+      "kind": "城",
+      "prefCode": "42",
+      "areaCode": "42203",
+      "summary": "島原市城内にある城。松倉重政が1618年に築城を始めた。",
+      "source": "https://shimabarajou.com/",
+      "sourceLabel": "島原城 公式サイト"
+    },
+    {
+      "id": "unzen-onsen",
+      "name": "雲仙温泉",
+      "kind": "温泉地",
+      "prefCode": "42",
+      "areaCode": "42213",
+      "summary": "雲仙市小浜町雲仙の温泉地。雲仙は昭和9年に日本で最初の国立公園に指定された。",
+      "source": "https://unzenonsen.unzen.org/principle/about/",
+      "sourceLabel": "雲仙観光局 公式サイト（雲仙とは）"
+    },
+    {
+      "id": "kumamoto-castle",
+      "name": "熊本城",
+      "kind": "城",
+      "prefCode": "43",
+      "areaCode": "43101",
+      "summary": "熊本市中央区本丸にある城。",
+      "source": "https://kumamoto-guide.jp/spots/detail/122",
+      "sourceLabel": "熊本城 観光案内（kumamoto-guide.jp）"
+    },
+    {
+      "id": "aso-jinja",
+      "name": "阿蘇神社",
+      "kind": "神社",
+      "prefCode": "43",
+      "areaCode": "43214",
+      "summary": "阿蘇市一の宮町宮地にある神社。全国に約500社ある阿蘇神社の総本社。",
+      "source": "https://asojinja.or.jp/",
+      "sourceLabel": "阿蘇神社 公式サイト"
+    },
+    {
+      "id": "sakitsu",
+      "name": "天草の崎津集落",
+      "kind": "世界遺産",
+      "prefCode": "43",
+      "areaCode": "43215",
+      "summary": "天草市河浦町にある集落。世界文化遺産「長崎と天草地方の潜伏キリシタン関連遺産」に含まれる。",
+      "source": "https://www.city.amakusa.kumamoto.jp/sakitsu-sekai/kiji0037/index.html",
+      "sourceLabel": "天草市 公式サイト（世界文化遺産「天草の﨑津集落」）"
+    },
+    {
+      "id": "kurokawa-onsen",
+      "name": "黒川温泉",
+      "kind": "温泉地",
+      "prefCode": "43",
+      "areaCode": "43423",
+      "summary": "南小国町満願寺黒川にある温泉地。",
+      "source": "https://www.town.minamioguni.lg.jp/kankou/kurokawa/kurokawa-onsen.html",
+      "sourceLabel": "南小国町 公式サイト（黒川温泉）"
+    },
+    {
+      "id": "tsujun-bridge",
+      "name": "通潤橋",
+      "kind": "空港・港・鉄道・橋（インフラ）",
+      "prefCode": "43",
+      "areaCode": "43447",
+      "summary": "山都町にある石造のアーチ橋。2023年9月に国宝に指定された。",
+      "source": "https://www.pref.kumamoto.jp/soshiki/125/185362.html",
+      "sourceLabel": "熊本県 公式サイト（通潤橋の国宝指定）"
+    },
+    {
+      "id": "beppu-jigoku-meguri",
+      "name": "別府地獄めぐり",
+      "kind": "温泉地",
+      "prefCode": "44",
+      "areaCode": "44202",
+      "summary": "別府市鉄輪・野田にある、海地獄・血の池地獄など7つの「地獄」を巡る観光コース。",
+      "source": "https://www.beppu-jigoku.com/",
+      "sourceLabel": "別府地獄めぐり公式サイト（別府地獄組合）"
+    },
+    {
+      "id": "usuki-sekibutsu",
+      "name": "臼杵石仏",
+      "kind": "観光地",
+      "prefCode": "44",
+      "areaCode": "44206",
+      "summary": "臼杵市深田にある磨崖仏。国宝に指定されている。",
+      "source": "https://www.city.usuki.oita.jp/docs/2014013000078/",
+      "sourceLabel": "臼杵市 公式サイト（国宝臼杵石仏）"
+    },
+    {
+      "id": "usa-jingu",
+      "name": "宇佐神宮",
+      "kind": "神社",
+      "prefCode": "44",
+      "areaCode": "44211",
+      "summary": "宇佐市南宇佐にある神社。本殿は国宝に指定されている。",
+      "source": "https://www.city.usa.oita.jp/tourist/touristspot/touristspot2/touristspot3/10171.html",
+      "sourceLabel": "宇佐市 公式サイト（宇佐神宮）"
+    },
+    {
+      "id": "yufuin-onsen",
+      "name": "由布院温泉",
+      "kind": "温泉地",
+      "prefCode": "44",
+      "areaCode": "44213",
+      "summary": "由布市にある温泉地。",
+      "source": "https://www.city.yufu.oita.jp/kankou/onsen",
+      "sourceLabel": "由布市 公式サイト（温泉）"
+    },
+    {
+      "id": "kokonoe-yume-otsuribashi",
+      "name": "九重“夢”大吊橋",
+      "kind": "空港・港・鉄道・橋（インフラ）",
+      "prefCode": "44",
+      "areaCode": "44461",
+      "summary": "九重町田野にある吊り橋。長さ390m、高さ173m。",
+      "source": "https://www.yumeooturihashi.com/",
+      "sourceLabel": "九重“夢”大吊橋 公式サイト"
+    },
+    {
+      "id": "aoshima-jinja",
+      "name": "青島神社",
+      "kind": "神社",
+      "prefCode": "45",
+      "areaCode": "45201",
+      "summary": "宮崎市青島にある神社。",
+      "source": "https://aoshima-jinja.jp/",
+      "sourceLabel": "青島神社 公式サイト"
+    },
+    {
+      "id": "udo-jingu",
+      "name": "鵜戸神宮",
+      "kind": "神社",
+      "prefCode": "45",
+      "areaCode": "45204",
+      "summary": "日南市宮浦にある神社。本殿は海に突き出た岬の洞窟内にある。",
+      "source": "https://www.kanko-miyazaki.jp/spot/1003",
+      "sourceLabel": "宮崎県観光協会 公式サイト（鵜戸神宮）"
+    },
+    {
+      "id": "toimisaki",
+      "name": "都井岬",
+      "kind": "自然",
+      "prefCode": "45",
+      "areaCode": "45207",
+      "summary": "串間市大納にある岬。国の天然記念物の野生馬「御崎馬」が生息する。",
+      "source": "https://www.kanko-miyazaki.jp/spot/1002",
+      "sourceLabel": "宮崎県観光協会 公式サイト（都井岬）"
+    },
+    {
+      "id": "saitobaru-kofun",
+      "name": "西都原古墳群",
+      "kind": "観光地",
+      "prefCode": "45",
+      "areaCode": "45208",
+      "summary": "西都市三宅にある古墳群。特別史跡に指定されている。",
+      "source": "https://www.kanko-miyazaki.jp/spot/1016",
+      "sourceLabel": "宮崎県観光協会 公式サイト（西都原古墳群）"
+    },
+    {
+      "id": "takachiho-gorge",
+      "name": "高千穂峡",
+      "kind": "自然",
+      "prefCode": "45",
+      "areaCode": "45441",
+      "summary": "高千穂町にある峡谷。昭和9年に五箇瀬川峡谷として国の名勝・天然記念物に指定された。",
+      "source": "https://takachiho-kanko.info/sightseeing/18/",
+      "sourceLabel": "高千穂町観光協会 公式サイト（高千穂峡）"
+    },
+    {
+      "id": "sakurajima",
+      "name": "桜島",
+      "kind": "自然",
+      "prefCode": "46",
+      "areaCode": "46201",
+      "summary": "鹿児島市にある、鹿児島湾の火山。北岳と南岳からなる複合火山。",
+      "source": "https://www.sakurajima.gr.jp/sakurajima.html",
+      "sourceLabel": "桜島観光ポータル みんなの桜島（桜島を知る）"
+    },
+    {
+      "id": "ibusuki-sunamushi",
+      "name": "指宿の砂むし温泉",
+      "kind": "温泉地",
+      "prefCode": "46",
+      "areaCode": "46210",
+      "summary": "指宿市にある、天然の砂むし場で砂浴ができる温泉。",
+      "source": "https://www.ibusuki.or.jp/spa/sunamushi/post-38/",
+      "sourceLabel": "指宿市観光協会 公式サイト（砂むし会館「砂楽」）"
+    },
+    {
+      "id": "kirishima-jingu",
+      "name": "霧島神宮",
+      "kind": "神社",
+      "prefCode": "46",
+      "areaCode": "46218",
+      "summary": "霧島市霧島田口にある神社。本殿・幣殿・拝殿が国宝に指定されている。",
+      "source": "https://kirishimajingu.or.jp/history/",
+      "sourceLabel": "霧島神宮 公式サイト（御由緒）"
+    },
+    {
+      "id": "tanegashima-space-center",
+      "name": "種子島宇宙センター",
+      "kind": "大学・研究",
+      "prefCode": "46",
+      "areaCode": "46502",
+      "summary": "南種子町茎永にあるJAXAのロケット発射場。",
+      "source": "https://www.jaxa.jp/about/centers/tnsc/index_j.html",
+      "sourceLabel": "JAXA 公式サイト（種子島宇宙センター）"
+    },
+    {
+      "id": "yakushima",
+      "name": "屋久島",
+      "kind": "世界遺産",
+      "prefCode": "46",
+      "areaCode": "46505",
+      "summary": "屋久島町にある島。世界自然遺産に登録されている。",
+      "source": "https://www.town.yakushima.kagoshima.jp/soshiki/somu/machinogaiyo/747.html",
+      "sourceLabel": "屋久島町 公式サイト（町の概要）"
+    },
+    {
+      "id": "naha-airport",
+      "name": "那覇空港",
+      "kind": "空港・港・鉄道・橋（インフラ）",
+      "prefCode": "47",
+      "areaCode": "47201",
+      "summary": "沖縄県那覇市にある空港。",
+      "source": "https://www.cab.mlit.go.jp/wcab/airport/central/naha.html",
+      "sourceLabel": "国土交通省 大阪航空局 公式サイト（那覇空港）"
+    },
+    {
+      "id": "shuri-castle",
+      "name": "首里城跡",
+      "kind": "世界遺産",
+      "prefCode": "47",
+      "areaCode": "47201",
+      "summary": "那覇市首里金城町にある城跡。「琉球王国のグスク及び関連遺産群」に含まれる。",
+      "source": "https://oki-park.jp/shurijo/access/",
+      "sourceLabel": "首里城公園 公式サイト（アクセス）"
+    },
+    {
+      "id": "sefa-utaki",
+      "name": "斎場御嶽",
+      "kind": "世界遺産",
+      "prefCode": "47",
+      "areaCode": "47215",
+      "summary": "南城市知念にある御嶽。「琉球王国のグスク及び関連遺産群」に含まれる。",
+      "source": "https://www.okinawastory.jp/spot/1395",
+      "sourceLabel": "おきなわ物語（沖縄観光コンベンションビューロー）斎場御嶽"
+    },
+    {
+      "id": "churaumi-aquarium",
+      "name": "沖縄美ら海水族館",
+      "kind": "観光地",
+      "prefCode": "47",
+      "areaCode": "47308",
+      "summary": "本部町の海洋博公園内にある水族館。",
+      "source": "https://churaumi.okinawa/sp/guide/access/",
+      "sourceLabel": "沖縄美ら海水族館 公式サイト（アクセス）"
+    },
+    {
+      "id": "manzamo",
+      "name": "万座毛",
+      "kind": "自然",
+      "prefCode": "47",
+      "areaCode": "47311",
+      "summary": "恩納村にある、琉球石灰岩の断崖と、その上に広がる芝生。",
+      "source": "https://www.vill.onna.okinawa.jp/sp/about/facility/1624949830/",
+      "sourceLabel": "恩納村 公式サイト（万座毛周辺活性化施設）"
+    }
+  ]
+}
