@@ -8,7 +8,7 @@ import { allocationColor, SUPPORT_COLORS, supportColor } from '../map/colors';
 import { SUPPORT_TITLE } from '../map/legend';
 import type { Pop } from '../engine/types';
 import { ALLOC_BADGE, ALLOC_CLEAR, mountApp, SKIP_TO_YEAR, sourceHtml, type AppHandle } from './app';
-import { APP_PROBLEM, SOURCES } from './sources';
+import { APP_PROBLEM, NAV_DESCRIPTIONS, NAV_SUMMARY, NAV_TITLE, SOURCES } from './sources';
 import { total } from '../engine/aggregate';
 import { formatPct, formatPop } from './format';
 import type { AllocationOverlay } from './state';
@@ -97,18 +97,31 @@ describe('mountApp shell', () => {
 
   test('the header asks the question the app starts from, as the last line under the title and the lead', async () => {
     const { root } = await mount();
-    const head = root.querySelector('header.app-head')!;
+    const head = root.querySelector('header.app-head .app-head-inner')!;
     expect([...head.children].map((c) => c.className)).toEqual(['app-title', 'app-lead', 'app-problem']);
     expect(head.querySelector('.app-problem')!.textContent).toBe(APP_PROBLEM);
     expect(head.querySelectorAll('.app-problem .keep').length).toBeGreaterThan(2); // laid out phrase by phrase
   });
 
-  test('the loading screen shows the same header, question included', async () => {
+  test('the loading screen shows the same header, question included, and the menu', async () => {
     const root = document.createElement('div');
     document.body.append(root);
     const never = vi.fn(() => new Promise<Response>(() => undefined));
     void mountApp(root, { fetch: never, base: '/', prefGeoCache: new Map(), timeoutMs: 5000 });
     expect(root.querySelector('.app-head .app-problem')!.textContent).toBe(APP_PROBLEM);
+    expect(root.querySelectorAll('nav.app-nav .app-nav-item')).toHaveLength(4);
+    expect(root.querySelector('.app-inner main .load-skeleton')).not.toBeNull(); // the page content sits in the page-width wrapper
+  });
+
+  test('the error screen keeps the header and the menu around the message', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const failing = vi.fn(() => Promise.resolve({ ok: false, status: 500, json: async () => ({}) } as unknown as Response));
+    void mountApp(root, { fetch: failing as unknown as typeof fetch, base: '/', prefGeoCache: new Map(), timeoutMs: 5000 });
+    await settle();
+    expect(root.querySelector('.load-error')).not.toBeNull();
+    expect(root.querySelector('.app-head .app-problem')!.textContent).toBe(APP_PROBLEM);
+    expect(root.querySelectorAll('nav.app-nav .app-nav-item')).toHaveLength(4);
   });
 
   test('the headline badge follows the year: census at 2020, official to 2050, estimate after', async () => {
@@ -121,6 +134,95 @@ describe('mountApp shell', () => {
     store.set({ year: 2055 });
     expect(badge()).toBe('試算');
     expect(root.querySelector('.map-headline-num [class^="badge-"]')!.className).toBe('badge-estimate');
+  });
+});
+
+describe('the menu under the title: what the app can do, and a way to each panel', () => {
+  const PANEL_IDS = ['panel-town', 'panel-controls', 'panel-allocation', 'panel-ai'];
+
+  test('a navigation landmark named by its heading 「この地図でできること」, with the four panels in the order of the page', async () => {
+    const { root } = await mount();
+    const nav = root.querySelector('nav.app-nav')!;
+    const heading = nav.querySelector<HTMLElement>('h2.app-nav-title')!;
+    expect(heading.textContent).toBe(NAV_TITLE);
+    expect(nav.getAttribute('aria-labelledby')).toBe(heading.id);
+    const links = [...nav.querySelectorAll<HTMLAnchorElement>('a.app-nav-item')];
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(PANEL_IDS.map((id) => `#${id}`));
+    expect(links.map((a) => a.dataset.panel)).toEqual(PANEL_IDS);
+    // the name of an item is the name of its panel
+    const panelNames = PANEL_IDS.map((id) => root.querySelector(`#${id} h2.panel-title`)!.firstChild!.textContent!.trim());
+    expect(links.map((a) => a.textContent)).toEqual(panelNames);
+    expect(panelNames).toEqual(['町の詳細', '前提を変える', '人口の割り振り', 'AIに質問']);
+  });
+
+  test('each item is described by its one line (the link\'s description), phrase by phrase; the page keeps one summary for the eye', async () => {
+    const { root } = await mount();
+    for (const id of PANEL_IDS) {
+      const link = root.querySelector<HTMLAnchorElement>(`a.app-nav-item[data-panel="${id}"]`)!;
+      const desc = root.querySelector(`#${link.getAttribute('aria-describedby')}`)!;
+      expect(desc.textContent).toBe(NAV_DESCRIPTIONS[id]);
+      expect(desc.querySelectorAll('.keep').length).toBeGreaterThan(0);
+      expect(link.contains(desc)).toBe(false); // the link's name stays the short name
+    }
+    const summary = root.querySelector('.app-nav-summary')!;
+    expect(summary.textContent).toBe(NAV_SUMMARY);
+    expect(summary.getAttribute('aria-hidden')).toBe('true'); // the same sentences are already the items' descriptions
+  });
+
+  test('the band sits before the page: header, menu, the summary line, then the page-width wrapper with the main landmark', async () => {
+    const { root } = await mount();
+    expect([...root.children].map((c) => c.className || c.tagName.toLowerCase())).toEqual(['app-head', 'app-nav', 'app-nav-summary', 'app-inner']);
+    expect(root.querySelector('.app-inner > main.app-body')).not.toBeNull();
+    expect(root.querySelector('.app-inner > footer.app-foot')).not.toBeNull(); // the footer is under main, inside the same wrapper
+  });
+
+  test('pressing an item scrolls to its panel, puts keyboard focus on the panel\'s heading and leaves the address alone', async () => {
+    const { root } = await mount();
+    const scrolled: Array<[string, ScrollIntoViewOptions | undefined]> = [];
+    Element.prototype.scrollIntoView = function (this: Element, options?: boolean | ScrollIntoViewOptions) {
+      scrolled.push([this.id, typeof options === 'object' ? options : undefined]);
+    };
+    const hashBefore = location.hash;
+    for (const id of PANEL_IDS) {
+      const link = root.querySelector<HTMLAnchorElement>(`a.app-nav-item[data-panel="${id}"]`)!;
+      const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+      link.dispatchEvent(click);
+      expect(click.defaultPrevented, id).toBe(true); // no jump of the address; the scroll is ours
+      const title = root.querySelector<HTMLElement>(`#${id} h2.panel-title`)!;
+      expect(title.getAttribute('tabindex'), id).toBe('-1');
+      expect(document.activeElement, id).toBe(title);
+    }
+    expect(scrolled.map(([id]) => id)).toEqual(PANEL_IDS);
+    expect(scrolled.every(([, o]) => o?.block === 'start')).toBe(true);
+    expect(location.hash).toBe(hashBefore);
+  });
+
+  test('the scroll is instant for a reader who asked for reduced motion, smooth otherwise', async () => {
+    const { root } = await mount();
+    const seen: Array<ScrollBehavior | undefined> = [];
+    Element.prototype.scrollIntoView = function (this: Element, options?: boolean | ScrollIntoViewOptions) {
+      seen.push(typeof options === 'object' ? options.behavior : undefined);
+    };
+    const link = root.querySelector<HTMLAnchorElement>('a.app-nav-item[data-panel="panel-ai"]')!;
+    link.click();
+    expect(seen.pop()).toBe('smooth'); // jsdom has no matchMedia: the default
+    const win = window as unknown as { matchMedia?: (q: string) => { matches: boolean } };
+    const original = win.matchMedia;
+    win.matchMedia = (q: string) => ({ matches: q.includes('reduce') });
+    link.click();
+    expect(seen.pop()).toBe('auto');
+    win.matchMedia = original;
+  });
+
+  test('keyboard: the items are links in the tab order, Enter on one goes to the panel', async () => {
+    const { root } = await mount();
+    Element.prototype.scrollIntoView = () => undefined;
+    const link = root.querySelector<HTMLAnchorElement>('a.app-nav-item[data-panel="panel-controls"]')!;
+    link.focus();
+    expect(document.activeElement).toBe(link);
+    expect(link.tabIndex).toBe(0);
+    link.click(); // the browser turns Enter on a link into this click
+    expect(document.activeElement).toBe(root.querySelector('#panel-controls h2.panel-title'));
   });
 });
 

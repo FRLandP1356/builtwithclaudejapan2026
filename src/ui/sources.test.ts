@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { allocatedBasisNote, APP_PROBLEM, badgeFor, SOURCES } from './sources';
+import { allocatedBasisNote, APP_PROBLEM, badgeFor, NAV_DESCRIPTIONS, NAV_SUMMARY, NAV_TITLE, SOURCES } from './sources';
 
 describe('APP_PROBLEM: the question the app starts from', () => {
   test('it is the sentence the owner chose, with the first person in hiragana', () => {
@@ -10,6 +10,36 @@ describe('APP_PROBLEM: the question the app starts from', () => {
 
   test('it never uses the kanji 私, claims that something cannot be kept, advises, or says 予測', () => {
     for (const word of ['私', '残せない', '閉鎖', '予測', 'べき', 'すべき', 'ください']) expect(APP_PROBLEM).not.toContain(word);
+  });
+});
+
+describe('the menu under the title: what the app can do', () => {
+  const PANEL_IDS = ['panel-town', 'panel-controls', 'panel-allocation', 'panel-ai'];
+  const all = [NAV_TITLE, NAV_SUMMARY, ...Object.values(NAV_DESCRIPTIONS)];
+
+  test('the heading and one line for each of the four panels, no more and no fewer', () => {
+    expect(NAV_TITLE).toBe('この地図でできること');
+    expect(Object.keys(NAV_DESCRIPTIONS)).toEqual(PANEL_IDS);
+    for (const id of PANEL_IDS) expect(NAV_DESCRIPTIONS[id].length, id).toBeGreaterThan(10);
+  });
+
+  test('every line fits two lines of a 250px column at 13px (about 19 characters a line), so the band keeps its height', () => {
+    for (const id of PANEL_IDS) expect(NAV_DESCRIPTIONS[id].length, id).toBeLessThanOrEqual(36);
+  });
+
+  test('the summary names what each line says: people of a town or prefecture, assumptions, the allocation, and the AI', () => {
+    expect(NAV_SUMMARY).toContain('人口を見る');
+    expect(NAV_SUMMARY).toContain('前提を変えて試す');
+    expect(NAV_SUMMARY).toContain('割り振って');
+    expect(NAV_SUMMARY).toContain('AIに日本語で聞く');
+  });
+
+  test('they describe what the app does and never advise what to keep, claim something cannot be kept, or say 予測 or 私', () => {
+    for (const text of all) {
+      for (const word of ['私', '予測', '残せない', '閉鎖', 'べき', 'すべき', 'ください', '推奨', 'おすすめ', '守る', '切り捨て']) {
+        expect(text, `${word} in ${text}`).not.toContain(word);
+      }
+    }
   });
 });
 

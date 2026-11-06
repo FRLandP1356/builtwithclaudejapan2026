@@ -22,7 +22,7 @@ import { breadcrumbs, buildSearchIndex, goUp, levelOf, pickArea, pickPref, prefO
 import { mountSearch } from './search';
 import { phrases } from './phrases';
 import { mountAIPanel } from './aiPanel';
-import { allocatedBasisNote, APP_LEAD, APP_PROBLEM, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, SOURCES, type SourceLine } from './sources';
+import { allocatedBasisNote, APP_LEAD, APP_PROBLEM, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, NAV_DESCRIPTIONS, NAV_SUMMARY, NAV_TITLE, SOURCES, type SourceLine } from './sources';
 import { createAppStore, DEFAULT_YEAR, MAP_MODES, type AllocationOverlay, type AppState, type MapMode, type PanelContext, type Store } from './state';
 import { MAP_MODE_GROUP, MAP_MODE_LABELS, SUPPORT_LABEL, support2020Line, supportLine } from './support';
 import { mountTownPanel } from './townPanel';
@@ -93,33 +93,48 @@ export function sourceHtml(s: SourceLine): string {
 }
 
 function headerHtml(): string {
-  return `<header class="app-head"><h1 class="app-title">${APP_TITLE}</h1><p class="app-lead">${APP_LEAD}</p><p class="app-problem">${phraseHtml(APP_PROBLEM)}</p></header>`;
+  return `<header class="app-head"><div class="app-head-inner"><h1 class="app-title">${APP_TITLE}</h1><p class="app-lead">${APP_LEAD}</p><p class="app-problem">${phraseHtml(APP_PROBLEM)}</p></div></header>`;
+}
+
+/**
+ * The menu under the title, the second tier of the band: what the app can do, and a way to each of its four panels.
+ * Each item is the panel's name (a link to the panel) over a one-line description (the link's accessible description).
+ * On a desktop the four sit in a row beside the heading; on a phone the names form a strip that scrolls sideways and
+ * sticks to the top of the window, and the four descriptions are read as one sentence under it (`.app-nav-summary`, a
+ * visual copy: the descriptions stay in the items for screen readers).
+ */
+function navHtml(): string {
+  const items = PANEL_TITLES.map(
+    (p) =>
+      `<li class="app-nav-card"><a class="app-nav-item" href="#${p.id}" data-panel="${p.id}" aria-describedby="${p.id}-nav-desc"><span class="app-nav-name">${p.title}</span></a><p class="app-nav-desc" id="${p.id}-nav-desc">${phraseHtml(NAV_DESCRIPTIONS[p.id])}</p></li>`,
+  ).join('');
+  return `<nav class="app-nav" aria-labelledby="app-nav-title"><div class="app-nav-inner"><h2 class="app-nav-title" id="app-nav-title">${NAV_TITLE}</h2><ul class="app-nav-list">${items}</ul></div></nav><p class="app-nav-summary" aria-hidden="true">${phraseHtml(NAV_SUMMARY)}</p>`;
 }
 
 /** `<main>` stays a plain landmark; the live region is a child. */
 function renderLoading(root: HTMLElement): void {
-  root.innerHTML = `${headerHtml()}
-    <main>
+  root.innerHTML = `${headerHtml()}${navHtml()}
+    <div class="app-inner"><main>
       <div class="load-skeleton" role="status" aria-live="polite">
         <p class="load-status">データを読み込んでいます（約2MB）</p>
         <div class="skeleton skeleton-line" style="width:40%"></div>
         <div class="skeleton skeleton-map"></div>
         <div class="skeleton skeleton-line" style="width:70%"></div>
       </div>
-    </main>`;
+    </main></div>`;
 }
 
 function renderError(root: HTMLElement, err: unknown, retry: () => void): void {
   const detail = err instanceof Error ? err.message : String(err);
-  root.innerHTML = `${headerHtml()}
-    <main>
+  root.innerHTML = `${headerHtml()}${navHtml()}
+    <div class="app-inner"><main>
       <div class="load-error" role="alert">
         <h2>データを読み込めませんでした</h2>
         <p>${escapeHtml(detail)}</p>
         <p>通信の状態を確かめてから、もう一度お試しください。</p>
         <button type="button" class="btn btn-primary" id="retry">もう一度読み込む</button>
       </div>
-    </main>`;
+    </main></div>`;
   root.querySelector<HTMLButtonElement>('#retry')?.addEventListener('click', retry);
 }
 
@@ -172,8 +187,8 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   let totals: Totals = deriveTotals(store.get().series, data.groups);
   let supports: SupportRatios = deriveSupport(store.get().series, data.groups);
 
-  root.innerHTML = `${headerHtml()}
-    <main class="app-body">
+  root.innerHTML = `${headerHtml()}${navHtml()}
+    <div class="app-inner"><main class="app-body">
       <section class="map-column" aria-label="地図">
         <div class="map-bar">
           <nav class="crumbs" aria-label="場所"><ol></ol></nav>
@@ -216,7 +231,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     <footer class="app-foot">
       <dl>${SOURCES.map(sourceHtml).join('')}</dl>
       <p>${FOOT_NOTE}</p>
-    </footer>`;
+    </footer></div>`;
 
   const q = <T extends Element>(sel: string) => root.querySelector<T>(sel)!;
   const crumbList = q<HTMLOListElement>('.crumbs ol');
@@ -583,6 +598,28 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   }
 
   const ac = new AbortController();
+  // ---- the menu under the title: go to a panel --------------------------------------------------------------------
+  function goToPanel(id: string): void {
+    const panel = root.querySelector<HTMLElement>(`#${id}`);
+    if (!panel) return;
+    const win = root.ownerDocument.defaultView;
+    const reduce = typeof win?.matchMedia === 'function' && win.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    panel.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+    // Land keyboard focus on the panel's heading, so a screen reader reads where it is (the scroll is above).
+    const title = panel.querySelector<HTMLElement>('h2.panel-title') ?? panel;
+    if (!title.hasAttribute('tabindex')) title.setAttribute('tabindex', '-1');
+    title.focus({ preventScroll: true });
+  }
+  for (const link of root.querySelectorAll<HTMLAnchorElement>('.app-nav-item')) {
+    link.addEventListener(
+      'click',
+      (e) => {
+        e.preventDefault(); // the hash would change the address; scroll and focus ourselves
+        goToPanel(link.dataset.panel!);
+      },
+      { signal: ac.signal },
+    );
+  }
   backBtn.addEventListener('click', () => store.set(goUp(store.get())), { signal: ac.signal });
   allocClear.addEventListener('click', () => store.set({ allocation: undefined }), { signal: ac.signal });
   for (const b of modeButtons) {
