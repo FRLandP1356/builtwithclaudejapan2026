@@ -79,7 +79,8 @@ export function bandIndexFor(bands: readonly FinanceBand[], population: number):
 
 /** A municipality's own per-resident figure (thousand yen), or undefined when the source has none for this code. */
 export function ownPerCapita(finance: Finance, code: string): number | undefined {
-  return Object.hasOwn(finance.municipalities, code) ? finance.municipalities[code][0] : undefined;
+  // An inherited name such as 'constructor' is not an array, so it has no [0]: the answer is undefined for it too.
+  return finance.municipalities[code]?.[0];
 }
 
 /** "令和6年度" from the Gregorian fiscal year (2019 is 令和1年度, written 令和元年度 by convention; the data starts at 令和2). */

@@ -121,9 +121,9 @@ export function bandFor(f: Finance, population: number): number | undefined {
   return p === undefined ? undefined : bandIndexFor(f.bands, p);
 }
 
-/** The year line in phrases (the panel adds the mark for the year after it: 試算, 公式推計 or 実績（国勢調査）). */
+/** The year line in phrases, the population written exactly as the tile of the panel writes it (the panel adds the mark for the year after it: 試算, 公式推計 or 実績（国勢調査）). */
 export function yearParts(year: number, population: number): [string, string, string] {
-  return ['規模は、', `${year}年の人口 ${formatPop(Math.round(population))}`, 'で選んでいます。'];
+  return ['規模は、', `${year}年の人口 ${formatPop(population)}`, 'で選んでいます。'];
 }
 
 /** 「いま、人口が1〜3万人の市町村（447団体）：中央値 約724千円、真ん中の半数が561〜883千円。」 in phrases that stay whole on a line. */
