@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, test } from 'vitest';
 import { makeRealContext } from '../../test/helpers/realPanelContext';
 import { populationAt } from './allocationCore';
-import { balanceSides, BOARD_KEEP_CHOICE, BOARD_KEEP_SUMMARY, keepLead } from './boardKeep';
+import { balanceSides, BOARD_KEEP_CHOICE, BOARD_KEEP_CHOICE_QUIET, BOARD_KEEP_SUMMARY, keepLead } from './boardKeep';
 import { mountBoardPanel } from './boardPanel';
 import { computeKeep, KEEP_APPLIED, KEEP_LIMITS, keepEffectLine } from './keepGuide';
 import type { AppStoreInitial, PanelContext } from './state';
@@ -55,6 +55,12 @@ describe('wording (pure)', () => {
     expect(BOARD_KEEP_CHOICE).toBe('どこかを残すと、別のどこかが目安を下回ります。選ぶのはあなたです。');
     for (const w of ['残せない', '閉鎖', '撤退', '廃止', '予測', '私', 'べき', '→', '①']) expect(BOARD_KEEP_CHOICE).not.toContain(w);
   });
+
+  test('where nothing else falls below, the choice line says only what is always true (the total is fixed), and claims no loss', () => {
+    expect(BOARD_KEEP_CHOICE_QUIET).toBe('人口の合計は変わらないので、ここを増やした分は、ほかの町で減ります。どこを増やすかは、あなたが選びます。');
+    expect(BOARD_KEEP_CHOICE_QUIET).not.toContain('下回ります');
+    for (const w of ['残せない', '閉鎖', '撤退', '廃止', '予測', '私', 'べき', '→', '①']) expect(BOARD_KEEP_CHOICE_QUIET).not.toContain(w);
+  });
 });
 
 describe('closed, nothing is built', () => {
@@ -88,7 +94,8 @@ describe('opened: 美浜町, 銀行, 2025 (the first row of 和歌山県)', () =
     expect(text(d.querySelector('.board-keep-effect'))).toBe(keepEffectLine(c.outcome.effects));
     expect([...d.querySelectorAll('.board-keep-top-item')].map((li) => li.textContent)).toEqual(c.outcome.effects.top.map((l) => `${l.name}（${l.count}町）`));
     expect(d.querySelector<HTMLElement>('.board-keep-top')!.hidden).toBe(c.outcome.effects.top.length === 0);
-    expect(text(d.querySelector('.board-keep-choice'))).toBe(BOARD_KEEP_CHOICE);
+    // the choice line follows the effect line: it never says something falls below where the line above says nothing does
+    expect(text(d.querySelector('.board-keep-choice'))).toBe(c.outcome.effects.areaCount > 0 ? BOARD_KEEP_CHOICE : BOARD_KEEP_CHOICE_QUIET);
     expect(text(d.querySelector('.board-keep-limits'))).toBe(KEEP_LIMITS);
     expect(d.querySelector<HTMLElement>('.board-keep-message')!.hidden).toBe(true);
     // the bars: one gain, one loss, both decorative
@@ -109,6 +116,7 @@ describe('opened: 美浜町, 銀行, 2025 (the first row of 和歌山県)', () =
       expect(text(d.querySelector('.board-keep-effect'))).toBe(`このとき、ほかの${c.outcome.effects.areaCount.toLocaleString('ja-JP')}町が、いずれかの施設の人口の目安を下回ります。`);
       expect(d.querySelector<HTMLElement>('.board-keep-top')!.hidden).toBe(false);
       expect([...d.querySelectorAll('.board-keep-top-item')].map((li) => li.textContent)).toEqual(c.outcome.effects.top.map((l) => `${l.name}（${l.count}町）`));
+      expect(text(d.querySelector('.board-keep-choice'))).toBe(BOARD_KEEP_CHOICE);
       return;
     }
     throw new Error('no row with an effect elsewhere');
@@ -173,7 +181,7 @@ describe('wording of everything a disclosure says', () => {
       for (const row of qa<HTMLLIElement>(':scope > .board > .board-list > .board-row').slice(0, 3)) open(keepOf(row));
       const all = section.textContent!.replace(/予測ではありません/g, '');
       for (const w of ['残せない', '閉鎖', '撤退', '廃止', '予測', '私', 'べき', 'おすすめ', '→', '①']) expect(all, `${w} in ${pp}`).not.toContain(w);
-      expect(all).toContain('選ぶのはあなたです');
+      expect(all).toMatch(/選ぶのはあなたです|あなたが選びます/); // the line with a loss, or the quiet line: either way the choice is the reader's
       mounted?.teardown();
       mounted = undefined;
       document.body.replaceChildren();

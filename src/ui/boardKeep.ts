@@ -25,6 +25,12 @@ export const BOARD_KEEP_SIDE_KEEP = 'ここを残すには';
 export const BOARD_KEEP_SIDE_COST = '代わりに';
 /** The one line that names the trade and leaves the choice to the reader. */
 export const BOARD_KEEP_CHOICE = 'どこかを残すと、別のどこかが目安を下回ります。選ぶのはあなたです。';
+/**
+ * Said instead when the moved people push no other town below a guide (most rows: a few hundred people are small next to
+ * the other towns' populations). The sentence must stay true there too: the total does not change, so what one town gains
+ * another loses; it does not claim that something falls below.
+ */
+export const BOARD_KEEP_CHOICE_QUIET = '人口の合計は変わらないので、ここを増やした分は、ほかの町で減ります。どこを増やすかは、あなたが選びます。';
 export const BOARD_KEEP_TOP_LEAD = '下回る町がいちばん多い施設';
 /** Said when, in the row's year, the town is not below the guide after all (a changed calculation): nothing to show. */
 export const BOARD_KEEP_NOT_BELOW = 'この年の人口では、この施設の目安を下回っていません。';
@@ -191,6 +197,7 @@ export function createBoardKeep(row: BoardRow, ctx: BoardKeepContext): BoardKeep
       b.sides[i].who.textContent = s.who;
     });
     b.effect.replaceChildren(...phraseNodes(keepEffectLine(outcome.effects)));
+    b.choice.replaceChildren(...phraseNodes(outcome.effects.areaCount > 0 ? BOARD_KEEP_CHOICE : BOARD_KEEP_CHOICE_QUIET));
     const hasTop = outcome.effects.top.length > 0;
     b.topLead.hidden = !hasTop;
     b.top.hidden = !hasTop;
