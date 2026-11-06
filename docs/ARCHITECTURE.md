@@ -33,7 +33,7 @@ src/ai/tools.ts（8つの道具。同じ engine を呼ぶ）◀── src/ai/cli
 | 中継の設定 | KV `RATE_KV`（名前空間 `town-2100-rate`）、Rate Limiting `IP_LIMITER`（60 秒に 20 回）、秘密 `ANTHROPIC_API_KEY`・`IP_HASH_SECRET`、変数 `ALLOWED_ORIGINS`。値は `worker/wrangler.jsonc`（秘密は含まない）。1日の上限の標準は、1人60回、全体400回 |
 | Anthropic 側 | この中継専用のワークスペース。月の利用上限 100 ドル、25 ドルでのメール通知、毎分の上限。API キーは Worker の秘密にだけ置き、期限は 2026-12-06 |
 | 保存済みの答え | `public/data/cached_answers.json`。5件、すべて作者の確認前（`pending`）。ファイルは公開ページが配るが、画面は `pending` を出さない |
-| リポジトリ | GitHub の `main`。提出まで非公開（README の冒頭の「リポジトリ」の行） |
+| リポジトリ | GitHub の `main`。公開の状況は、README の冒頭の「リポジトリ」の行のとおり |
 
 ## モジュール
 
