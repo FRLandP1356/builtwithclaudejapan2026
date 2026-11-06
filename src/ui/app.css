@@ -25,6 +25,14 @@
   font-size: var(--fs-14);
   max-width: 44em;
 }
+/* The question the app starts from: a row of its own under the title and the lead, in the body ink. */
+.app-problem {
+  flex: 1 0 100%;
+  max-width: 44em;
+  margin-top: var(--sp-1);
+  color: var(--ink);
+  font-size: var(--fs-15);
+}
 
 /* Two columns from 1024px */
 .app-body {
@@ -651,11 +659,16 @@
   .app-head {
     padding: var(--sp-4) 0 var(--sp-3);
   }
+  /* One line (about 930px at 15px) so the question costs the map column a single row of height. */
+  .app-problem {
+    max-width: none;
+  }
   .map-bar {
     padding: var(--sp-2) 0;
   }
-  /* 422px: everything of the column but the map at a first, unscrolled view (header, place bar, headline, the 50px
-     colour choice or the allocation bar that replaces it, legend and year). */
+  /* 422px: everything of the column but the map at a first, unscrolled view (header with its one-line question, place
+     bar, headline, the 50px colour choice or the allocation bar that replaces it, legend and year). Measured with the
+     question: 10-13px to spare at 1024x800, 1280x800 and 1512x949. */
   .map-svg {
     max-height: max(360px, calc(100vh - 422px));
   }

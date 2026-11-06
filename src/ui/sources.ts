@@ -6,6 +6,14 @@ export const APP_TITLE = '2100年の日本';
 export const APP_LEAD =
   '日本、都道府県、町の順に、2100年までの人口を地図で見る。2050年までは社人研の公式推計、それより後はこのアプリの試算。';
 
+/**
+ * The question the app starts from, under the title (the owner chose this wording on 2026-11-06). It asks; it never says
+ * what to keep or that anything cannot be kept. The first person is written in hiragana (わたしたち), never with the
+ * kanji 私, as everywhere the owner's voice is used.
+ */
+export const APP_PROBLEM =
+  'いま、何を残したいかを決めておかなければ、あとから選べなくなるかもしれません。わたしたちは何を残すのか。2100年の数字から考えます。';
+
 export { OFFICIAL_END_YEAR };
 
 /** Shown next to the year while year <= 2050. */

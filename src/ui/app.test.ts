@@ -8,7 +8,7 @@ import { allocationColor, changeColor, RATIO_MAX, SUPPORT_COLORS, supportColor }
 import { SUPPORT_TITLE } from '../map/legend';
 import type { Pop } from '../engine/types';
 import { ALLOC_BADGE, ALLOC_CLEAR, mountApp, SKIP_TO_YEAR, sourceHtml, type AppHandle } from './app';
-import { SOURCES } from './sources';
+import { APP_PROBLEM, SOURCES } from './sources';
 import { total } from '../engine/aggregate';
 import { formatPct, formatPop } from './format';
 import type { AllocationOverlay } from './state';
@@ -93,6 +93,22 @@ describe('mountApp shell', () => {
     expect(visibleHost()?.classList.contains('map-host-national')).toBe(true);
     expect(visibleHost()?.querySelectorAll('path.area')).toHaveLength(3);
     expect(crumbs()).toBe('日本');
+  });
+
+  test('the header asks the question the app starts from, as the last line under the title and the lead', async () => {
+    const { root } = await mount();
+    const head = root.querySelector('header.app-head')!;
+    expect([...head.children].map((c) => c.className)).toEqual(['app-title', 'app-lead', 'app-problem']);
+    expect(head.querySelector('.app-problem')!.textContent).toBe(APP_PROBLEM);
+    expect(head.querySelectorAll('.app-problem .keep').length).toBeGreaterThan(2); // laid out phrase by phrase
+  });
+
+  test('the loading screen shows the same header, question included', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const never = vi.fn(() => new Promise<Response>(() => undefined));
+    void mountApp(root, { fetch: never, base: '/', prefGeoCache: new Map(), timeoutMs: 5000 });
+    expect(root.querySelector('.app-head .app-problem')!.textContent).toBe(APP_PROBLEM);
   });
 
   test('the headline badge follows the year: census at 2020, official to 2050, estimate after', async () => {

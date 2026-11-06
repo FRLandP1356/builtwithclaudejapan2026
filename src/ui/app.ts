@@ -22,7 +22,7 @@ import { breadcrumbs, buildSearchIndex, goUp, levelOf, pickArea, pickPref, prefO
 import { mountSearch } from './search';
 import { phrases } from './phrases';
 import { mountAIPanel } from './aiPanel';
-import { allocatedBasisNote, APP_LEAD, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, SOURCES, type SourceLine } from './sources';
+import { allocatedBasisNote, APP_LEAD, APP_PROBLEM, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, SOURCES, type SourceLine } from './sources';
 import { createAppStore, DEFAULT_YEAR, MAP_MODES, type AllocationOverlay, type AppState, type MapMode, type PanelContext, type Store } from './state';
 import { MAP_MODE_GROUP, MAP_MODE_LABELS, SUPPORT_LABEL, support2020Line, supportLine } from './support';
 import { mountTownPanel } from './townPanel';
@@ -93,7 +93,7 @@ export function sourceHtml(s: SourceLine): string {
 }
 
 function headerHtml(): string {
-  return `<header class="app-head"><h1 class="app-title">${APP_TITLE}</h1><p class="app-lead">${APP_LEAD}</p></header>`;
+  return `<header class="app-head"><h1 class="app-title">${APP_TITLE}</h1><p class="app-lead">${APP_LEAD}</p><p class="app-problem">${phraseHtml(APP_PROBLEM)}</p></header>`;
 }
 
 /** `<main>` stays a plain landmark; the live region is a child. */

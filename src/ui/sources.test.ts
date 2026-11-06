@@ -1,5 +1,17 @@
 import { describe, expect, test } from 'vitest';
-import { allocatedBasisNote, badgeFor, SOURCES } from './sources';
+import { allocatedBasisNote, APP_PROBLEM, badgeFor, SOURCES } from './sources';
+
+describe('APP_PROBLEM: the question the app starts from', () => {
+  test('it is the sentence the owner chose, with the first person in hiragana', () => {
+    expect(APP_PROBLEM).toBe(
+      'いま、何を残したいかを決めておかなければ、あとから選べなくなるかもしれません。わたしたちは何を残すのか。2100年の数字から考えます。',
+    );
+  });
+
+  test('it never uses the kanji 私, claims that something cannot be kept, advises, or says 予測', () => {
+    for (const word of ['私', '残せない', '閉鎖', '予測', 'べき', 'すべき', 'ください']) expect(APP_PROBLEM).not.toContain(word);
+  });
+});
 
 describe('allocatedBasisNote', () => {
   test('up to 2050 it says the figure is this app\'s calculation on the official estimate (the census in 2020)', () => {

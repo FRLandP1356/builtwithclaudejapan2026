@@ -23,6 +23,12 @@ describe('app.css: the rules that behaviour depends on', () => {
     expect(declarations('.app-foot dd')).toMatch(/overflow-wrap:\s*anywhere/); // the URLs may break anywhere: no horizontal scroll
   });
 
+  test('the header question has a row of its own, and from 1024px it runs on one line (the map column keeps its height)', () => {
+    expect(declarations('.app-problem')).toMatch(/flex:\s*1 0 100%/);
+    expect(declarations('.app-problem')).toMatch(/max-width:\s*44em/);
+    expect(css).toMatch(/@media \(min-width: 1024px\) \{[^@]*?\.app-problem \{\s*max-width:\s*none;\s*\}/);
+  });
+
   test('the skip link is hidden until it has focus, and hidden by clipping (never display:none, which would make it unfocusable)', () => {
     const hidden = declarations('.skip-link:not(:focus)');
     expect(hidden).toMatch(/width:\s*1px/);
