@@ -6,6 +6,7 @@ import { SCENARIO_LIMITS } from '../data/runner';
 import { deriveTotals, yearIndex } from './derive';
 import type { Listener, Store } from './state';
 import { formatPop } from './format';
+import { BAR_MARKS, birthBlock, INFRA_LABELS, infraBlock, marksIntro, MIG_MODE_LABELS, migModeBlock, migrationBlock } from './barMarks';
 import {
   checkScenario,
   compareNote,
@@ -485,5 +486,187 @@ describe('checkScenario and the store agree', () => {
     const r = checkScenario({ ...DEFAULT_SCENARIO, cwrMult: 0.6, migScale: 1.5, infraStrength: 0.01 });
     expect('scenario' in r).toBe(true);
     if ('scenario' in r) expect(store.set({ scenario: r.scenario })).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// The guidance marks under the controls (barMarks.ts).
+// ---------------------------------------------------------------------------------------------------------------
+describe('guidance marks under the controls', () => {
+  /** [badge, title, [position, total][], derived sentence | undefined] of one marks block, as the page prints it. */
+  function printed(el: Element, id: string) {
+    const block = el.querySelector(`#${id}`)!;
+    return {
+      badge: block.querySelector('.bar-marks-title .badge-estimate')?.textContent,
+      title: block.querySelector('.bar-marks-title')!.textContent,
+      rows: [...block.querySelectorAll('.bar-marks-list dt')].map((dt) => [dt.textContent, dt.nextElementSibling!.textContent]),
+      fact: block.querySelector('.bar-marks-fact')?.textContent,
+    };
+  }
+  const IDS = ['ctl-cwr-marks', 'ctl-migmode-marks', 'ctl-migscale-marks', 'ctl-infra-marks'];
+
+  test('each control carries its block, in the right place, once', () => {
+    const { el, q } = mount();
+    for (const id of IDS) expect(el.querySelectorAll(`#${id}`)).toHaveLength(1);
+    // the birth bar: its marks come right after the slider
+    expect(q('#ctl-cwr').nextElementSibling).toBe(q('#ctl-cwr-marks'));
+    // migration: the mode block right after the two buttons, the strength block right after the strength bar
+    expect(q('[data-group="migration"] .choice').nextElementSibling).toBe(q('#ctl-migmode-marks'));
+    expect(q('#ctl-migscale').nextElementSibling).toBe(q('#ctl-migscale-marks'));
+    // infrastructure: under the three buttons, before the existing notice
+    const infra = q('[data-group="infra"]');
+    const order = [...infra.children];
+    expect(order.indexOf(q('#ctl-infra-marks'))).toBeGreaterThan(order.indexOf(infra.querySelector('.choice')!));
+    expect(q('#ctl-infra-marks').nextElementSibling).toBe(infra.querySelector('.notice'));
+    // the intro sits between the lead and the three groups
+    expect(q('.bar-marks-intro').previousElementSibling).toBe(q('.panel-lead'));
+    expect(q('.bar-marks-intro').nextElementSibling).toBe(q('.controls-groups'));
+    expect(q('.bar-marks-intro').textContent).toBe(marksIntro());
+  });
+
+  test('the words on the page (real data): estimate badge, positions, totals and the derived sentences', () => {
+    const { el } = mount();
+    const title = 'ほかの前提が初期値のときの、2100年の日本全体';
+    expect(printed(el, 'ctl-cwr-marks')).toEqual({
+      badge: '試算',
+      title: `試算 ${title}`,
+      rows: [['×0.6', '約5,009万人'], ['×1.0（初期値）', '約6,328万人'], ['×1.4', '約7,931万人']],
+      fact: 'この範囲の右端（×1.4）でも、2100年の日本全体は2050年（1億469万人）に届きません。',
+    });
+    expect(printed(el, 'ctl-migscale-marks')).toEqual({
+      badge: '試算',
+      title: `試算 ${title}`,
+      rows: [['×0.0', '約5,407万人'], ['×1.0（初期値）', '約6,328万人'], ['×1.5', '約6,935万人']],
+      fact: 'この範囲の右端（×1.5）でも、2100年の日本全体は2050年（1億469万人）に届きません。',
+    });
+    expect(printed(el, 'ctl-migmode-marks')).toEqual({
+      badge: '試算',
+      title: `試算 ${title}`,
+      rows: [['2050年ごろの傾向を続ける', '約6,328万人'], ['2100年に向けて少しずつ止まる', '約5,852万人']],
+      fact: undefined,
+    });
+    expect(printed(el, 'ctl-infra-marks')).toEqual({
+      badge: '試算',
+      title: '試算 仮定どおりに計算した、2100年の日本全体（ほかの前提は初期値）',
+      rows: [['なし', '約6,328万人'], ['弱い', '約6,320万人'], ['強い', '約6,308万人']],
+      fact: undefined,
+    });
+    expect(el.querySelector('.bar-marks-intro')!.textContent).toBe(
+      'どのつまみやボタンの下にも、その位置にしたときの2100年の日本全体の人口（このアプリの試算）を載せています。参考：2020年は1億2,615万人（国勢調査）、2050年は1億469万人（公式推計）です。',
+    );
+  });
+
+  test('the blocks print what the data module builds (so the data, not copies, drives the page)', () => {
+    const { el } = mount();
+    for (const b of [birthBlock(1), migModeBlock(), migrationBlock(1), infraBlock()]) {
+      const p = printed(el, b.id);
+      expect(p.rows).toEqual(b.rows.map((r) => [r.at, r.people]));
+      expect(p.fact).toBe(b.fact);
+    }
+  });
+
+  test('the positions in the blocks are the bars\' own limits and the buttons\' own words', () => {
+    const { q } = mount();
+    const cwr = q<HTMLInputElement>('#ctl-cwr');
+    const mig = q<HTMLInputElement>('#ctl-migscale');
+    expect([Number(cwr.min), Number(cwr.max)]).toEqual([BAR_MARKS.birth[0].value, BAR_MARKS.birth[2].value]);
+    expect([Number(mig.min), Number(mig.max)]).toEqual([BAR_MARKS.migration[0].value, BAR_MARKS.migration[2].value]);
+    expect(q('[data-mig="hold"]').textContent).toBe(MIG_MODE_LABELS.hold);
+    expect(q('[data-mig="fade"]').textContent).toBe(MIG_MODE_LABELS.fade);
+    for (const k of ['none', 'weak', 'strong'] as const) expect(q(`[data-infra="${k}"]`).textContent).toBe(INFRA_LABELS[k]);
+  });
+
+  test('the number under a position is the number the panel shows once the bar or button is put there', async () => {
+    const { q, type, tiles } = mount();
+    const shown = () => tiles()[0].value;
+    for (const m of BAR_MARKS.birth) {
+      await type(q<HTMLInputElement>('#ctl-cwr'), m.value);
+      await raf();
+      expect(shown(), `birth x${m.value}`).toBe(formatPop(m.people));
+    }
+    await type(q<HTMLInputElement>('#ctl-cwr'), 1);
+    await raf();
+    for (const m of BAR_MARKS.migration) {
+      await type(q<HTMLInputElement>('#ctl-migscale'), m.value);
+      await raf();
+      expect(shown(), `migration x${m.value}`).toBe(formatPop(m.people));
+    }
+    await type(q<HTMLInputElement>('#ctl-migscale'), 1);
+    await raf();
+    q<HTMLButtonElement>('[data-mig="fade"]').click();
+    expect(shown()).toBe(formatPop(BAR_MARKS.migFade));
+    q<HTMLButtonElement>('[data-mig="hold"]').click();
+    for (const k of ['weak', 'strong', 'none'] as const) {
+      q<HTMLButtonElement>(`[data-infra="${k}"]`).click();
+      expect(shown(), `infra ${k}`).toBe(formatPop(BAR_MARKS.infra[k]));
+    }
+  });
+
+  test('the marks describe the control, not its value: they do not change when the controls move', async () => {
+    const { el, q, type } = mount();
+    const snapshot = () => IDS.map((id) => el.querySelector(`#${id}`)!.outerHTML).join('\n') + el.querySelector('.bar-marks-intro')!.outerHTML;
+    const before = snapshot();
+    await type(q<HTMLInputElement>('#ctl-cwr'), 1.4);
+    await type(q<HTMLInputElement>('#ctl-migscale'), 0);
+    await raf();
+    q<HTMLButtonElement>('[data-mig="fade"]').click();
+    q<HTMLButtonElement>('[data-infra="strong"]').click();
+    expect(snapshot()).toBe(before);
+    q<HTMLButtonElement>('#ctl-reset').click();
+    expect(snapshot()).toBe(before);
+  });
+
+  test('plain text: no new focus stop, no live region, no id used twice', () => {
+    const { el } = mount();
+    const focusable = 'a[href], button, input, select, textarea, summary, [tabindex], [contenteditable]';
+    for (const sel of ['.bar-marks', '.bar-marks-intro']) {
+      for (const block of el.querySelectorAll(sel)) {
+        expect(block.querySelectorAll(focusable), sel).toHaveLength(0);
+        expect(block.matches('[role], [aria-live], [tabindex]'), sel).toBe(false);
+        expect(block.querySelectorAll('[role], [aria-live], [tabindex]'), sel).toHaveLength(0);
+      }
+    }
+    // the panel's own stops are unchanged: two sliders, two mode buttons, three presets, the reset button
+    expect(el.querySelectorAll(focusable)).toHaveLength(8);
+    const ids = [...el.querySelectorAll('[id]')].map((n) => n.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  test('the controls are described by their marks (screen readers read them with the control)', () => {
+    const { q } = mount();
+    expect(q('#ctl-cwr').getAttribute('aria-describedby')).toBe('ctl-cwr-marks ctl-cwr-help');
+    expect(q('#ctl-migscale').getAttribute('aria-describedby')).toBe('ctl-migscale-marks ctl-migscale-help');
+    expect(q('[data-group="migration"] .choice').getAttribute('aria-describedby')).toBe('ctl-migmode-marks');
+    expect(q('[data-group="infra"] .choice').getAttribute('aria-describedby')).toBe('ctl-infra-marks');
+    // the label and value announced for the sliders are unchanged
+    expect(q('#ctl-cwr').getAttribute('aria-valuetext')).toBe('2050年の水準の1.00倍');
+    expect(q('#ctl-migscale').getAttribute('aria-valuetext')).toBe('標準の1.0倍');
+    for (const id of ['ctl-cwr', 'ctl-migscale']) {
+      for (const ref of q(`#${id}`).getAttribute('aria-describedby')!.split(' ')) expect(document.getElementById(ref), ref).not.toBeNull();
+    }
+  });
+
+  test('the infrastructure notice and its tags are exactly what they were', () => {
+    const { q } = mount();
+    const notice = q<HTMLElement>('[data-group="infra"] .notice');
+    expect(notice.className).toBe('notice notice-estimate');
+    expect(notice.textContent).toBe(
+      '町の人口が、病院や店などの人口の目安を下回ると、町を出る人が増える、という仮定を置いた計算です。どれだけ増えるかを測った根拠は手元にありません。幅を見るための仮定です。',
+    );
+    expect([...document.querySelectorAll('[data-group="infra"] .field-tags .tag')].map((t) => t.textContent)).toEqual(['仮定', '公式の方法にはない要素']);
+  });
+
+  test('a second mount into the same element does not stack the blocks', () => {
+    const { ctx, el } = mount();
+    mountControls(el, ctx);
+    for (const id of IDS) expect(el.querySelectorAll(`#${id}`)).toHaveLength(1);
+    expect(el.querySelectorAll('.bar-marks-intro')).toHaveLength(1);
+  });
+
+  test('the words: no 予測, no advice, no judging of a value, no arrow or circled number', () => {
+    const { el } = mount();
+    const text = el.textContent!;
+    for (const w of ['予測', '残せない', '閉鎖', 'すべき', 'おすすめ', 'お勧め', '良い', '悪い', '十分', '→', '▲', '▼']) expect(text).not.toContain(w);
+    expect(text).not.toMatch(/[①-⑳]/);
   });
 });

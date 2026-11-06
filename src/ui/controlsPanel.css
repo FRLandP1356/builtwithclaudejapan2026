@@ -16,6 +16,30 @@
   gap: var(--sp-1) var(--sp-2);
 }
 
+/* Guidance marks (barMarks.ts): under each bar or button group, "this position gives about this 2100 total".
+   Small-note type, the estimate badge in the title, positions and totals as a two-column list. Plain text, no focus stop. */
+.bar-marks-intro {
+  margin-top: var(--sp-2);
+}
+.bar-marks {
+  display: grid;
+  gap: var(--sp-1);
+}
+.bar-marks-list {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: start;
+  gap: 2px var(--sp-4);
+  font-size: var(--fs-13);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+.bar-marks-list dt,
+.bar-marks-list dd {
+  margin: 0;
+}
+
 /* The two long migration choices stack so neither wraps awkwardly at 390px. */
 .choice-stack {
   display: flex;
