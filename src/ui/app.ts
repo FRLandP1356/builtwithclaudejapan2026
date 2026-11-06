@@ -1,5 +1,10 @@
 // Application shell: loads the data, creates the store and runner, mounts the maps, the year slider, the search,
-// the panel slots (#panel-town, #panel-controls, #panel-allocation, #panel-ai; Ruling 25) and the footer.
+// the panel slots (#panel-facts, #panel-board, #panel-town, #panel-controls, #panel-allocation, #panel-ai; Ruling 25)
+// and the footer (#panel-sources).
+// The first screen shows only what matters most (the owner, 2026-11-06): the title and the question, the map with
+// its year and legend, the board (分かれ目) and, for a town, its four numbers. Everything else is the lower layer: the
+// town panel, the assumptions, the allocation, the AI and the sources are folded cards, opened from the row
+// 「くわしく見る」 under the board or from their own title band.
 // While `store.get().allocation` is set the maps colour by the allocation's change in percent, draw rings on the towns
 // that crossed a focused facility's guide and count markers per prefecture, and the headline says 割り振り後.
 // Otherwise a segmented control above the map chooses what the maps colour by (`store.get().mapMode`): the change since
@@ -24,13 +29,17 @@ import { breadcrumbs, buildSearchIndex, goUp, levelOf, pickArea, pickPref, prefO
 import { mountSearch } from './search';
 import { phrases } from './phrases';
 import { mountAIPanel } from './aiPanel';
-import { allocatedBasisNote, APP_LEAD, APP_PROBLEM, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, NAV_DESCRIPTIONS, NAV_SUMMARY, NAV_TITLE, SOURCES, type SourceLine } from './sources';
+import { mountPlaceFacts } from './placeFacts';
+import { allocatedBasisNote, APP_LEAD, APP_PROBLEM, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, NAV_DESCRIPTIONS, NAV_TITLE, SOURCES, type SourceLine } from './sources';
 import { createAppStore, DEFAULT_YEAR, MAP_MODES, type AllocationOverlay, type AppState, type MapMode, type PanelContext, type Store } from './state';
 import { MAP_MODE_GROUP, MAP_MODE_LABELS, SUPPORT_LABEL, support2020Line, supportLine } from './support';
 import { mountTownPanel } from './townPanel';
 import { mountYearSlider } from './yearSlider';
 
 export { DEFAULT_YEAR };
+
+/** The footer's id and title: the sources, folded like the other parts of the lower layer. */
+export const SOURCES_PANEL = { id: 'panel-sources', title: '出典' } as const;
 
 export interface AppOptions extends LoadOptions {
   /** Cache for prefecture topologies (tests pass their own so apps do not share state). */
@@ -45,6 +54,8 @@ export interface AppHandle {
 
 /** The panel slots, in mobile order. Each is a `<section class="panel">` that already holds its `h2.panel-title`. */
 export interface PanelSlots {
+  /** The four numbers of a town (hidden for the country and a prefecture), above the board. */
+  facts: HTMLElement;
   /** 「分かれ目」: when, where and what falls below its population guide. The first card of the column. */
   board: HTMLElement;
   town: HTMLElement;
@@ -53,13 +64,25 @@ export interface PanelSlots {
   ai: HTMLElement;
 }
 
-const PANEL_TITLES: ReadonlyArray<{ key: keyof PanelSlots; id: string; title: string }> = [
-  { key: 'board', id: 'panel-board', title: BOARD_TITLE },
-  { key: 'town', id: 'panel-town', title: '町の詳細' },
-  { key: 'controls', id: 'panel-controls', title: '前提を変える' },
-  { key: 'allocation', id: 'panel-allocation', title: '人口の割り振り' },
-  { key: 'ai', id: 'panel-ai', title: 'AIに質問' },
+interface PanelSpec {
+  key: keyof PanelSlots;
+  id: string;
+  title: string;
+  /** The lower layer: folded at first, with a button in the title band and a link in the row 「くわしく見る」. */
+  folded: boolean;
+}
+
+const PANEL_TITLES: ReadonlyArray<PanelSpec> = [
+  { key: 'facts', id: 'panel-facts', title: '', folded: false },
+  { key: 'board', id: 'panel-board', title: BOARD_TITLE, folded: false },
+  { key: 'town', id: 'panel-town', title: '町の詳細', folded: true },
+  { key: 'controls', id: 'panel-controls', title: '前提を変える', folded: true },
+  { key: 'allocation', id: 'panel-allocation', title: '人口の割り振り', folded: true },
+  { key: 'ai', id: 'panel-ai', title: 'AIに質問', folded: true },
 ];
+
+/** The row 「くわしく見る」: the folded panels in page order, then the sources. */
+const MORE_ITEMS: ReadonlyArray<{ id: string; title: string }> = [...PANEL_TITLES.filter((p) => p.folded), SOURCES_PANEL];
 
 export const ALLOC_BADGE = '割り振り後';
 export const ALLOC_CLEAR = '割り振りを地図から消す';
@@ -71,6 +94,7 @@ export const SKIP_TO_YEAR = '地図をとばして、年の選択へ';
 // -----------------------------------------------------------------------------------------------------------------
 function mountPanels(ctx: PanelContext, slots: PanelSlots): Array<() => void> {
   const teardowns: Array<() => void> = [];
+  teardowns.push(mountPlaceFacts(slots.facts, ctx));
   teardowns.push(mountBoardPanel(slots.board, ctx));
   teardowns.push(mountTownPanel(slots.town, ctx));
   teardowns.push(mountControls(slots.controls, ctx));
@@ -98,29 +122,39 @@ export function sourceHtml(s: SourceLine): string {
   return `<dt>${escapeHtml(s.label)}</dt><dd><span class="src-text">${phraseHtml(s.text)}</span><span class="src-where">${link} ${phraseHtml(`（${s.retrieved}取得）`)}</span>${approval}</dd>`;
 }
 
+/** The band: the title and the question the app starts from, nothing else (the one-line description is in the sources card). */
 function headerHtml(): string {
-  return `<header class="app-head"><div class="app-head-inner"><h1 class="app-title">${APP_TITLE}</h1><p class="app-lead">${APP_LEAD}</p><p class="app-problem">${phraseHtml(APP_PROBLEM)}</p></div></header>`;
+  return `<header class="app-head"><div class="app-head-inner"><h1 class="app-title">${APP_TITLE}</h1><p class="app-problem">${phraseHtml(APP_PROBLEM)}</p></div></header>`;
 }
 
 /**
- * The menu under the title, the second tier of the band: what the app can do, and a way to each of its four panels.
- * Each item is the panel's name (a link to the panel) over a one-line description (the link's accessible description).
- * On a desktop the four sit in a row beside the heading; on a phone the names form a strip that scrolls sideways and
- * sticks to the top of the window, and the four descriptions are read as one sentence under it (`.app-nav-summary`, a
- * visual copy: the descriptions stay in the items for screen readers).
+ * The row under the board, the way into the lower layer: the names of the folded parts, nothing more on the screen.
+ * Each link opens its panel, scrolls to it and puts the focus on the panel's title button; its one-line description is
+ * kept for a screen reader only (`aria-describedby`, clipped).
  */
-function navHtml(): string {
-  // The board is the first card and needs no way to it; the menu leads to the four panels under it.
-  const items = PANEL_TITLES.filter((p) => p.key !== 'board').map(
+function moreHtml(): string {
+  const items = MORE_ITEMS.map(
     (p) =>
-      `<li class="app-nav-card"><a class="app-nav-item" href="#${p.id}" data-panel="${p.id}" aria-describedby="${p.id}-nav-desc"><span class="app-nav-name">${p.title}</span></a><p class="app-nav-desc" id="${p.id}-nav-desc">${phraseHtml(NAV_DESCRIPTIONS[p.id])}</p></li>`,
+      `<li class="app-more-card"><a class="app-more-item" href="#${p.id}" data-panel="${p.id}" aria-describedby="${p.id}-more-desc">${p.title}</a><span class="sr-only app-more-desc" id="${p.id}-more-desc">${escapeHtml(NAV_DESCRIPTIONS[p.id] ?? '')}</span></li>`,
   ).join('');
-  return `<nav class="app-nav" aria-labelledby="app-nav-title"><div class="app-nav-inner"><h2 class="app-nav-title" id="app-nav-title">${NAV_TITLE}</h2><ul class="app-nav-list">${items}</ul></div></nav><p class="app-nav-summary" aria-hidden="true">${phraseHtml(NAV_SUMMARY)}</p>`;
+  return `<nav class="app-more" aria-labelledby="app-more-title"><h2 class="app-more-title" id="app-more-title">${NAV_TITLE}</h2><ul class="app-more-list">${items}</ul></nav>`;
+}
+
+/** The title band of a card: a plain heading, or (folded parts) a button that opens and closes the card. */
+function panelTitleHtml(id: string, title: string, folded: boolean): string {
+  const inner = folded ? `<button type="button" class="panel-toggle" aria-expanded="false">${title}</button>` : title;
+  return `<h2 class="panel-title" id="${id}-title">${inner}</h2>`;
+}
+
+function panelHtml(p: PanelSpec): string {
+  const cls = ['panel', p.folded ? 'is-collapsed' : '', p.key === 'facts' ? 'place-facts' : ''].filter(Boolean).join(' ');
+  const hidden = p.key === 'facts' ? ' hidden' : '';
+  return `<section class="${cls}" id="${p.id}" aria-labelledby="${p.id}-title"${hidden}>${panelTitleHtml(p.id, p.title, p.folded)}</section>`;
 }
 
 /** `<main>` stays a plain landmark; the live region is a child. */
 function renderLoading(root: HTMLElement): void {
-  root.innerHTML = `${headerHtml()}${navHtml()}
+  root.innerHTML = `${headerHtml()}
     <div class="app-inner"><main>
       <div class="load-skeleton" role="status" aria-live="polite">
         <p class="load-status">データを読み込んでいます（約2MB）</p>
@@ -133,7 +167,7 @@ function renderLoading(root: HTMLElement): void {
 
 function renderError(root: HTMLElement, err: unknown, retry: () => void): void {
   const detail = err instanceof Error ? err.message : String(err);
-  root.innerHTML = `${headerHtml()}${navHtml()}
+  root.innerHTML = `${headerHtml()}
     <div class="app-inner"><main>
       <div class="load-error" role="alert">
         <h2>データを読み込めませんでした</h2>
@@ -194,7 +228,13 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   let totals: Totals = deriveTotals(store.get().series, data.groups);
   let supports: SupportRatios = deriveSupport(store.get().series, data.groups);
 
-  root.innerHTML = `${headerHtml()}${navHtml()}
+  // The right column: the town's numbers, the board, the row into the lower layer, then the folded cards.
+  const column = [
+    ...PANEL_TITLES.filter((p) => !p.folded).map(panelHtml),
+    moreHtml(),
+    ...PANEL_TITLES.filter((p) => p.folded).map(panelHtml),
+  ].join('');
+  root.innerHTML = `${headerHtml()}
     <div class="app-inner"><main class="app-body">
       <section class="map-column" aria-label="地図">
         <div class="map-bar">
@@ -227,15 +267,11 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
           <div class="year-slot"></div>
         </div>
       </section>
-      <section class="panel-column" aria-label="詳細">
-        ${PANEL_TITLES.map(
-          (p) => `<section class="panel" id="${p.id}" aria-labelledby="${p.id}-title">
-            <h2 class="panel-title" id="${p.id}-title">${p.title}</h2>
-          </section>`,
-        ).join('')}
-      </section>
+      <section class="panel-column" aria-label="詳細">${column}</section>
     </main>
-    <footer class="app-foot">
+    <footer class="app-foot panel is-collapsed" id="${SOURCES_PANEL.id}" aria-labelledby="${SOURCES_PANEL.id}-title">
+      ${panelTitleHtml(SOURCES_PANEL.id, SOURCES_PANEL.title, true)}
+      <p class="app-foot-lead">${APP_LEAD}</p>
       <dl>${SOURCES.map(sourceHtml).join('')}</dl>
       <p>${FOOT_NOTE}</p>
     </footer></div>`;
@@ -605,24 +641,42 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   }
 
   const ac = new AbortController();
-  // ---- the menu under the title: go to a panel --------------------------------------------------------------------
+  // ---- the lower layer: folded cards, the row 「くわしく見る」 and the title buttons -----------------------------------
+  /** Open or fold a card: the class hides everything but the title band; the button says which it is. */
+  function setFolded(panel: HTMLElement, folded: boolean): void {
+    panel.classList.toggle('is-collapsed', folded);
+    panel.querySelector<HTMLButtonElement>(':scope > .panel-title > .panel-toggle')?.setAttribute('aria-expanded', String(!folded));
+  }
   function goToPanel(id: string): void {
     const panel = root.querySelector<HTMLElement>(`#${id}`);
     if (!panel) return;
+    setFolded(panel, false);
     const win = root.ownerDocument.defaultView;
     const reduce = typeof win?.matchMedia === 'function' && win.matchMedia('(prefers-reduced-motion: reduce)').matches;
     panel.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
-    // Land keyboard focus on the panel's heading, so a screen reader reads where it is (the scroll is above).
-    const title = panel.querySelector<HTMLElement>('h2.panel-title') ?? panel;
-    if (!title.hasAttribute('tabindex')) title.setAttribute('tabindex', '-1');
+    // Land keyboard focus on the panel's title (its button, where there is one), so a screen reader reads where it is
+    // and that it is open (the scroll is above).
+    const toggle = panel.querySelector<HTMLElement>(':scope > .panel-title > .panel-toggle');
+    const title = toggle ?? panel.querySelector<HTMLElement>('h2.panel-title') ?? panel;
+    if (!toggle && !title.hasAttribute('tabindex')) title.setAttribute('tabindex', '-1');
     title.focus({ preventScroll: true });
   }
-  for (const link of root.querySelectorAll<HTMLAnchorElement>('.app-nav-item')) {
+  for (const link of root.querySelectorAll<HTMLAnchorElement>('.app-more-item')) {
     link.addEventListener(
       'click',
       (e) => {
-        e.preventDefault(); // the hash would change the address; scroll and focus ourselves
+        e.preventDefault(); // the hash would change the address; open, scroll and focus ourselves
         goToPanel(link.dataset.panel!);
+      },
+      { signal: ac.signal },
+    );
+  }
+  for (const toggle of root.querySelectorAll<HTMLButtonElement>('.panel-toggle')) {
+    toggle.addEventListener(
+      'click',
+      () => {
+        const panel = toggle.closest<HTMLElement>('.panel');
+        if (panel) setFolded(panel, !panel.classList.contains('is-collapsed'));
       },
       { signal: ac.signal },
     );
@@ -666,6 +720,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   }
 
   const slots: PanelSlots = {
+    facts: q<HTMLElement>('#panel-facts'),
     board: q<HTMLElement>('#panel-board'),
     town: q<HTMLElement>('#panel-town'),
     controls: q<HTMLElement>('#panel-controls'),

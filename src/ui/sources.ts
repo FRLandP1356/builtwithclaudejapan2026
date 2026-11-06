@@ -15,19 +15,19 @@ export const APP_PROBLEM =
   'いま、何を残したいかを決めておかなければ、あとから選べなくなるかもしれません。わたしたちは何を残すのか。2100年の数字から考えます。';
 
 /**
- * The menu under the title: what the app can do, one line per panel, in the words the panel itself uses (each line
- * says what the panel does and never what to do with the result). Keyed by the panel's id; the menu item's name is the
- * panel's own title.
+ * The way into the lower layer, under the board: the names of the folded panels, nothing more on the screen (the owner
+ * asked for the first screen to show only what matters most, 2026-11-06). One line per panel, in the words the panel
+ * itself uses, is kept for a screen reader as each link's description (it says what the panel does and never what to
+ * do with the result). Keyed by the panel's id; the link's name is the panel's own title.
  */
-export const NAV_TITLE = 'この地図でできること';
+export const NAV_TITLE = 'くわしく見る';
 export const NAV_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'panel-town': '町や県を選ぶと、人口・年齢・施設の人口の目安が出ます',
   'panel-controls': '出生や人口の移動、インフラの前提を変えて試します',
   'panel-allocation': '全国の人口は変えずに、ある地域を増やすと、ほかはどうなるかを見ます',
   'panel-ai': '日本語で聞くと、このアプリの計算を使って答えます',
+  'panel-sources': '人口・境界・施設の目安・歳出の出典と、2050年より後の数字の前提',
 };
-/** The four lines above as one sentence, for a phone, where the menu is a strip of names with no room for them. */
-export const NAV_SUMMARY = '町や県の人口を見る。前提を変えて試す。人口を割り振って、ほかの地域への影響を見る。AIに日本語で聞く。';
 
 export { OFFICIAL_END_YEAR };
 

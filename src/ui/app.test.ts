@@ -8,7 +8,7 @@ import { allocationColor, SUPPORT_COLORS, supportColor } from '../map/colors';
 import { SUPPORT_TITLE } from '../map/legend';
 import type { Pop } from '../engine/types';
 import { ALLOC_BADGE, ALLOC_CLEAR, mountApp, SKIP_TO_YEAR, sourceHtml, type AppHandle } from './app';
-import { APP_PROBLEM, NAV_DESCRIPTIONS, NAV_SUMMARY, NAV_TITLE, SOURCES } from './sources';
+import { APP_LEAD, APP_PROBLEM, NAV_DESCRIPTIONS, NAV_TITLE, SOURCES } from './sources';
 import { total } from '../engine/aggregate';
 import { formatPct, formatPop } from './format';
 import type { AllocationOverlay } from './state';
@@ -87,9 +87,11 @@ describe('mountApp shell', () => {
   test('renders the landmark, the four panel slots in order and the national map', async () => {
     const { root, visibleHost, crumbs } = await mount();
     expect(root.querySelector('main')).not.toBeNull();
-    // the board (分かれ目) is the first card of the column since 2026-11-06 (the owner's instruction: show first what matters most)
-    expect([...root.querySelectorAll('.panel')].map((p) => p.id)).toEqual(['panel-board', 'panel-town', 'panel-controls', 'panel-allocation', 'panel-ai']);
+    // since 2026-11-06 (the owner: show first what matters most) the column is the town's numbers (hidden here), the
+    // board (分かれ目), then the folded cards; the sources are a folded card under the page
+    expect([...root.querySelectorAll('.panel')].map((p) => p.id)).toEqual(['panel-facts', 'panel-board', 'panel-town', 'panel-controls', 'panel-allocation', 'panel-ai', 'panel-sources']);
     expect(root.querySelector('#panel-board .board-heading')!.textContent).toBe('日本全体で、人口の目安を下回っていく順番');
+    expect(root.querySelector<HTMLElement>('#panel-facts')!.hidden).toBe(true);
     expect(root.querySelectorAll('.panel .panel-empty')).toHaveLength(1); // all four panels are mounted; only the town panel's Japan-summary hint line remains
     expect(root.querySelectorAll('#panel-ai .ai-samples button')).toHaveLength(5);
     expect(visibleHost()?.classList.contains('map-host-national')).toBe(true);
@@ -97,25 +99,26 @@ describe('mountApp shell', () => {
     expect(crumbs()).toBe('日本');
   });
 
-  test('the header asks the question the app starts from, as the last line under the title and the lead', async () => {
+  test('the header is the title and the question the app starts from, nothing else (the one-line description moved to the sources card)', async () => {
     const { root } = await mount();
     const head = root.querySelector('header.app-head .app-head-inner')!;
-    expect([...head.children].map((c) => c.className)).toEqual(['app-title', 'app-lead', 'app-problem']);
+    expect([...head.children].map((c) => c.className)).toEqual(['app-title', 'app-problem']);
     expect(head.querySelector('.app-problem')!.textContent).toBe(APP_PROBLEM);
     expect(head.querySelectorAll('.app-problem .keep').length).toBeGreaterThan(2); // laid out phrase by phrase
+    expect(root.querySelector('.app-lead')).toBeNull();
+    expect(root.querySelector('#panel-sources .app-foot-lead')!.textContent).toBe(APP_LEAD);
   });
 
-  test('the loading screen shows the same header, question included, and the menu', async () => {
+  test('the loading screen shows the same header, question included', async () => {
     const root = document.createElement('div');
     document.body.append(root);
     const never = vi.fn(() => new Promise<Response>(() => undefined));
     void mountApp(root, { fetch: never, base: '/', prefGeoCache: new Map(), timeoutMs: 5000 });
     expect(root.querySelector('.app-head .app-problem')!.textContent).toBe(APP_PROBLEM);
-    expect(root.querySelectorAll('nav.app-nav .app-nav-item')).toHaveLength(4);
     expect(root.querySelector('.app-inner main .load-skeleton')).not.toBeNull(); // the page content sits in the page-width wrapper
   });
 
-  test('the error screen keeps the header and the menu around the message', async () => {
+  test('the error screen keeps the header around the message', async () => {
     const root = document.createElement('div');
     document.body.append(root);
     const failing = vi.fn(() => Promise.resolve({ ok: false, status: 500, json: async () => ({}) } as unknown as Response));
@@ -123,7 +126,6 @@ describe('mountApp shell', () => {
     await settle();
     expect(root.querySelector('.load-error')).not.toBeNull();
     expect(root.querySelector('.app-head .app-problem')!.textContent).toBe(APP_PROBLEM);
-    expect(root.querySelectorAll('nav.app-nav .app-nav-item')).toHaveLength(4);
   });
 
   test('the headline badge follows the year: census at 2020, official to 2050, estimate after', async () => {
@@ -139,64 +141,108 @@ describe('mountApp shell', () => {
   });
 });
 
-describe('the menu under the title: what the app can do, and a way to each panel', () => {
-  const PANEL_IDS = ['panel-town', 'panel-controls', 'panel-allocation', 'panel-ai'];
+describe('the lower layer: folded cards, and the row 「くわしく見る」 under the board as the way in', () => {
+  // the menu in the band was replaced on 2026-11-06: the owner asked for the first screen to show only what matters
+  // most and the rest to be folded away under it
+  const FOLDED_IDS = ['panel-town', 'panel-controls', 'panel-allocation', 'panel-ai', 'panel-sources'];
+  const toggleOf = (root: HTMLElement, id: string) => root.querySelector<HTMLButtonElement>(`#${id} > h2.panel-title > button.panel-toggle`)!;
 
-  test('a navigation landmark named by its heading 「この地図でできること」, with the four panels in the order of the page', async () => {
+  test('a navigation landmark named by its heading 「くわしく見る」, after the board and before the folded cards, with the five in page order', async () => {
     const { root } = await mount();
-    const nav = root.querySelector('nav.app-nav')!;
-    const heading = nav.querySelector<HTMLElement>('h2.app-nav-title')!;
+    const nav = root.querySelector('nav.app-more')!;
+    const heading = nav.querySelector<HTMLElement>('h2.app-more-title')!;
     expect(heading.textContent).toBe(NAV_TITLE);
     expect(nav.getAttribute('aria-labelledby')).toBe(heading.id);
-    const links = [...nav.querySelectorAll<HTMLAnchorElement>('a.app-nav-item')];
-    expect(links.map((a) => a.getAttribute('href'))).toEqual(PANEL_IDS.map((id) => `#${id}`));
-    expect(links.map((a) => a.dataset.panel)).toEqual(PANEL_IDS);
-    // the name of an item is the name of its panel
-    const panelNames = PANEL_IDS.map((id) => root.querySelector(`#${id} h2.panel-title`)!.firstChild!.textContent!.trim());
-    expect(links.map((a) => a.textContent)).toEqual(panelNames);
-    expect(panelNames).toEqual(['町の詳細', '前提を変える', '人口の割り振り', 'AIに質問']);
+    const links = [...nav.querySelectorAll<HTMLAnchorElement>('a.app-more-item')];
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(FOLDED_IDS.map((id) => `#${id}`));
+    expect(links.map((a) => a.dataset.panel)).toEqual(FOLDED_IDS);
+    // the name of an item is the name of its card (the text of the title band's button)
+    const names = FOLDED_IDS.map((id) => toggleOf(root, id).textContent!.trim());
+    expect(links.map((a) => a.textContent)).toEqual(names);
+    expect(names).toEqual(['町の詳細', '前提を変える', '人口の割り振り', 'AIに質問', '出典']);
+    // its place: after the board, before the first folded card
+    const board = root.querySelector('#panel-board')!;
+    const town = root.querySelector('#panel-town')!;
+    expect(board.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(nav.compareDocumentPosition(town) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(nav.parentElement).toBe(root.querySelector('.panel-column'));
   });
 
-  test('each item is described by its one line (the link\'s description), phrase by phrase; the page keeps one summary for the eye', async () => {
+  test('each item is described for a screen reader by its one line, clipped from the screen; the link\'s name stays the short name', async () => {
     const { root } = await mount();
-    for (const id of PANEL_IDS) {
-      const link = root.querySelector<HTMLAnchorElement>(`a.app-nav-item[data-panel="${id}"]`)!;
+    for (const id of FOLDED_IDS) {
+      const link = root.querySelector<HTMLAnchorElement>(`a.app-more-item[data-panel="${id}"]`)!;
       const desc = root.querySelector(`#${link.getAttribute('aria-describedby')}`)!;
-      expect(desc.textContent).toBe(NAV_DESCRIPTIONS[id]);
-      expect(desc.querySelectorAll('.keep').length).toBeGreaterThan(0);
-      expect(link.contains(desc)).toBe(false); // the link's name stays the short name
+      expect(desc.textContent, id).toBe(NAV_DESCRIPTIONS[id]);
+      expect(desc.classList.contains('sr-only')).toBe(true);
+      expect(link.contains(desc)).toBe(false);
     }
-    const summary = root.querySelector('.app-nav-summary')!;
-    expect(summary.textContent).toBe(NAV_SUMMARY);
-    expect(summary.getAttribute('aria-hidden')).toBe('true'); // the same sentences are already the items' descriptions
+    expect(root.querySelector('.app-more-desc:not(.sr-only)')).toBeNull();
   });
 
-  test('the band sits before the page: header, menu, the summary line, then the page-width wrapper with the main landmark', async () => {
+  test('the band sits before the page: header, then the page-width wrapper with the main landmark and the footer', async () => {
     const { root } = await mount();
-    expect([...root.children].map((c) => c.className || c.tagName.toLowerCase())).toEqual(['app-head', 'app-nav', 'app-nav-summary', 'app-inner']);
+    expect([...root.children].map((c) => c.className || c.tagName.toLowerCase())).toEqual(['app-head', 'app-inner']);
     expect(root.querySelector('.app-inner > main.app-body')).not.toBeNull();
     expect(root.querySelector('.app-inner > footer.app-foot')).not.toBeNull(); // the footer is under main, inside the same wrapper
+    expect(root.querySelector('.app-nav, .app-nav-summary')).toBeNull();
   });
 
-  test('pressing an item scrolls to its panel, puts keyboard focus on the panel\'s heading and leaves the address alone', async () => {
+  test('every folded card starts closed (its content in the DOM, the band a button that says so); the board and the facts are open with no button', async () => {
+    const { root } = await mount();
+    for (const id of FOLDED_IDS) {
+      const panel = root.querySelector<HTMLElement>(`#${id}`)!;
+      expect(panel.classList.contains('is-collapsed'), id).toBe(true);
+      const toggle = toggleOf(root, id);
+      expect(toggle.getAttribute('aria-expanded'), id).toBe('false');
+      expect(toggle.type).toBe('button');
+      expect(panel.children.length, id).toBeGreaterThan(1); // the content is mounted, only hidden by the class
+    }
+    expect(root.querySelector('#panel-board')!.classList.contains('is-collapsed')).toBe(false);
+    expect(root.querySelector('#panel-board .panel-toggle')).toBeNull();
+    expect(root.querySelector('#panel-facts .panel-toggle')).toBeNull();
+    expect(root.querySelector('#panel-sources dl')).not.toBeNull(); // the sources stay in the page, folded
+  });
+
+  test('pressing an item opens its card, scrolls to it, puts keyboard focus on the card\'s title button and leaves the address alone', async () => {
     const { root } = await mount();
     const scrolled: Array<[string, ScrollIntoViewOptions | undefined]> = [];
     Element.prototype.scrollIntoView = function (this: Element, options?: boolean | ScrollIntoViewOptions) {
       scrolled.push([this.id, typeof options === 'object' ? options : undefined]);
     };
     const hashBefore = location.hash;
-    for (const id of PANEL_IDS) {
-      const link = root.querySelector<HTMLAnchorElement>(`a.app-nav-item[data-panel="${id}"]`)!;
+    for (const id of FOLDED_IDS) {
+      const link = root.querySelector<HTMLAnchorElement>(`a.app-more-item[data-panel="${id}"]`)!;
       const click = new MouseEvent('click', { bubbles: true, cancelable: true });
       link.dispatchEvent(click);
       expect(click.defaultPrevented, id).toBe(true); // no jump of the address; the scroll is ours
-      const title = root.querySelector<HTMLElement>(`#${id} h2.panel-title`)!;
-      expect(title.getAttribute('tabindex'), id).toBe('-1');
-      expect(document.activeElement, id).toBe(title);
+      const panel = root.querySelector<HTMLElement>(`#${id}`)!;
+      expect(panel.classList.contains('is-collapsed'), id).toBe(false);
+      const toggle = toggleOf(root, id);
+      expect(toggle.getAttribute('aria-expanded'), id).toBe('true');
+      expect(document.activeElement, id).toBe(toggle);
     }
-    expect(scrolled.map(([id]) => id)).toEqual(PANEL_IDS);
+    expect(scrolled.map(([id]) => id)).toEqual(FOLDED_IDS);
     expect(scrolled.every(([, o]) => o?.block === 'start')).toBe(true);
     expect(location.hash).toBe(hashBefore);
+  });
+
+  test('the title button folds and opens its own card, and an item on an open card leaves it open', async () => {
+    const { root } = await mount();
+    Element.prototype.scrollIntoView = () => undefined;
+    const panel = root.querySelector<HTMLElement>('#panel-controls')!;
+    const toggle = toggleOf(root, 'panel-controls');
+    toggle.click();
+    expect(panel.classList.contains('is-collapsed')).toBe(false);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    toggle.click();
+    expect(panel.classList.contains('is-collapsed')).toBe(true);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    toggle.click();
+    root.querySelector<HTMLAnchorElement>('a.app-more-item[data-panel="panel-controls"]')!.click();
+    expect(panel.classList.contains('is-collapsed')).toBe(false);
+    // the other cards are untouched
+    expect(root.querySelector('#panel-town')!.classList.contains('is-collapsed')).toBe(true);
   });
 
   test('the scroll is instant for a reader who asked for reduced motion, smooth otherwise', async () => {
@@ -205,7 +251,7 @@ describe('the menu under the title: what the app can do, and a way to each panel
     Element.prototype.scrollIntoView = function (this: Element, options?: boolean | ScrollIntoViewOptions) {
       seen.push(typeof options === 'object' ? options.behavior : undefined);
     };
-    const link = root.querySelector<HTMLAnchorElement>('a.app-nav-item[data-panel="panel-ai"]')!;
+    const link = root.querySelector<HTMLAnchorElement>('a.app-more-item[data-panel="panel-ai"]')!;
     link.click();
     expect(seen.pop()).toBe('smooth'); // jsdom has no matchMedia: the default
     const win = window as unknown as { matchMedia?: (q: string) => { matches: boolean } };
@@ -216,15 +262,28 @@ describe('the menu under the title: what the app can do, and a way to each panel
     win.matchMedia = original;
   });
 
-  test('keyboard: the items are links in the tab order, Enter on one goes to the panel', async () => {
+  test('keyboard: the items are links in the tab order, Enter on one opens the card and lands on its title button', async () => {
     const { root } = await mount();
     Element.prototype.scrollIntoView = () => undefined;
-    const link = root.querySelector<HTMLAnchorElement>('a.app-nav-item[data-panel="panel-controls"]')!;
+    const link = root.querySelector<HTMLAnchorElement>('a.app-more-item[data-panel="panel-controls"]')!;
     link.focus();
     expect(document.activeElement).toBe(link);
     expect(link.tabIndex).toBe(0);
     link.click(); // the browser turns Enter on a link into this click
-    expect(document.activeElement).toBe(root.querySelector('#panel-controls h2.panel-title'));
+    expect(document.activeElement).toBe(toggleOf(root, 'panel-controls'));
+    expect(root.querySelector('#panel-controls')!.classList.contains('is-collapsed')).toBe(false);
+  });
+
+  test('a town\'s four numbers appear above the board when a town is selected, and go away for a prefecture', async () => {
+    const { root, store } = await mount();
+    const facts = root.querySelector<HTMLElement>('#panel-facts')!;
+    store.set({ selectedArea: '30206' });
+    expect(facts.hidden).toBe(false);
+    expect(facts.querySelector('.place-facts-name')!.textContent).toBe('田辺市');
+    expect([...facts.querySelectorAll('.place-fact dt')].map((d) => d.textContent)).toEqual(['2050年の人口', '2020年比', '65歳以上の割合', '高齢者1人を支える現役世代']);
+    expect(facts.compareDocumentPosition(root.querySelector('#panel-board')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    store.set({ selectedPref: '30', selectedArea: undefined });
+    expect(facts.hidden).toBe(true);
   });
 });
 

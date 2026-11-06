@@ -53,6 +53,32 @@ describe('the right column: four cards, each with a title band', () => {
   });
 });
 
+describe('a folded card (the lower layer, since 2026-11-06)', () => {
+  test('the class hides everything but the title band and drops the bottom inset; the content stays in the DOM', () => {
+    expect(declarations(theme, '.panel.is-collapsed > :not(.panel-title)')).toMatch(/display:\s*none/);
+    expect(declarations(theme, '.panel.is-collapsed')).toMatch(/padding-bottom:\s*0/);
+  });
+
+  test('the band is a button the full width of the band, 50px, in the band\'s own text, with a bordered chevron that turns when open', () => {
+    const toggle = declarations(theme, '.panel-toggle');
+    expect(toggle).toMatch(/flex:\s*1 1 auto/);
+    expect(toggle).toMatch(/min-height:\s*50px/);
+    expect(toggle).toMatch(/background:\s*transparent/);
+    expect(toggle).toMatch(/color:\s*inherit/);
+    expect(toggle).toMatch(/font:\s*inherit/);
+    expect(toggle).toMatch(/cursor:\s*pointer/);
+    expect(declarations(theme, '.panel > .panel-title:has(.panel-toggle)')).toMatch(/padding:\s*0/); // the button carries the inset
+    expect(declarations(theme, '.panel-toggle::before')).toMatch(/border-right:\s*2px solid currentColor/);
+    expect(declarations(theme, ".panel-toggle[aria-expanded='true']::before")).toMatch(/rotate\(45deg\)/);
+  });
+
+  test('keyboard focus on the band\'s button is drawn in the band\'s light text, inside the band (the indigo would swallow the accent ring)', () => {
+    const focus = declarations(theme, '.panel-toggle:focus-visible');
+    expect(focus).toMatch(/outline:\s*2px solid var\(--accent-ink\)/);
+    expect(focus).toMatch(/outline-offset:\s*-4px/);
+  });
+});
+
 describe('the sections inside a card', () => {
   test('every section title is a tinted strip with an indigo bar on its left, with room above it', () => {
     const section = declarations(theme, '.panel-section-title');

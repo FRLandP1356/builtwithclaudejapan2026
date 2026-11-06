@@ -43,8 +43,9 @@
 
 ## 配置（slots）
 
-- 390px：1 列。上から 帯（題・説明・問い）→ メニュー（見出し「この地図でできること」の行、4 つの欄の名前の帯。横に動かせ、見出しの行が流れ去ったあとは画面の上に貼り付く）→ 4 つの説明を 1 文にした行 → 場所の行（パンくず・戻る・検索）→ 場所の数字 →（割り振り中は 割り振りの行、それ以外は 地図の色の 2 択）→ 地図 → 凡例 → 年 → `#panel-board`（分かれ目） → `#panel-town` → `#panel-controls` → `#panel-allocation` → `#panel-ai` → 出典。
-- 1024px 以上：帯は窓の端から端まで（`--band` の地。中は `--page` 幅）。上の段に題と説明（1 行）、問い（1 行）、下の段にメニュー（見出しが左、4 つの欄が 4 列。名前の下に 1 行の説明が 2 行まで。カードのどこを押しても移動する）。その下は 2 列（地図 3 : パネル 2）。左の地図の列は `position: sticky` で、帯が流れ去ったあとは地図・凡例・年が 1 画面に収まる。最初の画面（動かさない状態）で帯・地図・凡例・年が収まるよう、地図の高さは `calc(100vh - 485px)` まで（帯 約 190px・場所の行・場所の数字・地図の色の 2 択（または割り振りの行）・凡例・年の分。1280×800 から 1920×1080 まで凡例の下端が窓の下端より 4px 上。845px より低い窓では地図 360px のままで、年まで少し動かす。1024px 幅ではメニューの説明が 3 行になり、940px より低い窓は年まで動かす）。`appCss.test.ts` が検査する。右の列にパネルが縦に並ぶ。
+- 最初の画面に出すのは 4 つだけ（作者の指示 2026-11-06「大切なものから順に、大切なものだけ」）：題と問いの 1 文、地図と年と凡例、分かれ目、下層への入口「くわしく見る」。町を選んだ時の基本の数字 4 行（`#panel-facts`）は分かれ目の上。町の詳細・前提を変える・人口の割り振り・AIに質問・出典は下層で、最初は閉じている（`.panel.is-collapsed`：中身は DOM に残し、見出しの帯だけ出す）。
+- 390px：1 列。上から 帯（題・問い）→ 場所の行（パンくず・戻る・検索）→ 場所の数字 →（割り振り中は 割り振りの行、それ以外は 地図の色の 2 択）→ 地図 → 凡例 → 年 → `#panel-facts`（町の数字。町の時だけ）→ `#panel-board`（分かれ目）→ `nav.app-more`（くわしく見る）→ `#panel-town` → `#panel-controls` → `#panel-allocation` → `#panel-ai` → `#panel-sources`（出典）。
+- 1024px 以上：帯は窓の端から端まで（`--band` の地。中は `--page` 幅）。題の行と問いの行（約 95px）。その下は 2 列（地図 3 : パネル 2）。左の地図の列は `position: sticky` で、帯が流れ去ったあとは地図・凡例・年が 1 画面に収まる。最初の画面（動かさない状態）で帯・地図・凡例・年が収まるよう、地図の高さは `calc(100vh - 395px)` まで（帯 約 95px・場所の行・場所の数字・地図の色の 2 択（または割り振りの行）・凡例・年の分。以前の 485px は帯のメニュー 90px を含んでいた）。`appCss.test.ts` が検査する。右の列に、町の数字・分かれ目・くわしく見る・閉じたカード 4 枚が縦に並び、出典のカードは 2 列の下。
 - パネルは `(el: HTMLElement, ctx: PanelContext)` で `el`（既にある `<section class="panel" id="panel-…">`）の中身を置き換え、片付けの関数を返す。`el` 自体の class と id は変えない。見出しは `h2.panel-title` を 1 つ残す（試算の印は `h2` の中に足す）。
 - 取り付けは `src/ui/app.ts` の `mountPanels(ctx, slots)`（「Panel registry」の印の付いた 5 行。返った片付けの関数は `destroy()` が呼ぶ）。
 - 横スクロールを出さない。横長の表は `.table-wrap` に入れる。
@@ -128,15 +129,19 @@
 | 使った道具 | `.ai-trace`（`details`）`.ai-trace-list` `.ai-trace-item` `.ai-trace-name` `.ai-trace-label` `.ai-trace-input` `.ai-trace-result`（`details`）`.ai-json`（`pre`、paper-2 の面）`.ai-copy-status` | 入力と結果をそのまま見せる |
 | 地図・前提・割り振りへの橋 | `.ai-links`（「◯◯を地図で開く」）`.ai-scenarios` `.ai-scenario` `.ai-scenario-msg`（`data-role=apply-scenario`）`.ai-allocations`（`data-role=apply-allocation`、「この割り振りを地図に反映する」） | 道具の入力から計算し直して store に置く。モデルの文章は何も使わない |
 
-## 帯とメニュー（`app.css`、`app.ts` の `headerHtml`・`navHtml`、文言は `sources.ts` の `NAV_*`）
+## 帯・下層への入口・閉じたカード（`app.css`・`theme.css`、`app.ts` の `headerHtml`・`moreHtml`・`panelHtml`、文言は `sources.ts` の `NAV_*`）
 
 | 要素 | class | 役割 |
 |---|---|---|
-| 帯 | `.app-head`（`--band` の地。中は `.app-head-inner`、`--page` 幅）`.app-title` `.app-lead` `.app-problem` | 題・説明・問い |
-| メニュー | `.app-nav`（`nav`、`aria-labelledby`。390px は `position: sticky`、`top` は見出しの行の高さの負の値で、見出しの行だけが流れ去る。1024px 以上は static）`.app-nav-inner` `.app-nav-title`（`h2`「この地図でできること」）`.app-nav-list`（`ul`。390px は横に動く帯、1024px 以上は 4 列）`.app-nav-card`（`li`）`.app-nav-item`（`a`、`href="#panel-…"`、`data-panel`、`aria-describedby`）`.app-nav-name`（紺の 1px の枠の名前。塗らない。hover と焦点で `--accent-soft`）`.app-nav-desc`（1 行の説明。390px は読み上げ用に隠す（clip。`display:none` にしない）。1024px 以上は名前の下に 13px） | 押すと `scrollIntoView`（動きを減らす設定なら即時）でその欄へ（住所の # は変えない）、欄の `h2.panel-title` に `tabindex=-1` を付けて焦点を移す。1024px 以上はカード全体がリンク（`::after` が覆う）、焦点の枠もカード全体 |
-| 4 つの説明の 1 文 | `.app-nav-summary`（`aria-hidden`。390px だけ） | 帯の下の 2 行まで。説明は項目の `aria-describedby` で読み上げられるので、ここは目のためだけ |
+| 帯 | `.app-head`（`--band` の地。中は `.app-head-inner`、`--page` 幅）`.app-title` `.app-problem` | 題と問いだけ。説明の 1 行（`APP_LEAD`）は出典のカードの先頭 `.app-foot-lead` に移した（2026-11-06） |
+| 下層への入口 | `.app-more`（`nav`、`aria-labelledby`。右の列の、分かれ目の次）`.app-more-title`（`h2`「くわしく見る」、ゴシック 15px）`.app-more-list`（`ul`、折り返す）`.app-more-card`（`li`）`.app-more-item`（`a`、`href="#panel-…"`、`data-panel`、`aria-describedby`。紺の 1px の枠の名前、40px。塗らない。hover と焦点で `--accent-soft`）`.app-more-desc`（`.sr-only`。1 行の説明は読み上げ用だけで、画面には名前だけ） | 町の詳細・前提を変える・人口の割り振り・AIに質問・出典の 5 つ。押すとそのカードを開き（`is-collapsed` を外し `aria-expanded=true`）、`scrollIntoView`（動きを減らす設定なら即時）でその欄へ（住所の # は変えない）、見出しの帯のボタン `.panel-toggle` に焦点を移す。貼り付く帯も横に動く帯も無い |
+| 閉じたカード | `.panel.is-collapsed`（`theme.css`：`> :not(.panel-title)` を `display:none`、下の余白 0。中身は DOM に残る）`.panel-toggle`（`h2.panel-title` の中の `button`、`aria-expanded`。帯いっぱい・50px・帯の文字色、左に枠線で描く印（開くと向きが変わる）。焦点の枠は帯の中に `--accent-ink` で描く）。試算の印は帯の中でボタンの右 | 町の詳細・前提を変える・人口の割り振り・AIに質問（右の列）と出典（`footer.app-foot.panel#panel-sources`、2 列の下）。最初は全部閉じている。見出しを押すと開き、もう一度押すと閉じる。分かれ目と町の数字のカードにはボタンが無く、常に開いている |
 
-読み込み中と読み込み失敗の画面にも、帯とメニューは出す（データが届くとき、帯が動かない）。説明は欄の内側が言っていること（人口の割り振りなら「全国の人口は変えずに」）と合わせ、何を残すかの助言や「残せない」の断定は書かない（`sources.test.ts` が語を検査する）。
+読み込み中と読み込み失敗の画面にも帯は出す（データが届くとき、帯が動かない）。説明は欄の内側が言っていること（人口の割り振りなら「全国の人口は変えずに」）と合わせ、何を残すかの助言や「残せない」の断定は書かない（`sources.test.ts` が語を検査する）。
+
+### 町の数字（`placeFacts.css`、`placeFacts.ts`）
+
+`#panel-facts`（`section.panel.place-facts`。町を選んでいる時だけ出し、県と日本では `hidden`）。見出しの帯は町の名前 `.place-facts-name` と年の印（`.badge-estimate` か `.badge-official`）。中は `dl.place-facts-list` の 4 行 `.place-fact`（`dt` が「2050年の人口」「2020年比」「65歳以上の割合」「高齢者1人を支える現役世代」、`dd` が明朝 22px の数字）。数字は町の詳細の最初の 4 枚のタイルと同じ関数（`deriveTotals`・`ageShares`・`deriveSupport`）と同じ書き方で、`placeFacts.test.ts` が 3 町 × 3 年でタイルと照合する。
 
 ## 地図（`app.css`、`src/map/`）
 
