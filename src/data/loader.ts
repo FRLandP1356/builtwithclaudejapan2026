@@ -2,12 +2,15 @@
 // All URLs are relative to import.meta.env.BASE_URL so the app works at any mount path.
 import type { Topology } from 'topojson-specification';
 import type { Area, Facility, Groups } from '../engine/types';
+import { parseFinance, type Finance } from './finance';
 
 export interface AppData {
   /** All 1,884 areas, in prefecture-file order. */
   areas: Area[];
   groups: Groups;
   facilities: Facility[];
+  /** Municipal spending per resident, fiscal 2024 actuals (finance.json). */
+  finance: Finance;
   /** 47 prefecture shapes, object name `prefectures`, properties { code, name }. */
   japanTopo: Topology;
   /** Prefecture code -> name, taken from the areas. */
@@ -87,16 +90,17 @@ function resolveFetch(opts: LoadOptions): typeof fetch {
   return opts.fetch ?? ((input, init) => fetch(input, init));
 }
 
-/** Load everything the app needs to start: 47 area files, groups, facilities and the national boundaries, in parallel. */
+/** Load everything the app needs to start: 47 area files, groups, facilities, spending per resident and the national boundaries, in parallel. */
 export async function loadAll(opts: LoadOptions = {}): Promise<AppData> {
   const f = resolveFetch(opts);
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const url = (p: string) => (opts.base === undefined ? dataUrl(p) : dataUrl(p, opts.base));
 
   const areaFiles = PREF_CODES.map((pp) => fetchJson<Area[]>(url(`data/areas/${pp}.json`), f, timeoutMs));
-  const [groups, facilities, japanTopo, ...areaLists] = await Promise.all([
+  const [groups, facilities, financeRaw, japanTopo, ...areaLists] = await Promise.all([
     fetchJson<Groups>(url('data/groups.json'), f, timeoutMs),
     fetchJson<Facility[]>(url('data/facilities.json'), f, timeoutMs),
+    fetchJson<unknown>(url('data/finance.json'), f, timeoutMs),
     fetchJson<Topology>(url('data/geo/japan.topo.json'), f, timeoutMs),
     ...areaFiles,
   ]);
@@ -113,7 +117,13 @@ export async function loadAll(opts: LoadOptions = {}): Promise<AppData> {
   if (!japanTopo || typeof japanTopo !== 'object' || !('objects' in japanTopo)) {
     throw new DataLoadError(url('data/geo/japan.topo.json'), 'shape');
   }
-  return { areas, groups, facilities, japanTopo, prefNames };
+  let finance: Finance;
+  try {
+    finance = parseFinance(financeRaw);
+  } catch (e) {
+    throw new DataLoadError(url('data/finance.json'), 'shape', undefined, e);
+  }
+  return { areas, groups, facilities, finance, japanTopo, prefNames };
 }
 
 export interface PrefGeoOptions extends LoadOptions {

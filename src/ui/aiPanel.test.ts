@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadAllAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
+import { loadFinance } from '../../test/helpers/loadFinance';
 import { repoPath } from '../../test/helpers/paths';
 import { ask, forgetAnsweredEndpoints } from '../ai/client';
 import type { AskResult, Message } from '../ai/client';
@@ -35,7 +36,7 @@ beforeAll(() => {
   const areas = loadAllAreas();
   const prefNames = new Map<string, string>();
   for (const a of areas) if (!prefNames.has(a.prefCode)) prefNames.set(a.prefCode, a.prefName);
-  data = { areas, groups: JSON.parse(readFileSync(repoPath('public/data/groups.json'), 'utf8')) as Groups, facilities: loadFacilities(), japanTopo: { type: 'Topology', objects: {}, arcs: [] } as never, prefNames };
+  data = { areas, groups: JSON.parse(readFileSync(repoPath('public/data/groups.json'), 'utf8')) as Groups, facilities: loadFacilities(), finance: loadFinance(), japanTopo: { type: 'Topology', objects: {}, arcs: [] } as never, prefNames };
   runner = createRunner(data);
 });
 

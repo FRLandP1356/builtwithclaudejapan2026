@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { loadSampleAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
+import { loadFinance } from '../../test/helpers/loadFinance';
 import { makeTopology } from '../../test/helpers/makeTopology';
 import { allocationColor, changeColor, RATIO_MAX, SUPPORT_COLORS, supportColor } from '../map/colors';
 import { SUPPORT_TITLE } from '../map/legend';
@@ -49,6 +50,7 @@ function makeFetch(control: Control) {
       return Promise.resolve(json({ cities: {}, prefs: groups }));
     }
     if (url.endsWith('facilities.json')) return Promise.resolve(json(loadFacilities()));
+    if (url.endsWith('finance.json')) return Promise.resolve(json(loadFinance()));
     if (url.endsWith('japan.topo.json')) return Promise.resolve(json(control.brokenNational ? { objects: {} } : japanTopo));
     return Promise.resolve(json('not found', 404));
   });

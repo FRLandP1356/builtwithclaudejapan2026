@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, test } from 'vitest';
 import { byCode, loadAllAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
+import { loadFinance } from '../../test/helpers/loadFinance';
 import { repoPath } from '../../test/helpers/paths';
 import type { AppData } from '../data/loader';
 import { createRunner, type Runner } from '../data/runner';
@@ -23,6 +24,7 @@ const data: AppData = {
   areas,
   groups,
   facilities: loadFacilities(),
+  finance: loadFinance(),
   japanTopo: {} as never,
   prefNames: new Map(areas.map((a) => [a.prefCode, a.prefName])),
 };
