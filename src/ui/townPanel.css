@@ -278,6 +278,11 @@
 .facility-keep-body p {
   margin: 0;
 }
+/* A phrase longer than the line wraps at word boundaries in browsers that know Japanese phrases (Chromium), not in
+   the middle of 「ありません」. Others fall back to breaking anywhere in it. */
+.facility-keep-body .keep {
+  word-break: auto-phrase;
+}
 .facility-keep-needs {
   display: grid;
   gap: var(--sp-1);

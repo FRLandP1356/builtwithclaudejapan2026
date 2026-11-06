@@ -11,6 +11,9 @@
 // Honest limits, kept in the wording: the people moved are a thought experiment, not a forecast of anyone's moves;
 // the guide is a 2009-2012 statistic of how common a facility is among municipalities of a size, not a cause. Nothing
 // here says a town or a facility should or should not be kept, and the verbs are always 「人口の目安を下回る」.
+//
+// Not offered to the AI on purpose: `run_allocation` (src/ai/tools.ts) could one day take a `facilityId` and answer
+// with `computeKeep`'s numbers; src/ai/ and worker/ are left as they are.
 import { allocate, type AllocationResult, type FacilityFlip } from '../engine/allocation';
 import { facilityStatus } from '../engine/facilities';
 import type { Facility } from '../engine/types';
