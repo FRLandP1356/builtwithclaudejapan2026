@@ -5,8 +5,12 @@
 // `evaluateFacilities` and friends are pure; `mountFacilityPanel` builds the DOM once and then only changes the tags,
 // the summary line and the notes (so a year change never re-creates the 48 rows). Facilities are looked up by `id`
 // only (Ruling 16), and the population given in is used unrounded (facilityStatus compares it as is).
+//
+// A facility that is below the guide gets a second row with the disclosure 「この目安に届くには」 (keepDisclosure.ts):
+// not for a town in a metropolitan area, where the table is only a reference, and one open at a time.
 import { facilityStatus, type Status } from '../engine/facilities';
 import type { Facility } from '../engine/types';
+import { createKeepRow, type KeepContext, type KeepRow } from './keepDisclosure';
 import { isMetroPref } from './metro';
 import { phraseNodes } from './phrases';
 import { ESTIMATE_BADGE, ESTIMATE_NOTE } from './sources';
@@ -117,6 +121,11 @@ export interface FacilityPanelInput {
   estimate: boolean;
   /** Used in the accessible names: 「田辺市」. */
   place: string;
+  /**
+   * What the disclosure under each below-the-guide facility needs (the town, its populations, the map). Without it,
+   * and for a town in a metropolitan area, no disclosure is offered.
+   */
+  keep?: KeepContext;
 }
 
 export interface FacilityPanelView {
@@ -130,8 +139,10 @@ interface Table {
 }
 
 interface RowEls {
+  tr: HTMLTableRowElement;
   tag: HTMLSpanElement;
   status: Status | undefined;
+  keep: KeepRow;
 }
 
 export function mountFacilityPanel(host: HTMLElement, facilities: readonly Facility[]): FacilityPanelView {
@@ -156,6 +167,9 @@ export function mountFacilityPanel(host: HTMLElement, facilities: readonly Facil
   const estimateNotice = notice('notice notice-estimate', ESTIMATE_NOTE);
 
   const rows = new Map<string, RowEls>();
+  const facilityList = [...facilities];
+  const facilityById = new Map(facilityList.map((f) => [f.id, f] as const));
+  let keepTown: string | undefined; // the town the open disclosures belong to
   const ev0 = evaluateFacilities(0, facilities);
   const essentialTable = buildTable(ev0.essential, '日々の暮らしに関わる主な施設');
   const othersTable = buildTable(ev0.others, 'その他の施設');
@@ -209,30 +223,50 @@ export function mountFacilityPanel(host: HTMLElement, facilities: readonly Facil
       const tag = document.createElement('span');
       td.append(tag);
       tr.append(th, td);
-      body.append(tr);
-      rows.set(r.id, { tag, status: undefined });
+      const keep = createKeepRow(facilityById.get(r.id)!, facilityList);
+      // One disclosure open at a time: opening another closes the rest.
+      keep.details.addEventListener('toggle', () => {
+        if (!keep.details.open) return;
+        for (const other of rows.values()) if (other.keep !== keep && other.keep.details.open) other.keep.details.open = false;
+      });
+      body.append(tr, keep.row);
+      rows.set(r.id, { tr, tag, status: undefined, keep });
     }
     table.append(cap, head, body);
     wrap.append(table);
     return { wrap, caption: cap };
   }
 
-  function setTag(id: string, status: Status): void {
+  function setTag(id: string, status: Status, keep: KeepContext | undefined): void {
     const el = rows.get(id);
-    if (!el || el.status === status) return;
-    const v = statusView(status);
-    el.tag.className = v.tagClass;
-    el.tag.textContent = v.label;
-    el.status = status;
+    if (!el) return;
+    if (el.status !== status) {
+      const v = statusView(status);
+      el.tag.className = v.tagClass;
+      el.tag.textContent = v.label;
+      el.status = status;
+    }
+    // The disclosure follows the status: only a facility below the guide has one.
+    const offered = status === 'below' ? keep : undefined;
+    el.keep.sync(offered);
+    el.tr.classList.toggle('has-keep', offered !== undefined);
   }
 
   return {
     update(input) {
       const ev = evaluateFacilities(input.pop, facilities);
-      for (const r of ev.essential) setTag(r.id, r.status);
-      for (const r of ev.others) setTag(r.id, r.status);
-      summary.replaceChildren(...phraseNodes(summaryParts(ev.belowCount, ev.total)));
       const notes = facilityNotes({ prefCode: input.prefCode, infraStrength: input.infraStrength });
+      // The guide comes from towns outside the three metropolitan areas: there the table is a reference, with no
+      // "how many more people" beside it.
+      const keep = notes.metro ? undefined : input.keep;
+      if (keep?.areaCode !== keepTown) {
+        // Another town: nothing stays open from the last one.
+        for (const el of rows.values()) if (el.keep.details.open) el.keep.details.open = false;
+        keepTown = keep?.areaCode;
+      }
+      for (const r of ev.essential) setTag(r.id, r.status, keep);
+      for (const r of ev.others) setTag(r.id, r.status, keep);
+      summary.replaceChildren(...phraseNodes(summaryParts(ev.belowCount, ev.total)));
       notices.replaceChildren(...[notes.metro && metroNotice, input.estimate && estimateNotice, notes.infra && infraNotice].filter((n): n is HTMLDivElement => n !== false));
       if (input.estimate && !badge.isConnected) title.append(' ', badge);
       if (!input.estimate && badge.isConnected) {

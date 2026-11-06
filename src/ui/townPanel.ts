@@ -9,6 +9,7 @@
 import { ageGroups, sumSeries, total } from '../engine/aggregate';
 import { DEFAULT_SCENARIO, type Area, type Pop, type Series } from '../engine/types';
 import type { AppData } from '../data/loader';
+import { populationAt, type PopulationAt } from './allocationCore';
 import { allocationView, overlayCovers, placeNumbers } from './allocationView';
 import { deriveSupport, deriveTotals, type Totals } from './derive';
 import { mountFacilityPanel } from './facilityPanel';
@@ -274,6 +275,13 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
     return pop;
   }
 
+  // Every area's population in one year, for the what-if under a facility; rebuilt only when the series or the year changes.
+  let atMemo: { series: Map<string, Series>; year: number; at: PopulationAt } | undefined;
+  function populationsFor(s: AppState): PopulationAt {
+    if (!atMemo || atMemo.series !== s.series || atMemo.year !== s.year) atMemo = { series: s.series, year: s.year, at: populationAt(data, s.series, s.year) };
+    return atMemo.at;
+  }
+
   /** Ruling 29: the pyramid axis is the largest single age-class value (either sex) over every year, for this place and series. */
   function axisMaxFor(series: Map<string, Series>, sc: TownScope, years: readonly number[]): number {
     popAt(series, sc, years[0]); // drops the caches first when the series changed
@@ -401,6 +409,13 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
         infraStrength: s.scenario.infraStrength,
         estimate,
         place: sc.name,
+        keep: {
+          areaCode: sc.area.code,
+          year: s.year,
+          place: sc.name,
+          populations: () => populationsFor(s),
+          reflect: (overlay) => store.set({ allocation: overlay }),
+        },
       });
     }
   }
