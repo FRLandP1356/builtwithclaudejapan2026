@@ -14,6 +14,8 @@ import { mountLegend } from '../map/legend';
 import { mountNationalMap } from '../map/nationalMap';
 import { mountPrefectureMap } from '../map/prefectureMap';
 import { mountAllocation } from './allocationPanel';
+import { BOARD_TITLE } from './board';
+import { mountBoardPanel } from './boardPanel';
 import { mountControls } from './controls';
 import { allocationLines, allocationView, changeOf, countMarkers, figureChanged, placeNumbers, type AllocationView, type PlaceKind, type PlaceNumbers } from './allocationView';
 import { deriveSupport, deriveTotals, ratioAt, yearIndex, type SupportRatios, type Totals } from './derive';
@@ -41,8 +43,10 @@ export interface AppHandle {
   destroy(): void;
 }
 
-/** The four panel slots, in mobile order. Each is a `<section class="panel">` that already holds its `h2.panel-title`. */
+/** The panel slots, in mobile order. Each is a `<section class="panel">` that already holds its `h2.panel-title`. */
 export interface PanelSlots {
+  /** 「分かれ目」: when, where and what falls below its population guide. The first card of the column. */
+  board: HTMLElement;
   town: HTMLElement;
   controls: HTMLElement;
   allocation: HTMLElement;
@@ -50,6 +54,7 @@ export interface PanelSlots {
 }
 
 const PANEL_TITLES: ReadonlyArray<{ key: keyof PanelSlots; id: string; title: string }> = [
+  { key: 'board', id: 'panel-board', title: BOARD_TITLE },
   { key: 'town', id: 'panel-town', title: '町の詳細' },
   { key: 'controls', id: 'panel-controls', title: '前提を変える' },
   { key: 'allocation', id: 'panel-allocation', title: '人口の割り振り' },
@@ -66,6 +71,7 @@ export const SKIP_TO_YEAR = '地図をとばして、年の選択へ';
 // -----------------------------------------------------------------------------------------------------------------
 function mountPanels(ctx: PanelContext, slots: PanelSlots): Array<() => void> {
   const teardowns: Array<() => void> = [];
+  teardowns.push(mountBoardPanel(slots.board, ctx));
   teardowns.push(mountTownPanel(slots.town, ctx));
   teardowns.push(mountControls(slots.controls, ctx));
   teardowns.push(mountAllocation(slots.allocation, ctx));
@@ -104,7 +110,8 @@ function headerHtml(): string {
  * visual copy: the descriptions stay in the items for screen readers).
  */
 function navHtml(): string {
-  const items = PANEL_TITLES.map(
+  // The board is the first card and needs no way to it; the menu leads to the four panels under it.
+  const items = PANEL_TITLES.filter((p) => p.key !== 'board').map(
     (p) =>
       `<li class="app-nav-card"><a class="app-nav-item" href="#${p.id}" data-panel="${p.id}" aria-describedby="${p.id}-nav-desc"><span class="app-nav-name">${p.title}</span></a><p class="app-nav-desc" id="${p.id}-nav-desc">${phraseHtml(NAV_DESCRIPTIONS[p.id])}</p></li>`,
   ).join('');
@@ -659,6 +666,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   }
 
   const slots: PanelSlots = {
+    board: q<HTMLElement>('#panel-board'),
     town: q<HTMLElement>('#panel-town'),
     controls: q<HTMLElement>('#panel-controls'),
     allocation: q<HTMLElement>('#panel-allocation'),

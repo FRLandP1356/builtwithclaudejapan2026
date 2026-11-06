@@ -87,7 +87,9 @@ describe('mountApp shell', () => {
   test('renders the landmark, the four panel slots in order and the national map', async () => {
     const { root, visibleHost, crumbs } = await mount();
     expect(root.querySelector('main')).not.toBeNull();
-    expect([...root.querySelectorAll('.panel')].map((p) => p.id)).toEqual(['panel-town', 'panel-controls', 'panel-allocation', 'panel-ai']);
+    // the board (分かれ目) is the first card of the column since 2026-11-06 (the owner's instruction: show first what matters most)
+    expect([...root.querySelectorAll('.panel')].map((p) => p.id)).toEqual(['panel-board', 'panel-town', 'panel-controls', 'panel-allocation', 'panel-ai']);
+    expect(root.querySelector('#panel-board .board-heading')!.textContent).toBe('日本全体で、人口の目安を下回っていく順番');
     expect(root.querySelectorAll('.panel .panel-empty')).toHaveLength(1); // all four panels are mounted; only the town panel's Japan-summary hint line remains
     expect(root.querySelectorAll('#panel-ai .ai-samples button')).toHaveLength(5);
     expect(visibleHost()?.classList.contains('map-host-national')).toBe(true);

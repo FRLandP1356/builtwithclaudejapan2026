@@ -43,10 +43,10 @@
 
 ## 配置（slots）
 
-- 390px：1 列。上から 帯（題・説明・問い）→ メニュー（見出し「この地図でできること」の行、4 つの欄の名前の帯。横に動かせ、見出しの行が流れ去ったあとは画面の上に貼り付く）→ 4 つの説明を 1 文にした行 → 場所の行（パンくず・戻る・検索）→ 場所の数字 →（割り振り中は 割り振りの行、それ以外は 地図の色の 2 択）→ 地図 → 凡例 → 年 → `#panel-town` → `#panel-controls` → `#panel-allocation` → `#panel-ai` → 出典。
+- 390px：1 列。上から 帯（題・説明・問い）→ メニュー（見出し「この地図でできること」の行、4 つの欄の名前の帯。横に動かせ、見出しの行が流れ去ったあとは画面の上に貼り付く）→ 4 つの説明を 1 文にした行 → 場所の行（パンくず・戻る・検索）→ 場所の数字 →（割り振り中は 割り振りの行、それ以外は 地図の色の 2 択）→ 地図 → 凡例 → 年 → `#panel-board`（分かれ目） → `#panel-town` → `#panel-controls` → `#panel-allocation` → `#panel-ai` → 出典。
 - 1024px 以上：帯は窓の端から端まで（`--band` の地。中は `--page` 幅）。上の段に題と説明（1 行）、問い（1 行）、下の段にメニュー（見出しが左、4 つの欄が 4 列。名前の下に 1 行の説明が 2 行まで。カードのどこを押しても移動する）。その下は 2 列（地図 3 : パネル 2）。左の地図の列は `position: sticky` で、帯が流れ去ったあとは地図・凡例・年が 1 画面に収まる。最初の画面（動かさない状態）で帯・地図・凡例・年が収まるよう、地図の高さは `calc(100vh - 485px)` まで（帯 約 190px・場所の行・場所の数字・地図の色の 2 択（または割り振りの行）・凡例・年の分。1280×800 から 1920×1080 まで凡例の下端が窓の下端より 4px 上。845px より低い窓では地図 360px のままで、年まで少し動かす。1024px 幅ではメニューの説明が 3 行になり、940px より低い窓は年まで動かす）。`appCss.test.ts` が検査する。右の列にパネルが縦に並ぶ。
 - パネルは `(el: HTMLElement, ctx: PanelContext)` で `el`（既にある `<section class="panel" id="panel-…">`）の中身を置き換え、片付けの関数を返す。`el` 自体の class と id は変えない。見出しは `h2.panel-title` を 1 つ残す（試算の印は `h2` の中に足す）。
-- 取り付けは `src/ui/app.ts` の `mountPanels(ctx, slots)`（「Panel registry」の印の付いた 4 行。返った片付けの関数は `destroy()` が呼ぶ）。
+- 取り付けは `src/ui/app.ts` の `mountPanels(ctx, slots)`（「Panel registry」の印の付いた 5 行。返った片付けの関数は `destroy()` が呼ぶ）。
 - 横スクロールを出さない。横長の表は `.table-wrap` に入れる。
 
 ## 共通の部品（`theme.css`）
@@ -74,6 +74,19 @@
 | 画面の外に出す文字（読み上げ用） | `.sr-only` |
 
 ## パネルが足した部品の族（各パネルの css。値は全部トークン）
+
+### 分かれ目（`boardPanel.css`、`boardPanel.ts`。文言と計算は `board.ts`、年のまたぎは `src/engine/crossings.ts`）
+
+右の列の先頭のカード（`#panel-board`、見出し「分かれ目」）。選んでいる場所（日本全体・県・町）について、いつ・どこで・何が人口の目安を下回るかを、短く見せる。動詞はいつも「人口の目安を下回る」で、「残せない」「閉鎖」「撤退」「廃止」は書かない（説明の 1 文 `BOARD_GUIDE_NOTE` が、目安は国土交通省の統計で、下回っても施設がなくなると決まるわけではないと言う）。名前のある有名なもの（神社仏閣・施設の固有名）は出さない。
+
+| 族 | 主な class | 役割 |
+|---|---|---|
+| 見出しの文 | `.board-heading`（`h3`、明朝 18px） | 「日本全体で、人口の目安を下回っていく順番」「和歌山県で、…」「田辺市で、人口の目安を下回る施設と、その年」（`boardHeading`） |
+| 年表の帯 | `.board-years`（`figure`）`.board-years-lead`（`figcaption`、`.note`）`.board-bars`（`ol`、16 列の grid、`aria-hidden`：数字は下の 1 文と表が言う）`.board-bar`（`li`。`data-year`、高さは `--board-h`＝最大に対する %。2050 年より後は `.is-estimate`）`.board-bar-value`（棒の上の数字。最大の棒と、表示中の年の棒だけ）`.board-bar-fill`（2050 年までは `--ink-2` の塗り、`.is-estimate` は `--accent-soft` の面に `--accent` の破線の縁＝年のトラックと同じ「試算」の作法）`.board-bar-year`（基線の罫と 2030・2050・2070・2100 の目盛）`.board-years-summary`（「いちばん多いのは2045年（6町）。」）`.board-table`（`details.chart-table`「棒の数字を表で見る」。全 16 年の数と単位、試算の行は `.is-estimate`） | 5 年ごとに、新しく目安を下回る町の数（県・日本：主な 8 施設のいずれか、町は 1 回だけ数える）か、施設の数（町）。表示中の年の棒は `aria-current="true"`：塗りが `--ink`、基線に 3px の印、数字を出す。年を動かしても帯は作り直さず印だけ動く |
+| 行 | `.board-list`（`ol`、上に `--line-2` の罫。空なら消える）`.board-row`（`li`。`data-year`・`data-facility`・`data-area`＝行の町）`.board-row-head`（2 列の grid：年 6.5em と中身）`.board-row-year`（明朝 18px。2050 年より後は `.badge-estimate`）`.board-row-facility`（太字 15px）`.board-row-towns`（14px `--ink-2`。「美浜町 ほか1町」、日本全体では「売木村（長野県） ほか2町」） | 県・日本：主な 8 施設の、いちばん早い順に `BOARD_ROWS`＝6 行（`groupCrossings`：年 → 主な施設 → 施設の順。行の町は目安をまたぐ前にいちばん人口が多かった町）。残りは `.board-more`（`details`「続きを見る（残り56件）」）。町：主な 8 施設の行を先に、残りは `.board-others`（`details`「その他の施設（18）」）。無ければ `.board-none` の 1 文 |
+| 注記 | `.board-already`（「2020年の時点で、すでに目安を下回る：11種類」／「…主な8施設のいずれかの目安を下回る：12町」）`.board-essential-note`（県・日本だけ）`.board-note`（`BOARD_GUIDE_NOTE`、文節ごとの `.keep`） | 2020 年に既に下回っているものは、またぎの行に入れず別に数える |
+
+計算は `boardCrossings`（`deriveTotals` の年ごとの合計を `scopeCrossings` に渡す）。県・日本は主な 8 施設だけで計算し、町は 48 種類すべて。場所か前提（`series`）が変わった時だけ作り直す。
 
 ### 町の詳細（`townPanel.css`、`townPanel.ts`・`pyramid.ts`・`seriesChart.ts`・`facilityPanel.ts`・`burdenPanel.ts`）
 
