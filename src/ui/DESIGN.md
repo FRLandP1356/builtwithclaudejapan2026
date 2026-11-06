@@ -82,6 +82,7 @@
 | ピラミッド | `.pyr-m` `.pyr-f` `.pyr-hit` `.pyramid-note` | 男は `--pyramid-m`、女は `--pyramid-f`。左右と「男」「女」の文字でも区別 |
 | 表の折りたたみ | `.chart-table`（`details`）、推移の表の下に `.note.chart-table-note` | 図の数字を表でも読めるように。注記は「公式推計の列は社人研の発表値。このアプリは公表された仮定から公式の方法で計算し直しているので、2050 年までの地図や町の数字は発表値と、町では数人、都道府県では数十人ほど違うことがある」（全 1,884 地域・2025〜2050 年の全期間で確かめた：町は最大 8.1 人（2040 年、横浜市緑区）、県は最大 47 人（2050 年、北海道）、全国は最大 17 人。`townPanel.test.ts` が毎年検査する）（`seriesChart.ts` の `TABLE_NOTE`。数字は変えない） |
 | 施設 | `.facility-summary`（明朝 20px）`.facility-notices` `.facility-group-title` `.facility-table`（`tbody th` は通常の太さ）`.facility-name` `.facility-guide` `.facility-note` `.facility-others`（`details`） | 施設の状態。印は `.tag` の 3 種 |
+| 目安に届くには | `.facility-keep-row`（表の行。`data-keep-for`＝施設の id、下回らない間は `hidden`）`.facility-keep-cell`（`colspan=2`）`.facility-keep`（`details`。`summary` は他の折りたたみと同じ印、14px、44px）`.facility-keep-body` `.facility-keep-year`（`.note`。「2100年の人口で計算」に印 `.badge-estimate` か `.badge-official`、割り振りのパネルの `.alloc-year` と同じ形）`.facility-keep-needs`（`dl`。`.facility-keep-need` の `dt`「50%の目安（1,500人）まで」と `dd`「あと約360人」、目安が 1 つの施設は「目安（500人）まで」の 1 行だけ）`.facility-keep-what`（上に罫）`.facility-keep-premise` `.facility-keep-effect` `.facility-keep-top-lead` `.facility-keep-top` `.facility-keep-actions`（`.actions`。`.btn` の「地図に反映する」と `.facility-keep-status`＝`role=status`）`.facility-keep-error` `.facility-keep-limits`。施設の行（`tr[data-facility-id]`）は下回る間 `.has-keep`（下の罫を外し、2 行が 1 件に見える） | 下回る施設の下に出す折りたたみ。三大都市圏の町には出さない（表は参考として出しているだけ）。同時に開くのは 1 つ（開くと他は閉じ、町を替えても閉じる）。本体は最初に開く時に作り、あとは文字だけ書き換える（年を動かしてもボタンのフォーカスが残る）。計算は開いている間だけ。2050 年より後は「試算」の印を年の行に付ける。文言の正本は `src/ui/keepGuide.ts`（計算も：`keepNeeds`＝あと何人、`computeKeep`＝50% の目安に届く人数を `allocate` で他の町から人口に比例して移した時に、他の町がいくつ目安を下回るか、いちばん多い施設 3 つ）。ボタンは `keepOverlay()` で作った重ねを `store.set({ allocation })` に置くだけ（割り振りのパネルの状態は読まない。AI のパネルの「この割り振りを地図に反映する」と同じ作り）。置くとその施設に焦点が付く |
 | 文の折り返し | `.keep` | 数字と単位を途中で折らない |
 
 ### 前提を変える・人口の割り振り（`controlsPanel.css`、`controls.ts`・`allocationPanel.ts`）
@@ -132,6 +133,7 @@
 - 出典（フッター）は `SOURCES`（`src/ui/sources.ts`）が正本。どの出典も、加工して作成したと書き、出典のページの URL を「文字が URL そのもののリンク」（`target=_blank` `rel=noopener`）で見せ、取得日（`docs/sources.md` の日付）を添える。測量法の承認の行は境界の出典の最後に残す。1 件は「何か」「ページと取得日」「承認の行」を `.src-text` `.src-where` `.src-approval` の 3 段に積む（スマホ幅でも読め、URL は途中で折れる）。人口の出典は「社人研がこのアプリの内容を保証するものではありません」で終える（`docs/sources.md` と README のとおり）。長い句は `word-break: auto-phrase`（Chromium）で文節で折る。
 - 施設の名前は 1 つだけ：`public/data/facilities.json` の `name` を、施設の `id` で引いて出す（町の詳細の表・割り振りの表・ボタンの読み上げ・ツールチップと地図の読み上げ・割り振りの `flips`）。UI のコードに施設の名前を直接書かない（`facilityNames.test.ts` が検査する）。README や docs の言い換え（「飲食料品店」「診療所」など）は画面の名前ではない。
 - 「残せない」でなく「人口の目安を下回る」。残す・残さないを勧める言葉は書かない。
+- 「この目安に届くには」の文言：人数は「もし移ったら」の仮の数で、実際の人の動きの予測ではない。人口の目安は 2009〜2012 年の統計で、人口が増えれば施設ができるという因果を示さない（`KEEP_LIMITS`、1 文）。結果は事実だけ（「ほかの19町が、いずれかの施設の人口の目安を下回ります」）で、残す・残さないも、人を動かすべきかどうかも書かない。動かす人数が他の地域の人口を超える（`allocate` が RangeError）時は「人数が大きすぎて、この計算はできません。」だけを出す。
 - 丸数字・矢印記号・英語の大文字ラベルは使わない。
 
 ## チャート（推移・ピラミッド）

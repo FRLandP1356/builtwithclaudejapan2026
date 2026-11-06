@@ -3,6 +3,16 @@
 const jp = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 0 });
 const DASH = '－';
 
+/** A whole number with separators: 1,500 / 12. */
+export function formatCount(n: number): string {
+  return jp.format(n);
+}
+
+/** An exact number of people with separators and no 万: 1,500人 / 175,000人 (the way the facility table prints a guide). */
+export function formatPeople(n: number): string {
+  return `${jp.format(n)}人`;
+}
+
 /** Population: 8,340人 / 4.2万人 / 68.5万人 / 1,190万人 / 1億2,615万人. */
 export function formatPop(n: number): string {
   if (!Number.isFinite(n)) return DASH;
@@ -14,6 +24,11 @@ export function formatPop(n: number): string {
   if (n >= 1e6) return `${jp.format(Math.round(n / 1e4))}万人`;
   if (n >= 1e4) return `${(n / 1e4).toFixed(1)}万人`;
   return `${jp.format(Math.round(n))}人`;
+}
+
+/** 約2.6万人 (always a positive amount: the sign is carried by the sentence around it). */
+export function approxPeople(n: number): string {
+  return `約${formatPop(Math.abs(n))}`;
 }
 
 /** Change versus 2020 from a ratio: 0.685 -> −31.5%, 1.025 -> +2.5%, 1 -> ±0.0%. */
