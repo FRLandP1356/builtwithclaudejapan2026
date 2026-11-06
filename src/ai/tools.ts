@@ -4,7 +4,7 @@
 // runTool never throws for bad model input. It returns `{ error, message }` (Japanese message) with one of the codes
 // unknown_tool, invalid_input, unknown_area, year_out_of_range, scenario_out_of_range, allocation_not_possible or
 // internal_error. Results are curated plain JSON (no raw Area objects, no file paths) and stay well under 6 KB.
-import { ages65, sumSeries, total } from '../engine/aggregate';
+import { ageGroups, ages65, sumSeries, total } from '../engine/aggregate';
 import { allocate } from '../engine/allocation';
 import type { AllocationInput } from '../engine/allocation';
 import { facilityStatus } from '../engine/facilities';
@@ -314,40 +314,46 @@ function findArea(raw: unknown, ctx: EngineContext): unknown {
 
 const DEFAULT_YEARS = [2020, 2030, 2040, 2050, 2060, 2075, 2100];
 
-function getSeries(raw: unknown, ctx: EngineContext): unknown {
-  const input = asInput(raw);
-  const place = resolvePlace(input.areaCode, ctx);
-  const scenario = parseScenario(input.scenario);
-
+/**
+ * The `years` input of get_series and get_age_groups: each year checked and snapped down to a multiple of 5, the same
+ * year asked for twice listed once (the first request wins), sorted. Omitted or empty means the seven default years.
+ */
+function parseYearList(raw: unknown): YearInfo[] {
   let wanted: YearInfo[];
-  if (!given(input.years) || (Array.isArray(input.years) && input.years.length === 0)) {
+  if (!given(raw) || (Array.isArray(raw) && raw.length === 0)) {
     wanted = DEFAULT_YEARS.map((y) => ({ year: y, requested: y }));
-  } else if (Array.isArray(input.years) && input.years.length <= MAX_YEARS) {
-    wanted = input.years.map((y) => parseYear(y, 'years の各要素'));
+  } else if (Array.isArray(raw) && raw.length <= MAX_YEARS) {
+    wanted = raw.map((y) => parseYear(y, 'years の各要素'));
   } else {
     return fail('invalid_input', `years は年の配列（最大 ${MAX_YEARS} 個）で指定してください。`);
   }
   const byYear = new Map<number, YearInfo>();
   for (const y of wanted) if (!byYear.has(y.year)) byYear.set(y.year, y); // the first request wins
+  return [...byYear.values()].sort((a, b) => a.year - b.year);
+}
+
+function getSeries(raw: unknown, ctx: EngineContext): unknown {
+  const input = asInput(raw);
+  const place = resolvePlace(input.areaCode, ctx);
+  const scenario = parseScenario(input.scenario);
+  const wanted = parseYearList(input.years);
 
   const series = seriesOf(place, ctx.run(scenario));
   const base = totalAt(series, FIRST_YEAR);
-  const rows = [...byYear.values()]
-    .sort((a, b) => a.year - b.year)
-    .map((y) => {
-      const pop = series[y.year];
-      if (!pop) return fail('internal_error', 'missing year');
-      const all = total(pop);
-      const old = ages65(pop);
-      return {
-        ...yearFields(y),
-        population: people(all),
-        ages65: people(old),
-        ages65Share: all > 0 ? percent1((100 * old) / all) : 0,
-        changeFrom2020Percent: base > 0 ? percent1((100 * (all - base)) / base) : 0,
-        basis: basisOf(y.year),
-      };
-    });
+  const rows = wanted.map((y) => {
+    const pop = series[y.year];
+    if (!pop) return fail('internal_error', 'missing year');
+    const all = total(pop);
+    const old = ages65(pop);
+    return {
+      ...yearFields(y),
+      population: people(all),
+      ages65: people(old),
+      ages65Share: all > 0 ? percent1((100 * old) / all) : 0,
+      changeFrom2020Percent: base > 0 ? percent1((100 * (all - base)) / base) : 0,
+      basis: basisOf(y.year),
+    };
+  });
   return { area: whoIs(place), scenario, rows };
 }
 
@@ -699,6 +705,44 @@ function countAreas(raw: unknown, ctx: EngineContext): unknown {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// 9. get_age_groups
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * get_age_groups: the same places, years, scenario and rounding as get_series, split into 0-14, 15-64 and 65+ with the
+ * engine's own class boundaries (`ageGroups`, shared with the town panel). Each group is rounded on its own, so the
+ * three people counts can differ from `total` by one person; the shares use get_series' rule (one decimal), so
+ * share65plus is exactly what get_series reports as ages65Share.
+ */
+function getAgeGroups(raw: unknown, ctx: EngineContext): unknown {
+  const input = asInput(raw);
+  const place = resolvePlace(input.areaCode, ctx);
+  const scenario = parseScenario(input.scenario);
+  const wanted = parseYearList(input.years);
+
+  const series = seriesOf(place, ctx.run(scenario));
+  const rows = wanted.map((y) => {
+    const pop = series[y.year];
+    if (!pop) return fail('internal_error', 'missing year');
+    const all = total(pop);
+    const groups = ageGroups(pop);
+    const share = (x: number): number => (all > 0 ? percent1((100 * x) / all) : 0);
+    return {
+      ...yearFields(y),
+      basis: basisOf(y.year),
+      total: people(all),
+      age0to14: people(groups.age0to14),
+      age15to64: people(groups.age15to64),
+      age65plus: people(groups.age65plus),
+      share0to14: share(groups.age0to14),
+      share15to64: share(groups.age15to64),
+      share65plus: share(groups.age65plus),
+    };
+  });
+  return { area: whoIs(place), scenario, rows };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 // Dispatch
 // ---------------------------------------------------------------------------------------------------------------
 
@@ -711,6 +755,7 @@ const HANDLERS = new Map<string, (input: unknown, ctx: EngineContext) => unknown
   ['run_allocation', runAllocation],
   ['find_similar_now', findSimilarNow],
   ['count_areas', countAreas],
+  ['get_age_groups', getAgeGroups],
 ]);
 
 /** Run one tool. The result is JSON-serialisable and is `{ error, message }` for any bad input; this never throws. */

@@ -7,7 +7,7 @@ import { allocate } from '../engine/allocation';
 import { facilityStatus } from '../engine/facilities';
 import { OFFICIAL_END_YEAR } from '../engine/scenarios';
 import { DEFAULT_SCENARIO } from '../engine/types';
-import type { Area, Facility, Scenario, Series } from '../engine/types';
+import type { Area, Facility, Pop, Scenario, Series } from '../engine/types';
 import { MAX_YEARS, TOOL_DEFS, TOOL_NAMES } from './toolDefs';
 import { TOOL_NAMES as SHARED_NAMES } from './toolNames';
 import { checkNumbers } from './numberCheck';
@@ -139,6 +139,23 @@ interface CountOut {
   total: number;
   examples: Array<Who & { population: number }>;
 }
+interface AgeRow {
+  year: number;
+  requestedYear?: number;
+  basis: string;
+  total: number;
+  age0to14: number;
+  age15to64: number;
+  age65plus: number;
+  share0to14: number;
+  share15to64: number;
+  share65plus: number;
+}
+interface AgeOut {
+  area: Who;
+  scenario: Scn;
+  rows: AgeRow[];
+}
 interface ResultMap {
   find_area: FindAreaOut;
   get_series: SeriesOut;
@@ -148,6 +165,7 @@ interface ResultMap {
   run_allocation: AllocOut;
   find_similar_now: SimilarOut;
   count_areas: CountOut;
+  get_age_groups: AgeOut;
 }
 type Failed = Partial<ToolError>;
 
@@ -165,9 +183,9 @@ const KITAYAMA_VILLAGE = '30427'; // one of the 13 villages without assumptions
 const MINATO_WARD = '13103';
 
 describe('tool definitions (data module and shared names)', () => {
-  it('schemas: there are 8 uniquely named tools, each description < 400 chars and each schema JSON < 2000 chars', () => {
-    expect(TOOL_DEFS).toHaveLength(8);
-    expect(new Set(TOOL_DEFS.map((t) => t.name)).size).toBe(8);
+  it('schemas: there are 9 uniquely named tools, each description < 400 chars and each schema JSON < 2000 chars', () => {
+    expect(TOOL_DEFS).toHaveLength(9);
+    expect(new Set(TOOL_DEFS.map((t) => t.name)).size).toBe(9);
     for (const t of TOOL_DEFS) {
       expect(t.name).toMatch(/^[a-z][a-z0-9_]*$/);
       expect(t.description.length).toBeGreaterThan(20);
@@ -183,7 +201,7 @@ describe('tool definitions (data module and shared names)', () => {
     expect([...TOOL_NAMES]).toEqual(TOOL_DEFS.map((t) => t.name));
     expect([...SHARED_NAMES]).toEqual([...TOOL_NAMES]);
     expect([...TOOL_NAMES].sort()).toEqual(
-      ['compare_sources', 'count_areas', 'facility_check', 'find_area', 'find_similar_now', 'get_series', 'run_allocation', 'run_projection'],
+      ['compare_sources', 'count_areas', 'facility_check', 'find_area', 'find_similar_now', 'get_age_groups', 'get_series', 'run_allocation', 'run_projection'],
     );
   });
 
@@ -269,6 +287,8 @@ describe('years', () => {
     for (const y of [2150, 2019, 1900, 2101, -5]) {
       expect(call('get_series', { areaCode: TANABE, years: [y] }).error, `get_series ${y}`).toBe('year_out_of_range');
       expect(call('get_series', { areaCode: TANABE, years: [2040, y] }).error).toBe('year_out_of_range');
+      expect(call('get_age_groups', { areaCode: TANABE, years: [y] }).error, `get_age_groups ${y}`).toBe('year_out_of_range');
+      expect(call('get_age_groups', { areaCode: TANABE, years: [2040, y] }).error).toBe('year_out_of_range');
       expect(call('facility_check', { areaCode: TANABE, year: y }).error).toBe('year_out_of_range');
       expect(call('find_similar_now', { areaCode: TANABE, year: y }).error).toBe('year_out_of_range');
       expect(call('count_areas', { year: y, below: 3000 }).error).toBe('year_out_of_range');
@@ -304,6 +324,12 @@ describe('years', () => {
     expect(full.error).toBeUndefined();
     expect(full.rows).toHaveLength(MAX_YEARS);
     expect(call('get_series', { areaCode: TANABE, years: [...all, 2100] }).error).toBe('invalid_input');
+    // get_age_groups takes the same list: the same schema entry, the same limit
+    const ageYears = TOOL_DEFS.find((t) => t.name === 'get_age_groups')!.input_schema.properties.years as { maxItems: number };
+    expect(ageYears.maxItems).toBe(MAX_YEARS);
+    expect(ageYears).toEqual(years);
+    expect(call('get_age_groups', { areaCode: TANABE, years: all }).rows).toHaveLength(MAX_YEARS);
+    expect(call('get_age_groups', { areaCode: TANABE, years: [...all, 2100] }).error).toBe('invalid_input');
   });
 
   it('non-numeric years are invalid_input', () => {
@@ -311,6 +337,9 @@ describe('years', () => {
     expect(call('facility_check', { areaCode: TANABE, year: NaN }).error).toBe('invalid_input');
     expect(call('get_series', { areaCode: TANABE, years: '2050' }).error).toBe('invalid_input');
     expect(call('get_series', { areaCode: TANABE, years: [null] }).error).toBe('invalid_input');
+    expect(call('get_age_groups', { areaCode: TANABE, years: '2050' }).error).toBe('invalid_input');
+    expect(call('get_age_groups', { areaCode: TANABE, years: [null] }).error).toBe('invalid_input');
+    expect(call('get_age_groups', { areaCode: TANABE, years: [NaN] }).error).toBe('invalid_input');
   });
 });
 
@@ -542,6 +571,7 @@ describe('scenario validation (Ruling 21)', () => {
     for (const [label, scenario] of bad) {
       for (const [tool, input] of [
         ['get_series', { areaCode: TANABE, scenario }],
+        ['get_age_groups', { areaCode: TANABE, scenario }],
         ['run_projection', { areaCode: TANABE, scenario }],
         ['compare_sources', { areaCode: TANABE, scenario }],
         ['facility_check', { areaCode: TANABE, year: 2100, scenario }],
@@ -562,6 +592,7 @@ describe('scenario validation (Ruling 21)', () => {
       { migMode: 'hold' }, { migMode: 'fade' },
     ]) {
       expect(call('get_series', { areaCode: TANABE, years: [2100], scenario }).error).toBeUndefined();
+      expect(call('get_age_groups', { areaCode: TANABE, years: [2100], scenario }).error).toBeUndefined();
     }
   });
 
@@ -570,6 +601,8 @@ describe('scenario validation (Ruling 21)', () => {
       expect(call('get_series', { areaCode: TANABE, scenario }).error).toBe('invalid_input');
     }
     expect(call('get_series', { areaCode: TANABE, scenario: { migrationMode: 'fade' } }).error).toBe('invalid_input');
+    expect(call('get_age_groups', { areaCode: TANABE, scenario: 'fade' }).error).toBe('invalid_input');
+    expect(call('get_age_groups', { areaCode: TANABE, scenario: { migrationMode: 'fade' } }).error).toBe('invalid_input');
     // null / undefined mean "no scenario given"
     expect(call('get_series', { areaCode: TANABE, scenario: null }).error).toBeUndefined();
   });
@@ -587,6 +620,8 @@ describe('scenario validation (Ruling 21)', () => {
     call('run_projection', { areaCode: TANABE, scenario: { migScale: 0.5 } }, spy);
     call('get_series', { areaCode: TANABE, scenario: { cwrMult: 9 } }, spy);
     call('count_areas', { year: 2100, below: 100, scenario: { migScale: 'x' } }, spy);
+    call('get_age_groups', { areaCode: TANABE, scenario: { migMode: 'fade', cwrMult: 1.1 } }, spy);
+    call('get_age_groups', { areaCode: TANABE, scenario: { infraStrength: 5 } }, spy);
     expect(seen.length).toBeGreaterThan(0);
     for (const s of seen) {
       expect(Object.keys(s).sort()).toEqual(['cwrMult', 'infraStrength', 'migMode', 'migScale']);
@@ -618,13 +653,14 @@ describe('use of ctx.run', () => {
       ['run_allocation', { target: { kind: 'pref', code: '30' }, deltaPercent: 5, year: 2100, scenario: sc }],
       ['find_similar_now', { areaCode: TANABE, year: 2100, scenario: sc }],
       ['count_areas', { year: 2100, below: 3000, scenario: sc }],
+      ['get_age_groups', { areaCode: '13', scenario: sc }],
     ];
     for (const [name, input] of calls) {
       current = name;
       expect(call(name, input, spy).error, name).toBeUndefined();
     }
     expect(counts).toEqual({
-      get_series: 1, compare_sources: 1, run_projection: 2, facility_check: 1, run_allocation: 1, find_similar_now: 1, count_areas: 1,
+      get_series: 1, compare_sources: 1, run_projection: 2, facility_check: 1, run_allocation: 1, find_similar_now: 1, count_areas: 1, get_age_groups: 1,
     });
   });
 });
@@ -1128,6 +1164,233 @@ describe('count_areas', () => {
   });
 });
 
+describe('get_age_groups', () => {
+  /** People in the classes from `from` up to (not including) `to`, both sexes: an oracle that does not use the engine helper. */
+  const sumClasses = (p: Pop, from: number, to: number): number =>
+    p.M.slice(from, to).reduce((t, v) => t + v, 0) + p.F.slice(from, to).reduce((t, v) => t + v, 0);
+  const allYears = Array.from({ length: MAX_YEARS }, (_, i) => 2020 + 5 * i);
+
+  it('tanabe: the groups are the engine classes 0-2, 3-12 and 13-19, in whole people, with one-decimal shares', () => {
+    const years = [2020, 2050, 2055, 2100];
+    const r = call('get_age_groups', { areaCode: TANABE, years });
+    expect(r.error).toBeUndefined();
+    expect(r.area).toEqual({ code: TANABE, name: '田辺市', prefName: '和歌山県' });
+    expect(r.scenario).toEqual(DEFAULT_SCENARIO);
+    expect(r.rows.map((x) => x.year)).toEqual(years);
+    const run = ctx.run(DEFAULT_SCENARIO).get(TANABE)!;
+    for (const row of r.rows) {
+      const pop = run[row.year];
+      const all = total(pop);
+      const parts: Array<[number, number, number, number]> = [
+        [0, 3, row.age0to14, row.share0to14],
+        [3, 13, row.age15to64, row.share15to64],
+        [13, 20, row.age65plus, row.share65plus],
+      ];
+      expect(row.total, `${row.year} total`).toBe(Math.round(all));
+      for (const [from, to, people, share] of parts) {
+        expect(people, `${row.year} people ${from}-${to}`).toBe(Math.round(sumClasses(pop, from, to)));
+        expect(share, `${row.year} share ${from}-${to}`).toBe(Math.round((1000 * sumClasses(pop, from, to)) / all) / 10);
+        expect(Number.isInteger(people)).toBe(true);
+      }
+      expect(Math.abs(row.age0to14 + row.age15to64 + row.age65plus - row.total)).toBeLessThanOrEqual(2);
+      expect(Math.abs(row.share0to14 + row.share15to64 + row.share65plus - 100)).toBeLessThanOrEqual(0.15 + 1e-9);
+    }
+    // the town's 2020 age structure: about one in ten is a child and more than a third is 65 or over (the panel's tiles)
+    expect(r.rows[0].share0to14).toBeGreaterThan(8);
+    expect(r.rows[0].share0to14).toBeLessThan(15);
+    expect(r.rows[0].share65plus).toBeGreaterThan(30);
+  });
+
+  it('a prefecture and Japan are the sums of their areas, class by class', () => {
+    const run = ctx.run(DEFAULT_SCENARIO);
+    for (const [areaCode, codes] of [
+      ['30', ctx.groups.prefs['30']],
+      ['00', ctx.areas.map((a) => a.code)],
+      ['01100', ctx.groups.cities['01100']],
+    ] as Array<[string, string[]]>) {
+      const r = call('get_age_groups', { areaCode, years: [2020, 2075, 2100] });
+      expect(r.error, areaCode).toBeUndefined();
+      for (const row of r.rows) {
+        const slice = (from: number, to: number): number => codes.reduce((t, c) => t + sumClasses(run.get(c)![row.year], from, to), 0);
+        expect(row.age0to14, `${areaCode} ${row.year} 0-14`).toBe(Math.round(slice(0, 3)));
+        expect(row.age15to64, `${areaCode} ${row.year} 15-64`).toBe(Math.round(slice(3, 13)));
+        expect(row.age65plus, `${areaCode} ${row.year} 65+`).toBe(Math.round(slice(13, 20)));
+        expect(row.total, `${areaCode} ${row.year} total`).toBe(Math.round(slice(0, 20)));
+      }
+    }
+  });
+
+  it('agrees with get_series for a city, a prefecture, a designated city and Japan: total, 65+ people, 65+ share and basis, under two scenarios', () => {
+    for (const areaCode of [TANABE, '30', '01100', '00']) {
+      for (const scenario of [undefined, { migMode: 'fade', cwrMult: 1.2 }]) {
+        const series = call('get_series', { areaCode, years: allYears, scenario });
+        const ages = call('get_age_groups', { areaCode, years: allYears, scenario });
+        expect(series.error).toBeUndefined();
+        expect(ages.error).toBeUndefined();
+        expect(ages.area).toEqual(series.area);
+        expect(ages.scenario).toEqual(series.scenario);
+        expect(ages.rows.map((x) => x.year)).toEqual(series.rows.map((x) => x.year));
+        ages.rows.forEach((row, i) => {
+          const same = series.rows[i];
+          const label = `${areaCode} ${row.year}`;
+          expect(row.total, label).toBe(same.population);
+          expect(row.age65plus, label).toBe(same.ages65);
+          expect(row.share65plus, label).toBe(same.ages65Share);
+          expect(row.basis, label).toBe(same.basis);
+        });
+      }
+    }
+  });
+
+  it('basis: official up to 2050 and app_estimate after, for any scenario (the switch is between 2050 and 2055)', () => {
+    for (const scenario of [undefined, { migMode: 'fade', cwrMult: 1.2 }]) {
+      const r = call('get_age_groups', { areaCode: TANABE, years: allYears, scenario });
+      for (const row of r.rows) expect(row.basis, `${row.year}`).toBe(row.year <= 2050 ? 'official' : 'app_estimate');
+      expect(r.rows.find((x) => x.year === 2050)!.basis).toBe('official');
+      expect(r.rows.find((x) => x.year === 2055)!.basis).toBe('app_estimate');
+    }
+  });
+
+  it('the scenario changes the numbers after 2050 only, and the result says which scenario it used', () => {
+    const base = call('get_age_groups', { areaCode: '13', years: [2040, 2050, 2100] });
+    const cwr = call('get_age_groups', { areaCode: '13', years: [2040, 2050, 2100], scenario: { cwrMult: 1.4 } });
+    expect(cwr.scenario).toEqual({ ...DEFAULT_SCENARIO, cwrMult: 1.4 });
+    expect(cwr.rows[0]).toEqual(base.rows[0]);
+    expect(cwr.rows[1]).toEqual(base.rows[1]);
+    expect(cwr.rows[2].age0to14).toBeGreaterThan(base.rows[2].age0to14);
+    expect(cwr.rows[2].share0to14).toBeGreaterThan(base.rows[2].share0to14);
+  });
+
+  it('years: the default seven years, a snapped year says which was asked, repeats are listed once, rows are sorted', () => {
+    expect(call('get_age_groups', { areaCode: TANABE }).rows.map((x) => x.year)).toEqual([2020, 2030, 2040, 2050, 2060, 2075, 2100]);
+    expect(call('get_age_groups', { areaCode: TANABE, years: [] }).rows.map((x) => x.year)).toEqual([2020, 2030, 2040, 2050, 2060, 2075, 2100]);
+    const snapped = call('get_age_groups', { areaCode: TANABE, years: [2100, 2043, 2040] });
+    expect(snapped.rows.map((x) => x.year)).toEqual([2040, 2100]);
+    expect(snapped.rows[0].requestedYear).toBe(2043);
+    expect(snapped.rows[1].requestedYear).toBeUndefined();
+  });
+
+  it('a row holds exactly the agreed fields, all plain numbers or text (no per-class vectors)', () => {
+    const r = call('get_age_groups', { areaCode: '00', years: allYears });
+    expect(Object.keys(r).sort()).toEqual(['area', 'rows', 'scenario']);
+    expect(r.rows).toHaveLength(MAX_YEARS);
+    for (const row of r.rows) {
+      expect(Object.keys(row).sort()).toEqual(
+        ['age0to14', 'age15to64', 'age65plus', 'basis', 'share0to14', 'share15to64', 'share65plus', 'total', 'year'],
+      );
+      for (const v of Object.values(row)) expect(['number', 'string']).toContain(typeof v);
+    }
+    expect(jsonSize(r)).toBeLessThan(6000);
+  });
+
+  it('bad input: unknown or malformed area codes are unknown_area / invalid_input', () => {
+    expect(call('get_age_groups', { areaCode: '99999' }).error).toBe('unknown_area');
+    expect(call('get_age_groups', { areaCode: '48' }).error).toBe('unknown_area');
+    expect(call('get_age_groups', { areaCode: '田辺市' }).error).toBe('unknown_area');
+    expect(call('get_age_groups', { areaCode: 30206 }).error).toBe('invalid_input');
+    expect(call('get_age_groups', {}).error).toBe('invalid_input');
+  });
+
+  it('the tool text says what it returns, that the later years are the app\'s estimates, and never says 予測', () => {
+    const def = TOOL_DEFS.find((t) => t.name === 'get_age_groups')!;
+    expect(def.description).toContain('0〜14歳');
+    expect(def.description).toContain('15〜64歳');
+    expect(def.description).toContain('65歳以上');
+    expect(def.description).toContain('2050年より後のこのアプリの試算');
+    expect(def.description).toContain('app_estimate');
+    expect(def.description).not.toMatch(/予測|予想/);
+    expect(def.input_schema.required).toEqual(['areaCode']);
+  });
+});
+
+describe('get_age_groups on a synthetic world (known classes, rounding, empty populations)', () => {
+  const vec = (fill: (j: number) => number): number[] => Array.from({ length: 20 }, (_, j) => fill(j));
+  /** A population with the given counts at (class, sex) places and 0 elsewhere. */
+  const sparse = (m: Record<number, number>, f: Record<number, number>): Pop => ({ M: vec((j) => m[j] ?? 0), F: vec((j) => f[j] ?? 0) });
+  const world = (code: string, prefCode: string, base: Pop): Area => ({
+    code,
+    name: `area${code}`,
+    prefCode,
+    prefName: `pref${prefCode}`,
+    kind: 'city',
+    base,
+    official: { 2025: 0, 2030: 0, 2035: 0, 2040: 0, 2045: 0, 2050: 0 },
+    assumptions: null,
+  });
+  const areas = [
+    // distinct count in every class and sex: M = 1..20, F = 100..2000
+    world('01001', '01', { M: vec((j) => j + 1), F: vec((j) => 100 * (j + 1)) }),
+    // fractional people, 0.4 in each group: every group rounds to 0 while the total rounds to 1
+    world('02001', '02', sparse({ 0: 0.4, 3: 0.4, 13: 0.4 }, {})),
+    // 308 children (12.32%), 1,883 working (75.32%), 309 aged 65+ (12.36%): one-decimal rounding of the shares
+    world('03001', '03', sparse({ 1: 300, 5: 1000, 13: 9 }, { 2: 8, 12: 883, 19: 300 })),
+    // nobody
+    world('04001', '04', sparse({}, {})),
+    // two areas of one prefecture, one person in each place next to a boundary (2|3, 12|13) and at both ends
+    world('05001', '05', sparse({ 2: 10, 12: 30 }, { 3: 20, 13: 40 })),
+    world('05002', '05', sparse({ 0: 1, 19: 3 }, { 12: 2 })),
+  ];
+  const flat = (): Map<string, Series> => {
+    const out = new Map<string, Series>();
+    for (const a of areas) {
+      const series: Series = {};
+      for (let y = 2020; y <= 2100; y += 5) series[y] = a.base;
+      out.set(a.code, series);
+    }
+    return out;
+  };
+  const prefs: Record<string, string[]> = { '01': ['01001'], '02': ['02001'], '03': ['03001'], '04': ['04001'], '05': ['05001', '05002'] };
+  const synth: EngineContext = { areas, facilities: [], groups: { cities: {}, prefs }, run: flat };
+  const rowOf = (code: string, year = 2050): AgeRow => call('get_age_groups', { areaCode: code, years: [year] }, synth).rows[0];
+
+  it('class boundaries: 0-14 is classes 0-2, 15-64 is classes 3-12 and 65+ is class 13 to 95+, each sex counted', () => {
+    // M: 1+2+3 = 6, F: 100+200+300 = 600 | M: 4..13 = 85, F: 8,500 | M: 14..20 = 119, F: 11,900 | all 21,210
+    expect(rowOf('01001')).toEqual({
+      year: 2050,
+      basis: 'official',
+      total: 21_210,
+      age0to14: 606,
+      age15to64: 8_585,
+      age65plus: 12_019,
+      share0to14: 2.9, // 2.857
+      share15to64: 40.5, // 40.476
+      share65plus: 56.7, // 56.666
+    });
+    expect(rowOf('01001', 2100).age65plus).toBe(12_019);
+  });
+
+  it('the groups are rounded one by one, the way get_series rounds: they can differ from the total by one person', () => {
+    expect(rowOf('02001')).toMatchObject({ total: 1, age0to14: 0, age15to64: 0, age65plus: 0, share0to14: 33.3, share15to64: 33.3, share65plus: 33.3 });
+  });
+
+  it('shares have one decimal and round to the nearest (12.36 -> 12.4, 12.32 -> 12.3, 75.32 -> 75.3)', () => {
+    expect(rowOf('03001')).toMatchObject({
+      total: 2_500, age0to14: 308, age15to64: 1_883, age65plus: 309, share0to14: 12.3, share15to64: 75.3, share65plus: 12.4,
+    });
+    expect(call('get_series', { areaCode: '03001', years: [2050] }, synth).rows[0].ages65Share).toBe(12.4);
+  });
+
+  it('an empty population has zero shares, not NaN', () => {
+    expect(rowOf('04001')).toEqual({
+      year: 2050, basis: 'official', total: 0, age0to14: 0, age15to64: 0, age65plus: 0, share0to14: 0, share15to64: 0, share65plus: 0,
+    });
+  });
+
+  it('a prefecture adds its areas class by class, and Japan adds every area', () => {
+    // 05001: children M2 = 10; working F3 = 20, M12 = 30; 65+ F13 = 40. 05002: child M0 = 1; working F12 = 2; 65+ M19 = 3
+    expect(rowOf('05')).toMatchObject({ total: 106, age0to14: 11, age15to64: 52, age65plus: 43 });
+    expect(rowOf('05').share65plus).toBe(40.6); // 43 / 106 = 40.57
+    // Japan adds the fractions before rounding: 0.4 of a child, 0.4 working and 0.4 aged 65+ from 02001 are 1.2 people in all
+    const japan = rowOf('00');
+    expect(japan).toMatchObject({
+      total: 23_817, // 21,210 + 1.2 + 2,500 + 0 + 106 = 23,817.2
+      age0to14: 925, // 606 + 0.4 + 308 + 0 + 11 = 925.4
+      age15to64: 10_520, // 8,585 + 0.4 + 1,883 + 0 + 52 = 10,520.4
+      age65plus: 12_371, // 12,019 + 0.4 + 309 + 0 + 43 = 12,371.4
+    });
+  });
+});
+
 describe('robustness', () => {
   const garbage: unknown[] = [
     undefined, null, 0, 1, NaN, '', 'x', '田辺', true, [], [1, 2], {}, { areaCode: null }, { areaCode: {} }, { areaCode: [] },
@@ -1182,6 +1445,7 @@ describe('robustness', () => {
       call('run_allocation', wakayamaTarget()),
       call('find_similar_now', { areaCode: TANABE, year: 2100 }),
       call('count_areas', { year: 2100, below: 3000 }),
+      call('get_age_groups', { areaCode: TANABE }),
     ];
     for (const r of results) {
       const s = JSON.stringify(r);

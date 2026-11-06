@@ -32,6 +32,9 @@ const YEAR = {
   description: '2020〜2100年。5の倍数でない年は直前の5の倍数に切り下げ、結果に使った年が入る',
 };
 
+/** The years of get_series and get_age_groups: a list of up to MAX_YEARS, the same validation in tools.ts for both. */
+const YEARS = { type: 'array', items: YEAR, maxItems: MAX_YEARS, description: '知りたい年（省くと代表的な7つの年）' };
+
 const SCENARIO = {
   type: 'object',
   description: '2050年より後の前提。省いた項目は標準。2050年までは前提によらず同じ',
@@ -69,7 +72,7 @@ export const TOOL_DEFS: ToolDef[] = [
       type: 'object',
       properties: {
         areaCode: AREA_CODE,
-        years: { type: 'array', items: YEAR, maxItems: MAX_YEARS, description: '知りたい年（省くと代表的な7つの年）' },
+        years: YEARS,
         scenario: SCENARIO,
       },
       required: ['areaCode'],
@@ -166,6 +169,21 @@ export const TOOL_DEFS: ToolDef[] = [
         scenario: SCENARIO,
       },
       required: ['year'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'get_age_groups',
+    description:
+      '地域の年齢3区分の人口を年ごとに返す。0〜14歳（子ども）、15〜64歳、65歳以上の人数と、総人口に対する割合（%）、数字の根拠（official=社人研の公式推計、app_estimate=2050年より後のこのアプリの試算）。「子どもの数」「高齢者の割合」に使う。years を省くと2020・2030・2040・2050・2060・2075・2100年。scenario で前提を変えられる。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        areaCode: AREA_CODE,
+        years: YEARS,
+        scenario: SCENARIO,
+      },
+      required: ['areaCode'],
       additionalProperties: false,
     },
   },

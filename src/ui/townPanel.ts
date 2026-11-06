@@ -5,7 +5,7 @@
 // The panel is built once. A store notification only changes the parts whose inputs changed: the selection rebuilds the
 // lines and the facility rows' owner, a new year rewrites the tiles, the pyramid, the facility tags and moves the
 // chart's marker, and a new scenario (a new `series`) redraws the lines. `mountTownPanel` returns its teardown.
-import { ages65, sumSeries, total } from '../engine/aggregate';
+import { ageGroups, sumSeries, total } from '../engine/aggregate';
 import { DEFAULT_SCENARIO, type Area, type Pop, type Series } from '../engine/types';
 import type { AppData } from '../data/loader';
 import { allocationView, overlayCovers, placeNumbers } from './allocationView';
@@ -36,8 +36,7 @@ export interface AgeShares {
 /** Total and age-group shares of a population; the shares are NaN for an empty population. */
 export function ageShares(p: Pop): AgeShares {
   const all = total(p);
-  const child = p.M.slice(0, 3).reduce((s, v) => s + v, 0) + p.F.slice(0, 3).reduce((s, v) => s + v, 0);
-  const elderly = ages65(p);
+  const { age0to14: child, age65plus: elderly } = ageGroups(p);
   if (!(all > 0)) return { total: all, child: NaN, working: NaN, elderly: NaN };
   return { total: all, child: child / all, working: (all - child - elderly) / all, elderly: elderly / all };
 }

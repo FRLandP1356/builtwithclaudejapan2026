@@ -66,6 +66,16 @@ describe('ageShares', () => {
     expect(s.elderly).toBeGreaterThan(0.2);
   });
 
+  test('uses the engine age groups (0-14 = classes 0-2, 65+ = class 13 and above), the same split the AI tool get_age_groups returns', () => {
+    // M = 1..20 and F = 100..2000 by class: the groups are 606, 8,585 and 12,019 of 21,210
+    const p = { M: Array.from({ length: 20 }, (_, j) => j + 1), F: Array.from({ length: 20 }, (_, j) => 100 * (j + 1)) };
+    const s = ageShares(p);
+    expect(s.total).toBe(21_210);
+    expect(s.child).toBeCloseTo(606 / 21_210, 12);
+    expect(s.working).toBeCloseTo(8_585 / 21_210, 12);
+    expect(s.elderly).toBeCloseTo(12_019 / 21_210, 12);
+  });
+
   test('an empty population has NaN shares instead of dividing by zero', () => {
     const z = { M: new Array(20).fill(0), F: new Array(20).fill(0) };
     expect(Number.isNaN(ageShares(z).elderly)).toBe(true);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ages65, sumSeries, total } from './aggregate';
+import { ageGroups, ages65, FIRST_65_PLUS, FIRST_WORKING_AGE, sumSeries, total } from './aggregate';
 import type { Pop, Series } from './types';
 
 function pop(m: number, f: number): Pop {
@@ -18,6 +18,33 @@ describe('aggregate', () => {
     p.F[19] = 2; // 95+
     p.F[15] = 3;
     expect(ages65(p)).toBe(6);
+  });
+
+  it('ageGroups: 0-14 is classes 0-2, 15-64 is classes 3-12, 65+ is class 13 to 95+; both sexes, every class counted once', () => {
+    // M = 1..20 and F = 100..2000 by class: every class has its own count, so a boundary one class off changes a group
+    const p: Pop = { M: Array.from({ length: 20 }, (_, j) => j + 1), F: Array.from({ length: 20 }, (_, j) => 100 * (j + 1)) };
+    expect(ageGroups(p)).toEqual({ age0to14: 6 + 600, age15to64: 85 + 8_500, age65plus: 119 + 11_900 });
+    expect(FIRST_WORKING_AGE).toBe(3);
+    expect(FIRST_65_PLUS).toBe(13);
+    const g = ageGroups(p);
+    expect(g.age0to14 + g.age15to64 + g.age65plus).toBe(total(p));
+    expect(g.age65plus).toBe(ages65(p));
+  });
+
+  it('ageGroups: a single person at each side of the two boundaries lands in the right group', () => {
+    const at = (cls: number, sex: 'M' | 'F'): Pop => {
+      const p = pop(0, 0);
+      p[sex][cls] = 1;
+      return p;
+    };
+    for (const sex of ['M', 'F'] as const) {
+      expect(ageGroups(at(2, sex))).toEqual({ age0to14: 1, age15to64: 0, age65plus: 0 }); // 10-14
+      expect(ageGroups(at(3, sex))).toEqual({ age0to14: 0, age15to64: 1, age65plus: 0 }); // 15-19
+      expect(ageGroups(at(12, sex))).toEqual({ age0to14: 0, age15to64: 1, age65plus: 0 }); // 60-64
+      expect(ageGroups(at(13, sex))).toEqual({ age0to14: 0, age15to64: 0, age65plus: 1 }); // 65-69
+      expect(ageGroups(at(19, sex))).toEqual({ age0to14: 0, age15to64: 0, age65plus: 1 }); // 95+
+      expect(ageGroups(at(0, sex))).toEqual({ age0to14: 1, age15to64: 0, age65plus: 0 }); // 0-4
+    }
   });
 
   it('sumSeries adds series year by year, per class', () => {

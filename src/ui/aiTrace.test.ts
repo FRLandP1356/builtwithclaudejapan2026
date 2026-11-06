@@ -53,6 +53,7 @@ describe('toolLabel', () => {
     expect(toolLabel('run_allocation')).toBe('人口の割り振りを計算する');
     expect(toolLabel('find_similar_now')).toBe('似た町をさがす');
     expect(toolLabel('count_areas')).toBe('町の数を数える');
+    expect(toolLabel('get_age_groups')).toBe('年齢別の人口を取る');
   });
 
   it('falls back to a plain label for a name it does not know, keeping the name as text', () => {
@@ -185,7 +186,7 @@ describe('scenarioOffers', () => {
   });
 
   it('looks at every tool that takes a scenario, and only those', () => {
-    for (const tool of ['run_projection', 'get_series', 'compare_sources', 'facility_check', 'find_similar_now', 'count_areas', 'run_allocation']) {
+    for (const tool of ['run_projection', 'get_series', 'compare_sources', 'facility_check', 'find_similar_now', 'count_areas', 'run_allocation', 'get_age_groups']) {
       expect(scenarioOffers([item(tool, { scenario: { migScale: 0.5 } })]), tool).toEqual([{ cwrMult: 1, migMode: 'hold', migScale: 0.5, infraStrength: 0 }]);
     }
     expect(scenarioOffers([item('find_area', { query: 'x', scenario: { migScale: 0.5 } })])).toEqual([]);
@@ -433,6 +434,7 @@ describe('traceUsesEstimate', () => {
   it('is true when a result is marked as this app\'s estimate or reaches past 2050', () => {
     expect(traceUsesEstimate([item('get_series', {}, { rows: [{ year: 2100, basis: 'app_estimate' }] })])).toBe(true);
     expect(traceUsesEstimate([item('count_areas', {}, { year: 2100, count: 3 })])).toBe(true);
+    expect(traceUsesEstimate([item('get_age_groups', {}, { rows: [{ year: 2055, basis: 'app_estimate', total: 100 }] })])).toBe(true);
     expect(traceUsesEstimate([item('compare_sources', {}, { appEstimate: [{ year: 2060, basis: 'app_estimate' }] })])).toBe(true);
   });
 
