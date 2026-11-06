@@ -18,10 +18,12 @@ import './landmarks.css';
 // Wording (pure)
 // ---------------------------------------------------------------------------------------------------------------
 
-export const LANDMARKS_TITLE_PREF = 'この県にある有名なものの例';
+/** 「県」では北海道・東京都・大阪府・京都府に合わない: the title names the kind of place without naming it. */
+export const LANDMARKS_TITLE_PREF = 'この都道府県にある有名なものの例';
 export const LANDMARKS_TITLE_AREA = 'この町にある有名なものの例';
 /** Under the list: what the list is and what it is not. */
-export const LANDMARKS_NOTE = '完全な一覧ではありません。人口の目安を下回るかどうかとは関係なく、そこにあるものを示しています。';
+export const LANDMARKS_NOTE =
+  '完全な一覧ではありません。人口の目安を下回るかどうかとは関係なく、そこにあるものを示しています。各施設や団体の計画・意向とは関係なく、協力や公認を受けたものでもありません。';
 export const LANDMARKS_SOURCE = '出典：';
 /** Read-aloud suffix of the town's button: 「田辺市を選ぶ」. */
 export const LANDMARKS_SELECT = 'を選ぶ';

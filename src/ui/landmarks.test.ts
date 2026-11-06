@@ -23,12 +23,14 @@ describe('titles', () => {
     expect(landmarksTitle('pref')).toBe(LANDMARKS_TITLE_PREF);
     expect(landmarksTitle('area')).toBe(LANDMARKS_TITLE_AREA);
     expect(landmarksTitle('japan')).toBeUndefined();
-    expect(LANDMARKS_TITLE_PREF).toBe('この県にある有名なものの例');
+    expect(LANDMARKS_TITLE_PREF).toBe('この都道府県にある有名なものの例');
     expect(LANDMARKS_TITLE_AREA).toBe('この町にある有名なものの例');
   });
 
   test('the note says what the list is and what it is not, and nothing about what comes next', () => {
-    expect(LANDMARKS_NOTE).toBe('完全な一覧ではありません。人口の目安を下回るかどうかとは関係なく、そこにあるものを示しています。');
+    expect(LANDMARKS_NOTE).toBe(
+      '完全な一覧ではありません。人口の目安を下回るかどうかとは関係なく、そこにあるものを示しています。各施設や団体の計画・意向とは関係なく、協力や公認を受けたものでもありません。',
+    );
   });
 });
 
