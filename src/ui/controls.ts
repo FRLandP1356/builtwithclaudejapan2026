@@ -117,7 +117,7 @@ const EFFECT_YEAR = 2100;
 const LIMITS = SCENARIO_LIMITS;
 
 const TEMPLATE = `
-  <p class="panel-lead">2050年までの数字は、社人研の公式推計のまま変わりません。ここで変えるのは、2050年より後の計算に使う前提です。</p>
+  <p class="panel-lead">2050年までの数字は、国立社会保障・人口問題研究所の公式推計のまま変わりません。ここで変えるのは、2050年より後の計算に使う前提です。</p>
   <div class="controls-groups">
     <div class="field" data-group="birth">
       <label class="field-label" for="ctl-cwr"><span>子どもの生まれやすさ</span><span class="field-value" id="ctl-cwr-value"></span></label>

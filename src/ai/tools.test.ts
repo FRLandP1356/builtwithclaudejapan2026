@@ -490,7 +490,7 @@ describe('compare_sources', () => {
     const { note } = call('compare_sources', { areaCode: TANABE });
     expect(note).toMatch(/2050/);
     expect(note).toMatch(/数人/);
-    expect(note).toMatch(/社人研/);
+    expect(note).toMatch(/国立社会保障・人口問題研究所/);
   });
 
   it('an optional scenario changes only the app-estimate years', () => {

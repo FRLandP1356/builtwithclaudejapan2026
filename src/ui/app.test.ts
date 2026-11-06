@@ -250,8 +250,8 @@ describe('footer attribution', () => {
     const { root } = await mount();
     const [population] = [...root.querySelectorAll('.app-foot dl dd')];
     expect(population.querySelector('.src-text')!.textContent).toBe(SOURCES[0].text);
-    expect(population.querySelector('.src-text')!.textContent).toContain('を加工して作成（公共データ利用規約 第1.0版（PDL1.0））。社人研がこのアプリの内容を保証するものではありません');
-    expect([...population.querySelectorAll('.src-text .keep')].at(-1)!.textContent).toBe('社人研がこのアプリの内容を保証するものではありません'); // its own phrase after the 。
+    expect(population.querySelector('.src-text')!.textContent).toContain('を加工して作成（公共データ利用規約 第1.0版（PDL1.0））。国立社会保障・人口問題研究所がこのアプリの内容を保証するものではありません');
+    expect([...population.querySelectorAll('.src-text .keep')].at(-1)!.textContent).toBe('国立社会保障・人口問題研究所がこのアプリの内容を保証するものではありません'); // its own phrase after the 。
   });
 
   test('the facility line says 加工して作成 and the boundary line keeps the approval number, last', async () => {

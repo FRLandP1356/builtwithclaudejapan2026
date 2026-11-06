@@ -183,7 +183,7 @@ describe('mountControls', () => {
     expect(q('.panel-title').textContent).toContain('前提を変える');
     expect(q('.panel-title .badge-estimate').textContent).toBe('試算');
     expect(q('.panel-lead').textContent).toBe(
-      '2050年までの数字は、社人研の公式推計のまま変わりません。ここで変えるのは、2050年より後の計算に使う前提です。',
+      '2050年までの数字は、国立社会保障・人口問題研究所の公式推計のまま変わりません。ここで変えるのは、2050年より後の計算に使う前提です。',
     );
   });
 

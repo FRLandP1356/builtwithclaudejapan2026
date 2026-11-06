@@ -21,32 +21,32 @@
 
   /* Map colours (src/map/colors.ts is the source of truth; these mirror it for tags and legends). */
   --map-neutral: #d0c9c4;
-  /* Population relative to 2020, nine classes palest (fewest remain) to darkest (grew): --accent mixed into --paper
-     in OKLab at 12 / 24.6 / 37.1 / 49.7 / 62.3 / 74.9 / 87.4 / 100 / 115 %, even steps of 0.07 in OKLab lightness.
-     Mirrors CHANGE_COLORS in src/map/colors.ts. */
-  --change-1: #dce0e2;
-  --change-2: #c1c9d4;
-  --change-3: #a6b4c6;
-  --change-4: #8c9eb8;
-  --change-5: #7389a9;
-  --change-6: #5b759b;
-  --change-7: #43608d;
+  /* Population relative to 2020, nine classes palest (fewest remain: no colour, white) to darkest (grew): --accent
+     mixed into white in OKLab at 0 / 14.3 / 28.6 / 42.9 / 57.1 / 71.4 / 85.7 / 100 / 120 %, even steps of 0.083 in OKLab
+     lightness. Mirrors CHANGE_COLORS in src/map/colors.ts. */
+  --change-1: #ffffff;
+  --change-2: #dee4ed;
+  --change-3: #bec9da;
+  --change-4: #9fafc8;
+  --change-5: #8196b5;
+  --change-6: #637da3;
+  --change-7: #476490;
   --change-8: #2b4c7e;
-  --change-9: #0d346c;
+  --change-9: #012a64;
   /* Allocation overlay (change in percent): the diverging rust / blue scale around the neutral. */
   --decline: #a43d2b;
   --decline-deep: #721d14;
   --decline-soft: #f2ddd6;
   --growth: #376daf;
   --growth-soft: #dde6f2;
-  /* Support ratio (people aged 15-64 per person aged 65+), six classes fewest (near black) to most (greyed paper):
-     #14181f mixed into --paper in OKLab at 100 / 83 / 66 / 49 / 32 / 15 %. Mirrors SUPPORT_COLORS in src/map/colors.ts. */
+  /* Support ratio (people aged 15-64 per person aged 65+), six classes fewest (near black) to most (white, no colour):
+     #14181f mixed into white in OKLab at 100 / 80 / 60 / 40 / 20 / 0 %. Mirrors SUPPORT_COLORS in src/map/colors.ts. */
   --support-1: #14181f;
-  --support-2: #34383d;
-  --support-3: #575a5e;
-  --support-4: #7d7f82;
-  --support-5: #a5a7a6;
-  --support-6: #cfd0cd;
+  --support-2: #3b3f45;
+  --support-3: #676a70;
+  --support-4: #97999d;
+  --support-5: #cacbcd;
+  --support-6: #ffffff;
   --map-sea: var(--paper);
   --map-border: var(--paper);
   --map-coast: var(--line-2);

@@ -55,6 +55,7 @@ const contrast = (a: string, b: string) => {
   return (x + 0.05) / (y + 0.05);
 };
 const PAPER = '#f6f5f0';
+const WHITE = '#ffffff';
 const ACCENT = '#2b4c7e';
 const theme = readFileSync(repoPath('src/ui/theme.css'), 'utf8');
 
@@ -109,27 +110,31 @@ describe('changeClass and changeColor (population relative to 2020)', () => {
     expect(theme).toMatch(new RegExp(`--map-neutral:\\s*${MAP_NEUTRAL};`));
   });
 
-  test('the colours are the accent mixed into the paper in OKLab: 12 .. 100 % in even steps, then 115 % for "grew"', () => {
-    const p = oklab(PAPER);
+  test('the colours are the accent mixed into white in OKLab: 0 .. 100 % in even sevenths, then 120 % for "grew"', () => {
+    const w = oklab(WHITE);
     const a = oklab(ACCENT);
-    const shares = [0.12, 0.246, 0.371, 0.497, 0.623, 0.749, 0.874, 1, 1.15];
+    const shares = [0, 1 / 7, 2 / 7, 3 / 7, 4 / 7, 5 / 7, 6 / 7, 1, 1.2];
     shares.forEach((share, k) => {
-      const want = p.map((v, i) => v + (a[i] - v) * share);
+      const want = w.map((v, i) => v + (a[i] - v) * share);
       const got = oklab(CHANGE_COLORS[k]);
       const dE = Math.hypot(...got.map((v, i) => v - want[i]));
       expect(dE, `class ${k + 1}`).toBeLessThan(0.004); // within the 8-bit rounding of the hex
     });
+    expect(CHANGE_COLORS[0]).toBe(WHITE); // the fewest remain: no colour at all
     expect(CHANGE_COLORS[7]).toBe(ACCENT); // "same as 2020" is the app's accent itself
   });
 
-  test('neighbouring classes can be told apart, the palest is almost paper but not paper, the darkest is dark', () => {
+  test('the range is wide (white to a deep indigo), neighbouring classes can be told apart, and no class is the paper', () => {
     for (let k = 1; k < CHANGE_COLORS.length; k++) {
-      expect(oklab(CHANGE_COLORS[k - 1])[0] - oklab(CHANGE_COLORS[k])[0], `ΔL ${k}`).toBeGreaterThanOrEqual(0.065);
-      expect(contrast(CHANGE_COLORS[k - 1], CHANGE_COLORS[k]), `contrast ${k}`).toBeGreaterThanOrEqual(1.25);
+      expect(oklab(CHANGE_COLORS[k - 1])[0] - oklab(CHANGE_COLORS[k])[0], `ΔL ${k}`).toBeGreaterThanOrEqual(0.08);
+      expect(contrast(CHANGE_COLORS[k - 1], CHANGE_COLORS[k]), `contrast ${k}`).toBeGreaterThanOrEqual(1.27);
     }
-    expect(contrast(CHANGE_COLORS[0], PAPER)).toBeGreaterThan(1.15); // a place with almost nobody left still shows
-    expect(CHANGE_COLORS[0]).not.toBe(PAPER);
-    expect(contrast(CHANGE_COLORS[8], PAPER)).toBeGreaterThan(9);
+    // the owner asked for a wider range, down to no colour: the lightness spans 1.0 .. 0.3 (it was 0.90 .. 0.33)
+    expect(oklab(CHANGE_COLORS[0])[0]).toBeCloseTo(1, 2);
+    expect(oklab(CHANGE_COLORS[8])[0]).toBeLessThan(0.31);
+    expect(oklab(CHANGE_COLORS[0])[0] - oklab(CHANGE_COLORS[8])[0]).toBeGreaterThan(0.69);
+    expect(CHANGE_COLORS[0]).not.toBe(PAPER); // white, not the paper: the land is a hair lighter than the sea
+    expect(contrast(CHANGE_COLORS[8], PAPER)).toBeGreaterThan(12);
   });
 
   test('theme.css mirrors the classes as --change-1 ... --change-9', () => {
@@ -295,24 +300,25 @@ describe('support ratio classes', () => {
     expect(contrast(SUPPORT_COLORS[0], PAPER)).toBeGreaterThan(14);
   });
 
-  test('the ramp is #14181f mixed into the paper in OKLab at 100, 83, 66, 49, 32 and 15 %', () => {
-    const p = oklab(PAPER);
+  test('the ramp is #14181f mixed into white in OKLab at 100, 80, 60, 40, 20 and 0 %', () => {
+    const w = oklab(WHITE);
     const a = oklab('#14181f');
-    [1, 0.83, 0.66, 0.49, 0.32, 0.15].forEach((share, k) => {
-      const want = p.map((v, i) => v + (a[i] - v) * share);
+    [1, 0.8, 0.6, 0.4, 0.2, 0].forEach((share, k) => {
+      const want = w.map((v, i) => v + (a[i] - v) * share);
       const got = oklab(SUPPORT_COLORS[k]);
       const dE = Math.hypot(...got.map((v, i) => v - want[i]));
       expect(dE, `step ${k + 1}`).toBeLessThan(0.004); // within the 8-bit rounding of the hex
     });
   });
 
-  test('neighbouring classes can be told apart in even steps, and the palest is not the paper', () => {
+  test('neighbouring classes can be told apart in even steps, and the palest is white, no colour', () => {
     const L = SUPPORT_COLORS.map((c) => oklab(c)[0]);
     for (let k = 1; k < L.length; k++) {
-      expect(L[k] - L[k - 1], `ΔL ${k}`).toBeGreaterThanOrEqual(0.1);
-      expect(contrast(SUPPORT_COLORS[k - 1], SUPPORT_COLORS[k]), `contrast ${k}`).toBeGreaterThanOrEqual(1.45);
+      expect(L[k] - L[k - 1], `ΔL ${k}`).toBeGreaterThanOrEqual(0.15);
+      expect(contrast(SUPPORT_COLORS[k - 1], SUPPORT_COLORS[k]), `contrast ${k}`).toBeGreaterThanOrEqual(1.6);
     }
-    expect(contrast(SUPPORT_COLORS[5], PAPER)).toBeGreaterThanOrEqual(1.35); // a greyed paper, never the sea
+    expect(SUPPORT_COLORS[5]).toBe(WHITE); // the easiest places have no colour at all
+    expect(SUPPORT_COLORS[5]).not.toBe(SUPPORT_NO_DATA); // and no data is a different, tinted grey
     // a grey ramp: every class has almost no chroma
     for (const c of SUPPORT_COLORS) {
       const [, x, y] = oklab(c);

@@ -68,13 +68,13 @@ describe('SOURCES: the footer attributions', () => {
     expect(SOURCES).toEqual([
       {
         label: '人口',
-        text: '国立社会保障・人口問題研究所「日本の地域別将来推計人口（令和5年推計）」を加工して作成（公共データ利用規約 第1.0版（PDL1.0））。社人研がこのアプリの内容を保証するものではありません',
+        text: '国立社会保障・人口問題研究所「日本の地域別将来推計人口（令和5年推計）」を加工して作成（公共データ利用規約 第1.0版（PDL1.0））。国立社会保障・人口問題研究所がこのアプリの内容を保証するものではありません',
         url: 'https://www.ipss.go.jp/pp-shicyoson/j/shicyoson23/t-page.asp',
         retrieved: '2026年11月5日',
       },
       {
         label: '境界',
-        text: '国土交通省「国土数値情報（行政区域データ）」（2021年版）を加工して作成（簡略化と社人研の地域に合わせた結合。国が作成した地図ではありません）',
+        text: '国土交通省「国土数値情報（行政区域データ）」（2021年版）を加工して作成（簡略化と国立社会保障・人口問題研究所の地域に合わせた結合。国が作成した地図ではありません）',
         url: 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2021.html',
         retrieved: '2026年11月5日',
         approval: '測量法に基づく国土地理院長承認（複製）R2JHf 450',
@@ -112,6 +112,6 @@ describe('SOURCES: the footer attributions', () => {
     expect(SOURCES[3].text).toContain('実績');
     expect(SOURCES[4].text).toContain('令和5年度');
     // docs/sources.md ("画面と README の出典の書き方"): the IPSS line says the institute does not vouch for this app
-    expect(SOURCES[0].text.endsWith('。社人研がこのアプリの内容を保証するものではありません')).toBe(true);
+    expect(SOURCES[0].text.endsWith('。国立社会保障・人口問題研究所がこのアプリの内容を保証するものではありません')).toBe(true);
   });
 });

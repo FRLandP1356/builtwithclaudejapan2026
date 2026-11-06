@@ -202,7 +202,7 @@ describe('mountTownPanel: updates only what changed', () => {
     const note = q('.series-figure .chart-table .chart-table-note')!;
     expect(note.textContent).toBe(TABLE_NOTE);
     expect(note.classList.contains('note')).toBe(true);
-    expect(note.textContent).toContain('社人研が発表した値');
+    expect(note.textContent).toContain('国立社会保障・人口問題研究所が発表した値');
     expect(note.textContent).toContain('公表された仮定から公式の方法で計算し直しています');
     expect(note.textContent).toContain('町では数人、都道府県では数十人ほど違うことがあります');
     expect(note.textContent).not.toContain('予測');
@@ -927,7 +927,7 @@ describe('the support ratio chart', () => {
     expect(rows.get(2100)).toEqual(['－', '0.80']);
     for (const [y, cells] of rows) expect(cells.find((c) => c !== '－'), String(y)).toBe(r(y).toFixed(2));
     const note = details.querySelector('.note.chart-table-note')!;
-    expect(note.textContent).toBe('15〜64歳の人数を65歳以上の人数で割った値です。公式推計の列も、社人研の発表値ではなく、このアプリが公式の方法で計算し直した年齢別の人口から求めています。');
+    expect(note.textContent).toBe('15〜64歳の人数を65歳以上の人数で割った値です。公式推計の列も、国立社会保障・人口問題研究所の発表値ではなく、このアプリが公式の方法で計算し直した年齢別の人口から求めています。');
   });
 
   test('points sit at ratio / axis maximum of the way up from the zero gridline, and the marker dot on the line', () => {

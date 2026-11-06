@@ -12,7 +12,7 @@ export const SUPPORT_DEFINITION = '15〜64歳の人数 ÷ 65歳以上の人数';
 
 /** Under the ratio's data table: what the numbers are, and that up to 2050 they are this app's recomputation too. */
 export const SUPPORT_TABLE_NOTE =
-  '15〜64歳の人数を65歳以上の人数で割った値です。公式推計の列も、社人研の発表値ではなく、このアプリが公式の方法で計算し直した年齢別の人口から求めています。';
+  '15〜64歳の人数を65歳以上の人数で割った値です。公式推計の列も、国立社会保障・人口問題研究所の発表値ではなく、このアプリが公式の方法で計算し直した年齢別の人口から求めています。';
 
 /** The ratio over the years, drawn by the population chart's view (same lines, legend, summary and table). */
 export const SUPPORT_CHART: SeriesChartSpec = {

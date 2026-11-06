@@ -59,6 +59,14 @@ describe('app.css: the rules that behaviour depends on', () => {
     expect(css).toMatch(/@media \(min-width: 1024px\) \{[^@]*?\.app-nav-summary \{\s*display:\s*none;\s*\}/); // ...and not on a desktop
   });
 
+  test('both colour maps draw their borders and coast in translucent ink (their palest class is white), and the legend bar keeps an edge', () => {
+    for (const mode of ['ratio', 'support']) {
+      expect(declarations(`.map-column:has(.legend[data-mode='${mode}']) .mesh`), mode).toMatch(/stroke:\s*var\(--map-line-pale\)/);
+      expect(declarations(`.map-column:has(.legend[data-mode='${mode}']) .coast`), mode).toMatch(/stroke:\s*var\(--map-line-pale\)/);
+    }
+    expect(declarations('.legend-bar')).toMatch(/box-shadow:\s*0 0 0 1px var\(--line-2\)/);
+  });
+
   test('the whole card is the link on a desktop, a focused item shows a ring, and every name keeps a 44px touch row on a phone', () => {
     expect(css).toMatch(/\.app-nav-item::after \{[^}]*content:\s*''[^}]*position:\s*absolute[^}]*inset:/);
     expect(declarations('.app-nav-card')).toMatch(/position:\s*relative/);

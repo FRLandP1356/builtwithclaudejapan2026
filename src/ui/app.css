@@ -434,10 +434,13 @@
   stroke-linejoin: round;
   pointer-events: none;
 }
-/* The population map (legend in its ratio mode): its palest classes are almost paper, so the paper borders and the
-   light coast would vanish there; a translucent ink line stays visible on every class. */
+/* The population map and the support-ratio map (legend in its ratio or support mode): their palest class is white (no
+   colour), so the paper borders and the light coast would vanish there; a translucent ink line stays visible on every
+   class. */
 .map-column:has(.legend[data-mode='ratio']) .mesh,
-.map-column:has(.legend[data-mode='ratio']) .coast {
+.map-column:has(.legend[data-mode='ratio']) .coast,
+.map-column:has(.legend[data-mode='support']) .mesh,
+.map-column:has(.legend[data-mode='support']) .coast {
   stroke: var(--map-line-pale);
 }
 .ring {
@@ -619,6 +622,7 @@
   height: 14px;
   margin-top: var(--sp-2);
   border-radius: 2px;
+  box-shadow: 0 0 0 1px var(--line-2); /* the palest block is white, almost the paper: the bar keeps its edge */
 }
 /* Tall enough for the labels that drop a row (the 増えた所は一番濃い end label: a 26px tick line, its gap and a 21px text
    line), so nothing hangs out of the box into the year block below, and the row-2 label sits clear of 「同じ」 above it. */
@@ -915,7 +919,7 @@
 .app-foot .src-approval {
   display: block;
 }
-/* A phrase longer than the line (社人研がこのアプリの内容を保証するものではありません) wraps at word boundaries in browsers that
+/* A phrase longer than the line (国立社会保障・人口問題研究所がこのアプリの内容を保証するものではありません) wraps at word boundaries in browsers that
    know Japanese phrases (Chromium), not in the middle of 「ありません」. Others fall back to breaking anywhere in it. */
 .app-foot .src-text {
   word-break: auto-phrase;

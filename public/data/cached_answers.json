@@ -4,7 +4,7 @@
     {
       "id": "q1",
       "question": "日本の人口が減り出してから、東京はどうなっていますか？",
-      "answer": "社人研の公式推計では、日本全体の人口は2020年の約1億2,615万人から2050年には約1億469万人（17%減）になります。一方、東京都は少し増えます。\n\n東京都（公式推計）\n- 2020年：14,047,594人（65歳以上は22.7%）\n- 2030年：14,348,575人（2020年比で2.1%増）\n- 2040年：14,507,390人（3.3%増、65歳以上は27.3%）\n- 2050年：14,399,111人（2.5%増、65歳以上は29.6%）\n\n2050年より後は、このアプリの試算です。\n- 2075年：13,223,057人（2020年比で5.9%減）\n- 2100年：11,897,838人（15.3%減、65歳以上は30.7%）\n\n2050年ごろまでは人口が保たれますが、高齢化は進みます。その後は、このアプリの試算では緩やかに減ります。ただし、日本全体の減り方よりは小さいです。",
+      "answer": "国立社会保障・人口問題研究所の公式推計では、日本全体の人口は2020年の約1億2,615万人から2050年には約1億469万人（17%減）になります。一方、東京都は少し増えます。\n\n東京都（公式推計）\n- 2020年：14,047,594人（65歳以上は22.7%）\n- 2030年：14,348,575人（2020年比で2.1%増）\n- 2040年：14,507,390人（3.3%増、65歳以上は27.3%）\n- 2050年：14,399,111人（2.5%増、65歳以上は29.6%）\n\n2050年より後は、このアプリの試算です。\n- 2075年：13,223,057人（2020年比で5.9%減）\n- 2100年：11,897,838人（15.3%減、65歳以上は30.7%）\n\n2050年ごろまでは人口が保たれますが、高齢化は進みます。その後は、このアプリの試算では緩やかに減ります。ただし、日本全体の減り方よりは小さいです。",
       "trace": [
         {
           "tool": "find_area",
@@ -158,12 +158,12 @@
       ],
       "status": "verified",
       "generatedAt": "2026-11-06T00:40:51.010Z",
-      "note": "Made by the real model (claude-sonnet-5-5) through the deployed Worker with scripts/ai_live_check.ts; every number was found in the tool results. Read and approved by the owner on 2026-11-06 09:47 JST."
+      "note": "Made by the real model (claude-sonnet-5-5) through the deployed Worker with scripts/ai_live_check.ts; every number was found in the tool results. Read and approved by the owner on 2026-11-06 09:47 JST. On 2026-11-06 (evening) the abbreviation 社人研 in the text was written out as 国立社会保障・人口問題研究所 at the owner's instruction (wording only; no number or sentence changed)."
     },
     {
       "id": "q2",
       "question": "田辺市の2100年の人口は何人くらいで、65歳以上は何割ですか？",
-      "answer": "和歌山県の田辺市について、標準の前提で見た結果です。\n\n- 2100年の「このアプリの試算」では、人口は11,880人、65歳以上は6,125人で、割合は51.6%です。\n- 2020年は69,870人で、65歳以上は34%でした。\n- 2050年は社人研の公式推計で42,311人、65歳以上は48.8%です。\n\n2050年より後の数字は予測ではなく、このアプリの試算です。",
+      "answer": "和歌山県の田辺市について、標準の前提で見た結果です。\n\n- 2100年の「このアプリの試算」では、人口は11,880人、65歳以上は6,125人で、割合は51.6%です。\n- 2020年は69,870人で、65歳以上は34%でした。\n- 2050年は国立社会保障・人口問題研究所の公式推計で42,311人、65歳以上は48.8%です。\n\n2050年より後の数字は予測ではなく、このアプリの試算です。",
       "trace": [
         {
           "tool": "find_area",
@@ -240,7 +240,7 @@
       ],
       "status": "verified",
       "generatedAt": "2026-11-06T00:41:15.247Z",
-      "note": "Made by the real model (claude-sonnet-5-5) through the deployed Worker with scripts/ai_live_check.ts; every number was found in the tool results. Read and approved by the owner on 2026-11-06 09:47 JST. Known: it names 42,311 as the official 2050 figure for 田辺市; the IPSS table says 42,309."
+      "note": "Made by the real model (claude-sonnet-5-5) through the deployed Worker with scripts/ai_live_check.ts; every number was found in the tool results. Read and approved by the owner on 2026-11-06 09:47 JST. Known: it names 42,311 as the official 2050 figure for 田辺市; the IPSS table says 42,309. On 2026-11-06 (evening) the abbreviation 社人研 in the text was written out as 国立社会保障・人口問題研究所 at the owner's instruction (wording only; no number or sentence changed)."
     },
     {
       "id": "q3",
@@ -629,7 +629,7 @@
     {
       "id": "q4",
       "question": "人口が3,000人を下回る町は、2100年に何町ありますか？",
-      "answer": "このアプリの試算（標準の前提）では、2100年に人口が3,000人を下回る市区町村は730件です。対象の市区町村は全部で1,884件です。\n\nこの数には町だけでなく、村や市、区も含まれます。町村だけに絞った件数は、このアプリでは分かりません。\n\n人口が特に少ない例は次のとおりです。\n- 黒滝村（奈良県）：14人\n- 笠置町（京都府）：16人\n- 御杖村（奈良県）：21人\n- 南牧村（群馬県）：22人\n- 曽爾村（奈良県）：29人\n\n2050年より後の数字は社人研の公式推計ではなく、このアプリの試算です。出生や人口移動の前提を変えると件数も変わります。",
+      "answer": "このアプリの試算（標準の前提）では、2100年に人口が3,000人を下回る市区町村は730件です。対象の市区町村は全部で1,884件です。\n\nこの数には町だけでなく、村や市、区も含まれます。町村だけに絞った件数は、このアプリでは分かりません。\n\n人口が特に少ない例は次のとおりです。\n- 黒滝村（奈良県）：14人\n- 笠置町（京都府）：16人\n- 御杖村（奈良県）：21人\n- 南牧村（群馬県）：22人\n- 曽爾村（奈良県）：29人\n\n2050年より後の数字は国立社会保障・人口問題研究所の公式推計ではなく、このアプリの試算です。出生や人口移動の前提を変えると件数も変わります。",
       "trace": [
         {
           "tool": "count_areas",
@@ -685,16 +685,16 @@
       ],
       "status": "verified",
       "generatedAt": "2026-11-06T00:41:50.800Z",
-      "note": "Made by the real model (claude-sonnet-5-5) through the deployed Worker with scripts/ai_live_check.ts; every number was found in the tool results. Read and approved by the owner on 2026-11-06 09:47 JST."
+      "note": "Made by the real model (claude-sonnet-5-5) through the deployed Worker with scripts/ai_live_check.ts; every number was found in the tool results. Read and approved by the owner on 2026-11-06 09:47 JST. On 2026-11-06 (evening) the abbreviation 社人研 in the text was written out as 国立社会保障・人口問題研究所 at the owner's instruction (wording only; no number or sentence changed)."
     },
     {
       "id": "q5",
       "question": "公式の推計と、このアプリの試算は、どう違いますか？",
-      "answer": "違いは、数字のもとになっている計算と、対象の年です。\n\n- 公式の推計は、国立社会保障・人口問題研究所（社人研）が出しているものです。市区町村別では2025年から2050年までです。\n- このアプリの試算は、2050年より後（2055年から2100年まで、5年刻み）の数字です。社人研の市区町村別の推計は2050年までなので、その先をこのアプリが独自に計算しています。予測ではなく、前提を置いた試算です。\n- 試算では、子ども女性比、人口移動の強さや続き方、必須の施設が人口の目安を下回ったときの転出の強さなどの前提を変えられます。前提を変えても、2050年までの数字は変わりません。\n- 2050年までの範囲で、公式の推計とアプリの計算がどれだけ合っているかも確かめられます。\n\n気になる自治体があれば名前を教えてください。公式の推計とこのアプリの数字を並べてお見せします。",
+      "answer": "違いは、数字のもとになっている計算と、対象の年です。\n\n- 公式の推計は、国立社会保障・人口問題研究所が出しているものです。市区町村別では2025年から2050年までです。\n- このアプリの試算は、2050年より後（2055年から2100年まで、5年刻み）の数字です。国立社会保障・人口問題研究所の市区町村別の推計は2050年までなので、その先をこのアプリが独自に計算しています。予測ではなく、前提を置いた試算です。\n- 試算では、子ども女性比、人口移動の強さや続き方、必須の施設が人口の目安を下回ったときの転出の強さなどの前提を変えられます。前提を変えても、2050年までの数字は変わりません。\n- 2050年までの範囲で、公式の推計とアプリの計算がどれだけ合っているかも確かめられます。\n\n気になる自治体があれば名前を教えてください。公式の推計とこのアプリの数字を並べてお見せします。",
       "trace": [],
       "status": "verified",
       "generatedAt": "2026-11-06T00:41:58.952Z",
-      "note": "Made by the real model (claude-sonnet-5-5) through the deployed Worker with scripts/ai_live_check.ts; every number was found in the tool results. Read and approved by the owner on 2026-11-06 09:47 JST."
+      "note": "Made by the real model (claude-sonnet-5-5) through the deployed Worker with scripts/ai_live_check.ts; every number was found in the tool results. Read and approved by the owner on 2026-11-06 09:47 JST. On 2026-11-06 (evening) the abbreviation 社人研 in the text was written out as 国立社会保障・人口問題研究所 at the owner's instruction (wording only; no number or sentence changed)."
     }
   ]
 }

@@ -4,7 +4,7 @@ import { OFFICIAL_END_YEAR } from '../engine/scenarios';
 
 export const APP_TITLE = '2100年の日本';
 export const APP_LEAD =
-  '日本、都道府県、町の順に、2100年までの人口を地図で見る。2050年までは社人研の公式推計、それより後はこのアプリの試算。';
+  '日本、都道府県、町の順に、2100年までの人口を地図で見る。2050年までは国立社会保障・人口問題研究所の公式推計、それより後はこのアプリの試算。';
 
 /**
  * The question the app starts from, under the title (the owner chose this wording on 2026-11-06). It asks; it never says
@@ -32,7 +32,7 @@ export const NAV_SUMMARY = '町や県の人口を見る。前提を変えて試�
 export { OFFICIAL_END_YEAR };
 
 /** Shown next to the year while year <= 2050. */
-export const OFFICIAL_NOTE = '2050年までは社人研の公式推計';
+export const OFFICIAL_NOTE = '2050年までは国立社会保障・人口問題研究所の公式推計';
 /** Shown next to the year while year > 2050 (never say 予測). */
 export const ESTIMATE_NOTE = '2050年より後は、このアプリの試算です（予測ではありません）';
 /** Text of the small dashed badge that marks any estimated figure. */
@@ -76,13 +76,13 @@ export interface SourceLine {
 export const SOURCES: readonly SourceLine[] = [
   {
     label: '人口',
-    text: '国立社会保障・人口問題研究所「日本の地域別将来推計人口（令和5年推計）」を加工して作成（公共データ利用規約 第1.0版（PDL1.0））。社人研がこのアプリの内容を保証するものではありません',
+    text: '国立社会保障・人口問題研究所「日本の地域別将来推計人口（令和5年推計）」を加工して作成（公共データ利用規約 第1.0版（PDL1.0））。国立社会保障・人口問題研究所がこのアプリの内容を保証するものではありません',
     url: 'https://www.ipss.go.jp/pp-shicyoson/j/shicyoson23/t-page.asp',
     retrieved: '2026年11月5日',
   },
   {
     label: '境界',
-    text: '国土交通省「国土数値情報（行政区域データ）」（2021年版）を加工して作成（簡略化と社人研の地域に合わせた結合。国が作成した地図ではありません）',
+    text: '国土交通省「国土数値情報（行政区域データ）」（2021年版）を加工して作成（簡略化と国立社会保障・人口問題研究所の地域に合わせた結合。国が作成した地図ではありません）',
     url: 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2021.html',
     retrieved: '2026年11月5日',
     approval: '測量法に基づく国土地理院長承認（複製）R2JHf 450',

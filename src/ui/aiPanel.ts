@@ -71,7 +71,7 @@ export const PANEL_TEXT = {
   // the panel says so before it shows a box and sample questions. It is the card's own sentence (MSG_NOT_AVAILABLE), word
   // for word, so the two cannot drift; the promise and the number check describe a working AI and are left out.
   introUnavailable: MSG_NOT_AVAILABLE,
-  after2050: '2050年までの数字は社人研の公式推計、2050年より後の数字は、このアプリの試算です（予測ではありません）。',
+  after2050: '2050年までの数字は国立社会保障・人口問題研究所の公式推計、2050年より後の数字は、このアプリの試算です（予測ではありません）。',
   waiting: '計算の結果を引いています…',
   blank: '質問を入力してください。',
   tooLong: `質問は${MAX_QUESTION_LENGTH}文字までにしてください。`,

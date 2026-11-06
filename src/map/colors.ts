@@ -1,10 +1,11 @@
-// Colour scales for the maps: the population in year Y relative to 2020 (classes of one indigo), the support ratio
-// (classes from a greyed paper to near black) and, while a reallocation is drawn, its change in percent (the diverging
-// rust / blue scale kept at the end of the file).
+// Colour scales for the maps: the population in year Y relative to 2020 (classes of one indigo from colourless to dark),
+// the support ratio (classes from colourless to near black) and, while a reallocation is drawn, its change in percent
+// (the diverging rust / blue scale kept at the end of the file).
 //
 // Population relative to 2020 (decided 2026-11-06 with the owner; see src/ui/DESIGN.md):
-// - One hue, the app's indigo (--accent #2b4c7e), by lightness alone: the fewer people remain, the paler the area
-//   (almost the paper); an area that kept its 2020 population is dark; an area that grew is the darkest of all.
+// - One hue, the app's indigo (--accent #2b4c7e), by lightness alone: the fewer people remain, the paler the area, down
+//   to no colour at all (white; the owner asked for the widest range, 2026-11-06 evening); an area that kept its 2020
+//   population is dark; an area that grew is the darkest of all.
 // - Hard classes, not a gradient: the owner asked for steps that read at a glance even on the pale end. Nine classes,
 //   their lower bounds 1/16, 1/8, 1/4, 0.4, 1/2, 0.7, 0.85 and "more than 1" (CHANGE_BREAKS). Counted on the default
 //   scenario (2026-11-06): the four steps from 1/16 to 1/4 and 1/2 resolve the towns of 2100 (median 0.25, 5th percentile
@@ -12,10 +13,11 @@
 //   of the 47 prefectures of 2100 (now 4 / 20 / 15 / 7 / 1 over five classes; 2075: 3 / 10 / 27 / 6 / 1); the two breaks
 //   inside 1/2 .. 1 resolve the prefectures of 2050 (0.58 .. 1.03: 11 / 28 / 7 / 1): Tohoku and Shikoku in 1/2 .. 0.7, most
 //   of the country in 0.7 .. 0.85, the Kanto core, Aichi, Fukuoka and Okinawa in 0.85 .. 1, Tokyo above 1.
-// - The colours are --accent mixed into --paper in OKLab at 12, 24.6, 37.1, 49.7, 62.3, 74.9, 87.4, 100 and 115 %: even
-//   steps of 0.07 in OKLab lightness from the palest to the "same" class (WCAG 1.26 .. 1.41 between neighbours), the
-//   palest 1.22:1 against the paper (almost paper, as asked; the map's lines make the shape), the "same as 2020" class
-//   the accent itself, the "grew" class the same hue a step darker (115 % extrapolates the mix).
+// - The colours are --accent mixed into white in OKLab at 0, 14.3, 28.6, 42.9, 57.1, 71.4, 85.7, 100 and 120 %: even
+//   steps of 0.083 in OKLab lightness from white (L 1.0) to the "same" class (WCAG 1.28 .. 1.43 between neighbours; the
+//   first range was 0.904 .. 0.334, now 1.0 .. 0.301). The palest class is white itself, 1.09:1 against the paper: no
+//   colour, so the map's lines (translucent ink, app.css) make its shape. The "same as 2020" class is the accent itself,
+//   the "grew" class the same hue darker (120 % extrapolates the mix; 122 % would leave the sRGB gamut).
 // Values beyond the domain (including +-Infinity) fall into the end classes; NaN (no data) is the neutral grey.
 
 /**
@@ -27,10 +29,10 @@ export const RATIO_MIN = CHANGE_BREAKS[0];
 export const NEUTRAL_RATIO = 1;
 
 /**
- * One colour per class, palest to darkest (theme.css --change-1 ... --change-9 mirror these). The OKLab mix of
- * --accent (#2b4c7e) into --paper (#f6f5f0) at 12 .. 115 % in even steps of lightness (see the header).
+ * One colour per class, palest (white) to darkest (theme.css --change-1 ... --change-9 mirror these). The OKLab mix of
+ * --accent (#2b4c7e) into white at 0 .. 120 % in even steps of lightness (see the header).
  */
-export const CHANGE_COLORS: readonly string[] = ['#dce0e2', '#c1c9d4', '#a6b4c6', '#8c9eb8', '#7389a9', '#5b759b', '#43608d', '#2b4c7e', '#0d346c'];
+export const CHANGE_COLORS: readonly string[] = ['#ffffff', '#dee4ed', '#bec9da', '#9fafc8', '#8196b5', '#637da3', '#476490', '#2b4c7e', '#012a64'];
 
 /** The map's neutral grey (theme.css --map-neutral): no data, and the fill before the first data arrives. */
 export const MAP_NEUTRAL = '#d0c9c4';
@@ -218,8 +220,8 @@ export function allocationLegendStops(scale: number): LegendStop[] {
 // -----------------------------------------------------------------------------------------------------------------
 // Support ratio: people aged 15-64 per person aged 65+ (src/engine/aggregate.ts supportRatio), a sequential scale in
 // classes. The fewer people there are per older person (the harder it is), the closer to black; the more, the paler,
-// down to a greyed paper. Decided 2026-11-06 with the owner (the earlier indigo ramp read "darker = more", the
-// opposite of what people expect from a map of strain).
+// down to no colour at all (white). Decided 2026-11-06 with the owner (the earlier indigo ramp read "darker = more", the
+// opposite of what people expect from a map of strain; the pale end was widened to white the same evening).
 //
 // Class breaks, from the distribution of all 1,884 areas in 2020 and 2100 (default scenario, computed 2026-11-06 from
 // public/data; the class counts use the values rounded to one decimal, as on screen):
@@ -235,12 +237,12 @@ export function allocationLegendStops(scale: number): LegendStop[] {
 export const SUPPORT_BREAKS: readonly number[] = [0.8, 1, 1.5, 2, 3];
 
 /**
- * One colour per class, fewest people per older person first (near black) to most (a greyed paper): #14181f mixed
- * into --paper (#f6f5f0) in OKLab at 100, 83, 66, 49, 32 and 15 % (theme.css --support-1 ... --support-6 mirror
- * these). Even steps of 0.13 in OKLab lightness (WCAG 1.51 to 1.73 between neighbours); the palest is 1.42:1 against
- * the paper (a greyed paper, never the sea); the darkest is #14181f, the darkest the owner allows.
+ * One colour per class, fewest people per older person first (near black) to most (white, no colour): #14181f mixed
+ * into white in OKLab at 100, 80, 60, 40, 20 and 0 % (theme.css --support-1 ... --support-6 mirror these). Even steps
+ * of 0.158 in OKLab lightness (WCAG 1.62 to 1.95 between neighbours); the palest is white, 1.09:1 against the paper, so
+ * the map's lines (translucent ink, app.css) make its shape; the darkest is #14181f, the darkest the owner allows.
  */
-export const SUPPORT_COLORS: readonly string[] = ['#14181f', '#34383d', '#575a5e', '#7d7f82', '#a5a7a6', '#cfd0cd'];
+export const SUPPORT_COLORS: readonly string[] = ['#14181f', '#3b3f45', '#676a70', '#97999d', '#cacbcd', '#ffffff'];
 
 /** An area without a ratio (nobody aged 65+): the map's neutral grey, outside the grey ramp (warmer, lighter). */
 export const SUPPORT_NO_DATA = MAP_NEUTRAL;
