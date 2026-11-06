@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { loadSampleAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
+import { loadFinance } from '../../test/helpers/loadFinance';
 import { makeTopology } from '../../test/helpers/makeTopology';
 import { allocationColor, changeColor, RATIO_MAX, SUPPORT_COLORS, supportColor } from '../map/colors';
 import { SUPPORT_TITLE } from '../map/legend';
@@ -49,6 +50,7 @@ function makeFetch(control: Control) {
       return Promise.resolve(json({ cities: {}, prefs: groups }));
     }
     if (url.endsWith('facilities.json')) return Promise.resolve(json(loadFacilities()));
+    if (url.endsWith('finance.json')) return Promise.resolve(json(loadFinance()));
     if (url.endsWith('japan.topo.json')) return Promise.resolve(json(control.brokenNational ? { objects: {} } : japanTopo));
     return Promise.resolve(json('not found', 404));
   });
@@ -110,7 +112,7 @@ describe('footer attribution', () => {
   test('each source is a label and a text that says it was processed, then its page as a link showing the URL, then the day it was read', async () => {
     const { root } = await mount();
     const entries = [...root.querySelectorAll('.app-foot dl dd')];
-    expect([...root.querySelectorAll('.app-foot dl dt')].map((d) => d.textContent)).toEqual(['人口', '境界', '施設の目安']);
+    expect([...root.querySelectorAll('.app-foot dl dt')].map((d) => d.textContent)).toEqual(['人口', '境界', '施設の目安', '市町村の歳出', '歳出の公表値']);
     expect(entries).toHaveLength(SOURCES.length);
     entries.forEach((dd, i) => {
       const src = SOURCES[i];
@@ -121,8 +123,8 @@ describe('footer attribution', () => {
       expect(links[0].textContent).toBe(src.url); // the URL itself is the visible text
       expect(links[0].getAttribute('rel')).toBe('noopener');
       expect(links[0].getAttribute('target')).toBe('_blank');
-      expect(dd.querySelector('.src-where')!.textContent).toBe(`${src.url} （2026年11月5日取得）`);
-      expect(dd.querySelector('.src-where .keep:last-child')!.textContent).toBe('（2026年11月5日取得）'); // the date never breaks inside
+      expect(dd.querySelector('.src-where')!.textContent).toBe(`${src.url} （${src.retrieved}取得）`);
+      expect(dd.querySelector('.src-where .keep:last-child')!.textContent).toBe(`（${src.retrieved}取得）`); // the date never breaks inside
     });
   });
 

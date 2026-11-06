@@ -1,10 +1,12 @@
 import { describe, expect, test, vi } from 'vitest';
 import { loadSampleAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
+import { loadFinance } from '../../test/helpers/loadFinance';
 import { DataLoadError, dataUrl, loadAll, loadPrefGeo, PREF_CODES } from './loader';
 
 const sample = loadSampleAreas();
 const facilities = loadFacilities();
+const finance = loadFinance();
 const topo = { type: 'Topology', objects: { prefectures: { type: 'GeometryCollection', geometries: [] } }, arcs: [] };
 const prefTopo = { type: 'Topology', objects: { areas: { type: 'GeometryCollection', geometries: [] } }, arcs: [] };
 
@@ -31,6 +33,7 @@ function makeFetch(overrides: Record<string, unknown> = {}) {
       return new Response(JSON.stringify({ cities: {}, prefs }), { status: 200 });
     }
     if (url.endsWith('data/facilities.json')) return new Response(JSON.stringify(facilities), { status: 200 });
+    if (url.endsWith('data/finance.json')) return new Response(JSON.stringify(finance), { status: 200 });
     if (url.endsWith('data/geo/japan.topo.json')) return new Response(JSON.stringify(topo), { status: 200 });
     if (/data\/geo\/pref\/\d\d\.topo\.json$/.test(url)) return new Response(JSON.stringify(prefTopo), { status: 200 });
     return new Response('not found', { status: 404 });
@@ -55,9 +58,11 @@ describe('loadAll', () => {
     expect(calls.filter((u) => /data\/areas\/\d\d\.json$/.test(u))).toHaveLength(47);
     expect(calls).toContain('/data/groups.json');
     expect(calls).toContain('/data/facilities.json');
+    expect(calls).toContain('/data/finance.json');
     expect(calls).toContain('/data/geo/japan.topo.json');
     expect(data.areas.length).toBe(sample.length);
     expect(data.facilities.length).toBe(facilities.length);
+    expect(data.finance).toEqual(finance);
     expect(data.japanTopo.objects.prefectures).toBeDefined();
     expect(data.groups.prefs).toBeDefined();
     // prefecture names come from the areas
@@ -77,6 +82,20 @@ describe('loadAll', () => {
       expect(err.status).toBe(500);
       expect(err.reason).toBe('http');
     }
+  });
+
+  test('a finance.json that is not in the expected shape rejects with a shape error naming the file', async () => {
+    const { fetchStub } = makeFetch({ '/data/finance.json': { ...finance, bands: [] } });
+    await expect(loadAll({ fetch: fetchStub as unknown as typeof fetch, base: '/' })).rejects.toMatchObject({
+      name: 'DataLoadError',
+      reason: 'shape',
+      url: '/data/finance.json',
+    });
+  });
+
+  test('a missing finance.json fails the load like any other data file', async () => {
+    const { fetchStub } = makeFetch({ '/data/finance.json': 404 });
+    await expect(loadAll({ fetch: fetchStub as unknown as typeof fetch, base: '/' })).rejects.toMatchObject({ reason: 'http', status: 404, url: '/data/finance.json' });
   });
 
   test('a network error is wrapped the same way', async () => {

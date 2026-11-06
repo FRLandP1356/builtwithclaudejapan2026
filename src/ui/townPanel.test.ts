@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, test } from 'vitest';
 import { byCode, loadAllAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
+import { loadFinance } from '../../test/helpers/loadFinance';
 import { repoPath } from '../../test/helpers/paths';
 import type { AppData } from '../data/loader';
 import { createRunner, type Runner } from '../data/runner';
@@ -23,6 +24,7 @@ const data: AppData = {
   areas,
   groups,
   facilities: loadFacilities(),
+  finance: loadFinance(),
   japanTopo: {} as never,
   prefNames: new Map(areas.map((a) => [a.prefCode, a.prefName])),
 };
@@ -290,7 +292,7 @@ describe('mountTownPanel: wording', () => {
   test('never says 残せない, never calls a figure 予測, and uses 閉鎖 only in the fixed note that denies it', () => {
     const { section, store } = setup({ selectedArea: '30206' });
     for (const year of [2020, 2050, 2100]) {
-      for (const sel of [{ selectedArea: '30206' }, { selectedArea: '13101' }, { selectedPref: '30' }, { selectedPref: undefined }]) {
+      for (const sel of [{ selectedArea: '30206' }, { selectedArea: '13101' }, { selectedArea: '01101' }, { selectedArea: '07999' }, { selectedArea: '13402' }, { selectedPref: '30' }, { selectedPref: undefined }]) {
         store.set({ year, ...sel });
         const text = section.textContent!.replace(PERMANENT_NOTE, '').replace(/予測ではありません/g, '');
         expect(text).not.toContain('残せない');
@@ -979,9 +981,140 @@ describe('the support ratio chart', () => {
     expect(section.querySelector('.support-svg')!.getAttribute('aria-label')).toMatch(/^和歌山県の高齢者1人を支える現役世代の推移。/);
   });
 
-  test('the panel keeps the order: tiles, pyramid, population chart, support chart, facilities', () => {
+  test('the panel keeps the order: tiles, pyramid, population chart, support chart, facilities, spending per resident', () => {
     const { section } = setup({ selectedArea: '30206' });
     const order = [...section.querySelectorAll('.town > .panel-section')].map((e) => e.classList[1]);
-    expect(order).toEqual(['town-kpis', 'town-pyramid', 'town-series', 'town-support', 'town-facilities']);
+    expect(order).toEqual(['town-kpis', 'town-pyramid', 'town-series', 'town-support', 'town-facilities', 'town-burden']);
+  });
+});
+
+describe('mountTownPanel: spending per resident (令和6年度 actuals of municipalities as large as this town)', () => {
+  const textOf = (e: Element | null) => e!.textContent!.replace(/\s+/g, ' ').trim();
+  const band = (section: HTMLElement) => textOf(section.querySelector('.burden-band'));
+  const markedBand = (section: HTMLElement) => [...section.querySelectorAll('.burden-bar')].findIndex((e) => e.classList.contains('is-current'));
+
+  test('a town gets the block after the facilities; Japan and a prefecture do not', () => {
+    const { section, q, store } = setup();
+    expect(q('.town-burden')).toBeNull();
+    store.set({ selectedPref: '30' });
+    expect(q('.town-burden')).toBeNull();
+    store.set({ selectedArea: '30206' });
+    const block = q('.town-burden')!;
+    expect(block.previousElementSibling).toBe(q('.town-facilities'));
+    expect(block.nextElementSibling).toBeNull();
+    expect(textOf(block.querySelector('h3'))).toBe('いま、この規模の市町村は、1人あたりこれだけ使っています');
+    store.set({ selectedPref: '13' }); // another prefecture drops the town selection
+    expect(q('.town-burden')).toBeNull();
+    store.set({ selectedArea: '30206' });
+    expect(section.querySelectorAll('.town-burden')).toHaveLength(1);
+    expect(q('.town-burden')!.previousElementSibling).toBe(q('.town-facilities'));
+  });
+
+  test('田辺市: its own 680 thousand yen, and the band of the selected year: 2020 5〜10万人, 2050 3〜5万人, 2100 1〜3万人', () => {
+    const { section, store } = setup({ selectedArea: '30206', year: 2020 });
+    expect(textOf(section.querySelector('.burden-own'))).toBe('この町の令和6年度：1人あたり約680千円');
+    expect(band(section)).toBe('いま、人口が5〜10万人の市町村（237団体）：中央値 約502千円、真ん中の半数が436〜599千円。');
+    expect(markedBand(section)).toBe(4);
+    store.set({ year: 2050 });
+    expect(band(section)).toBe('いま、人口が3〜5万人の市町村（237団体）：中央値 約584千円、真ん中の半数が473〜690千円。');
+    expect(markedBand(section)).toBe(3);
+    store.set({ year: 2100 });
+    expect(band(section)).toBe('いま、人口が1〜3万人の市町村（447団体）：中央値 約724千円、真ん中の半数が561〜883千円。');
+    expect(markedBand(section)).toBe(2);
+    // the money does not change with the year
+    expect(textOf(section.querySelector('.burden-own'))).toBe('この町の令和6年度：1人あたり約680千円');
+  });
+
+  test('the band is chosen by the population the tile shows for that year, and the year line says so with the right mark', () => {
+    const { section, store, kpis } = setup({ selectedArea: '30206', year: 2100 });
+    expect(kpis()[0]).toContain('1.2万人');
+    expect(textOf(section.querySelector('.burden-year'))).toBe('規模は、2100年の人口 1.2万人で選んでいます。 試算');
+    expect(section.querySelector('.burden-year .badge-estimate')).not.toBeNull();
+    store.set({ year: 2050 });
+    expect(kpis()[0]).toContain('4.2万人');
+    expect(textOf(section.querySelector('.burden-year'))).toBe('規模は、2050年の人口 4.2万人で選んでいます。 公式推計');
+    store.set({ year: 2020 });
+    expect(textOf(section.querySelector('.burden-year'))).toBe('規模は、2020年の人口 7.0万人で選んでいます。 実績（国勢調査）');
+    // never the 試算 mark on the heading or on the money: the figure is an actual
+    store.set({ year: 2100 });
+    expect(section.querySelector('.town-burden h3 .badge-estimate')).toBeNull();
+    expect(section.querySelector('.burden-own .badge-estimate')).toBeNull();
+    expect(section.querySelector('.burden-band .badge-estimate')).toBeNull();
+  });
+
+  test('a scenario that changes the population changes the year line and the band with it', () => {
+    const { section, store, kpis } = setup({ selectedArea: '30206', year: 2100 });
+    const alt: Scenario = { ...DEFAULT_SCENARIO, cwrMult: 0.6, migScale: 0 };
+    store.set({ scenario: alt });
+    const tile = kpis()[0].match(/[\d.,]+(万)?人/)![0];
+    expect(textOf(section.querySelector('.burden-year'))).toContain(`2100年の人口 ${tile}`);
+    const pop = total(createRunner(data).run(alt).get('30206')![2100]);
+    const expected = pop < 5000 ? 0 : pop < 10000 ? 1 : pop < 30000 ? 2 : 3;
+    expect(markedBand(section)).toBe(expected);
+  });
+
+  test('the table disclosure stays open when the year or the town changes (DOM state)', () => {
+    const { section, store, q } = setup({ selectedArea: '30206', year: 2100 });
+    const details = q<HTMLDetailsElement>('.burden-table')!;
+    details.open = true;
+    store.set({ year: 2050 });
+    store.set({ selectedArea: '13402' });
+    expect(q('.burden-table')).toBe(details);
+    expect(details.open).toBe(true);
+    store.set({ selectedPref: '30' }); // 青ヶ島村 is in Tokyo: another prefecture drops the town selection
+    expect(q('.burden-table')).toBeNull();
+    store.set({ selectedArea: '30206' });
+    expect(q('.burden-table')).toBe(details);
+    expect(details.open).toBe(true);
+    expect(section.querySelectorAll('.burden-table')).toHaveLength(1);
+  });
+
+  test('a ward of a designated city has no figure of its own and says so; the band for its size is still shown', () => {
+    const { section } = setup({ selectedArea: '01101', year: 2020 });
+    expect(textOf(section.querySelector('.burden-own'))).toBe('この区は政令指定都市の一部で、区ごとの決算はありません。');
+    expect(band(section)).toContain('人口が');
+    expect(markedBand(section)).toBeGreaterThanOrEqual(0);
+  });
+
+  test('a special ward (千代田区) has its own figure; the 浜通り area has none', () => {
+    const { section, store } = setup({ selectedArea: '13101', year: 2020 });
+    expect(textOf(section.querySelector('.burden-own'))).toBe('この町の令和6年度：1人あたり約958千円');
+    expect(band(section)).toContain('人口が5〜10万人の市町村');
+    store.set({ selectedArea: '07999' });
+    expect(textOf(section.querySelector('.burden-own'))).toBe('この地域は複数の市町村をまとめたもので、地域としての決算はありません。');
+    expect(band(section)).toContain('人口が20万人以上の市町村（132団体）');
+  });
+
+  test('a village of a few hundred people (青ヶ島村, no age assumptions) gets the smallest band and its large figure', () => {
+    const { section } = setup({ selectedArea: '13402', year: 2100 });
+    expect(textOf(section.querySelector('.burden-own'))).toBe('この町の令和6年度：1人あたり約5,747千円');
+    expect(band(section)).toContain('人口が5千人未満の市町村（302団体）');
+    expect(markedBand(section)).toBe(0);
+  });
+
+  test('every town of the real data renders a figure or a stated reason, and a marked band, in every year', () => {
+    const { section, store } = setup({ selectedArea: '30206' });
+    const sample = areas.filter((a, i) => i % 53 === 0 || a.kind === 'hamadori');
+    for (const year of [2020, 2100]) {
+      for (const a of sample) {
+        store.set({ selectedArea: a.code, year });
+        expect(textOf(section.querySelector('.burden-own')).length, a.name).toBeGreaterThan(10);
+        expect(markedBand(section), `${a.name} ${year}`).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  test('no horizontal-scroll risk in the markup: the strip and both tables sit in the panel width (tables in .table-wrap)', () => {
+    const { section } = setup({ selectedArea: '30206' });
+    expect(section.querySelectorAll('.burden-table .table-wrap')).toHaveLength(2);
+    for (const t of section.querySelectorAll('.burden-table table')) expect(t.parentElement!.classList.contains('table-wrap')).toBe(true);
+  });
+
+  test('teardown removes the block with the rest', () => {
+    const { section, teardown } = setup({ selectedArea: '30206' });
+    expect(section.querySelector('.town-burden')).not.toBeNull();
+    teardown();
+    expect(section.querySelector('.town-burden')).toBeNull();
+    expect(section.querySelector('.burden-bars')).toBeNull();
   });
 });

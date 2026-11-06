@@ -8,6 +8,7 @@ import type { Groups } from '../../src/engine/types';
 import { createAppStore, type AppStoreInitial, type PanelContext } from '../../src/ui/state';
 import { loadAllAreas } from './loadAreas';
 import { loadFacilities } from './loadFacilities';
+import { loadFinance } from './loadFinance';
 import { repoPath } from './paths';
 
 let cached: AppData | undefined;
@@ -19,7 +20,7 @@ export function realAppData(): AppData {
   const prefNames = new Map<string, string>();
   for (const a of areas) if (!prefNames.has(a.prefCode)) prefNames.set(a.prefCode, a.prefName);
   const groups = JSON.parse(readFileSync(repoPath('public/data/groups.json'), 'utf8')) as Groups;
-  cached = { areas, groups, facilities: loadFacilities(), japanTopo: { type: 'Topology', objects: {}, arcs: [] } as unknown as Topology, prefNames };
+  cached = { areas, groups, facilities: loadFacilities(), finance: loadFinance(), japanTopo: { type: 'Topology', objects: {}, arcs: [] } as unknown as Topology, prefNames };
   return cached;
 }
 
