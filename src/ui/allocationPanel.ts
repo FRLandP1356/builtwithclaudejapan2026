@@ -10,13 +10,13 @@ import { allocate, type AllocationInput, type AllocationResult, type FacilityFli
 import type { Area, Facility, Series } from '../engine/types';
 import { AllocationFormError, allocationErrorMessage, populationAt, targetPeople, type AllocationTarget, type PopulationAt } from './allocationCore';
 import { buildOverlay } from './allocationOverlay';
-import { formatPop } from './format';
+import { approxPeople } from './format';
 import { prefCodesOf, REGION_IDS, REGION_NAMES, type RegionId } from './regions';
 import { badgeFor } from './sources';
 import type { AllocationOverlay, AppState, PanelContext } from './state';
 
 // Re-exported so the panel stays the one import for its form helpers (they live in allocationCore.ts).
-export { AllocationFormError, allocationErrorMessage, populationAt, targetPeople, type AllocationTarget, type PopulationAt };
+export { AllocationFormError, allocationErrorMessage, approxPeople, populationAt, targetPeople, type AllocationTarget, type PopulationAt };
 
 /** Button texts for drawing the allocation on the map. */
 export const MAP_BUTTON = { off: '地図に反映する', on: '地図に反映中' } as const;
@@ -67,11 +67,6 @@ const countFormat = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 0 })
 export function signedCount(n: number): string {
   if (n === 0) return '±0';
   return `${n < 0 ? '−' : '+'}${countFormat.format(Math.abs(n))}`;
-}
-
-/** 約2.6万人 (always a positive amount; the sign is carried by the sentence). */
-export function approxPeople(n: number): string {
-  return `約${formatPop(Math.abs(n))}`;
 }
 
 export interface DescribeInput {

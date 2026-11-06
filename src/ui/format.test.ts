@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { formatDeltaPct, formatPct, formatPop, formatSupport, formatSupportExact, formatYear, SUPPORT_NONE } from './format';
+import { approxPeople, formatCount, formatDeltaPct, formatPct, formatPeople, formatPop, formatSupport, formatSupportExact, formatYear, SUPPORT_NONE } from './format';
 
 describe('formatDeltaPct', () => {
   test('one decimal normally, two below 0.1, ±0 near zero', () => {
@@ -71,5 +71,23 @@ describe('formatSupport and formatSupportExact', () => {
       expect(formatSupport(v)).toBe('—');
       expect(formatSupportExact(v)).toBe('—');
     }
+  });
+});
+
+describe('formatCount and formatPeople: exact numbers with separators', () => {
+  test('a whole number, never 万', () => {
+    expect(formatCount(12)).toBe('12');
+    expect(formatCount(1500)).toBe('1,500');
+    expect(formatCount(1_234_567)).toBe('1,234,567');
+    expect(formatPeople(500)).toBe('500人');
+    expect(formatPeople(175_000)).toBe('175,000人');
+  });
+});
+
+describe('approxPeople', () => {
+  test('約 plus the usual population format, always positive', () => {
+    expect(approxPeople(26_198.7)).toBe('約2.6万人');
+    expect(approxPeople(-26_198.7)).toBe('約2.6万人');
+    expect(approxPeople(30)).toBe('約30人');
   });
 });
