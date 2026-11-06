@@ -47,4 +47,8 @@ describe('app.css: the rules that behaviour depends on', () => {
     expect(declarations('.map-mode[hidden]')).toMatch(/display:\s*none/);
     expect(declarations('.map-mode')).not.toMatch(/display:/);
   });
+
+  test('on a desktop the map leaves room for everything else of its column, the colour choice included (422px)', () => {
+    expect(declarations('.map-svg')).toMatch(/max-height:\s*max\(360px, calc\(100vh - 422px\)\)/);
+  });
 });
