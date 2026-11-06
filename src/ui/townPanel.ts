@@ -1,5 +1,6 @@
-// Town detail panel (Task 9): key numbers, population pyramid, population over time and, for a town, the facility
-// panel. Ruling 27 decides what is shown: nothing selected -> Japan summary; only a prefecture -> prefecture summary
+// Town detail panel (Task 9): key numbers (with the support ratio, 15-64 per person aged 65+, as the fifth tile),
+// population pyramid, population over time, the support ratio over time and, for a town, the facility panel.
+// Ruling 27 decides what is shown: nothing selected -> Japan summary; only a prefecture -> prefecture summary
 // (no facilities); a town -> everything.
 //
 // The panel is built once. A store notification only changes the parts whose inputs changed: the selection rebuilds the
@@ -9,14 +10,15 @@ import { ages65, sumSeries, total } from '../engine/aggregate';
 import { DEFAULT_SCENARIO, type Area, type Pop, type Series } from '../engine/types';
 import type { AppData } from '../data/loader';
 import { allocationView, overlayCovers, placeNumbers } from './allocationView';
-import { deriveTotals, type Totals } from './derive';
+import { deriveSupport, deriveTotals, type Totals } from './derive';
 import { mountFacilityPanel } from './facilityPanel';
-import { formatPct, formatPop } from './format';
+import { formatPct, formatPop, formatSupport } from './format';
 import { levelOf, type Level, type Selection } from './nav';
 import { mountPyramid } from './pyramid';
 import { mountSeriesChart, seriesPoints, type SeriesPointsInput } from './seriesChart';
-import { badgeFor, ESTIMATE_BADGE } from './sources';
+import { badgeFor, ESTIMATE_BADGE, OFFICIAL_END_YEAR } from './sources';
 import type { AppState, PanelContext } from './state';
+import { SUPPORT_CHART, SUPPORT_DEFINITION, SUPPORT_LABEL, support2020Line } from './support';
 import './townPanel.css';
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -140,6 +142,15 @@ function makeHeading(): { el: HTMLHeadingElement; set(text: string, estimate: bo
   };
 }
 
+/** The official part of a row: 2020..2050 by year (the line drawn solid). */
+function officialPart(years: readonly number[], row: ArrayLike<number>): Record<number, number> {
+  const out: Record<number, number> = {};
+  years.forEach((y, i) => {
+    if (y <= OFFICIAL_END_YEAR) out[y] = row[i];
+  });
+  return out;
+}
+
 function rowFor(t: Totals, scope: TownScope): Float64Array | undefined {
   if (scope.level === 'area') return t.area.get(scope.key);
   if (scope.level === 'pref') return t.pref.get(scope.key);
@@ -184,7 +195,20 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
   const kpiRow = document.createElement('div');
   kpiRow.className = 'kpi-row';
   const kpis = [makeKpi(), makeKpi(), makeKpi(), makeKpi()];
-  kpiRow.append(...kpis.map((k) => k.root));
+  // The fifth tile, after the 65+ and 0-14 shares: the support ratio, with the 試算 mark after 2050 and its definition.
+  const support = makeKpi();
+  support.root.classList.add('town-support-kpi');
+  support.label.textContent = SUPPORT_LABEL;
+  const supportNote = document.createTextNode('');
+  const supportBadge = document.createElement('span');
+  supportBadge.className = 'badge-estimate';
+  supportBadge.textContent = ESTIMATE_BADGE;
+  support.note.append(supportNote);
+  const supportDef = document.createElement('p');
+  supportDef.className = 'note town-support-def';
+  supportDef.textContent = SUPPORT_DEFINITION;
+  support.root.append(supportDef);
+  kpiRow.append(...kpis.map((k) => k.root), support.root);
   kpiSection.append(kpiRow);
   const basis = document.createElement('span');
   kpis[0].note.append(basis);
@@ -209,17 +233,26 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
   seriesSection.append(seriesHeading.el, seriesHost);
   const chart = mountSeriesChart(seriesHost);
 
+  const supportSection = document.createElement('div');
+  supportSection.className = 'panel-section town-support';
+  const supportHeading = makeHeading();
+  supportHeading.set(SUPPORT_CHART.title, false);
+  const supportHost = document.createElement('div');
+  supportSection.append(supportHeading.el, supportHost);
+  const supportChart = mountSeriesChart(supportHost, SUPPORT_CHART);
+
   const facilitySection = document.createElement('div');
   facilitySection.className = 'panel-section town-facilities';
   const facilities = mountFacilityPanel(facilitySection, data.facilities);
 
-  root.append(head, hint, kpiSection, pyramidSection, seriesSection);
+  root.append(head, hint, kpiSection, pyramidSection, seriesSection, supportSection);
   el.append(root);
 
   // Per-selection and per-series caches.
   let scope: TownScope | undefined;
   let officialRow: Record<number, number> = {};
   let seriesInput: Omit<SeriesPointsInput, 'year'> | undefined;
+  let supportInput: Omit<SeriesPointsInput, 'year'> | undefined;
   const popCache = new Map<string, Pop>();
   const axisCache = new Map<string, number>();
   let popCacheSeries: Map<string, Series> | undefined;
@@ -319,18 +352,46 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
     pyramidHeading.set(`${s.year}年の年齢別の人口`, estimate);
     pyramid.update({ pop, year: s.year, place: sc.name, axisMax: axisMaxFor(s.series, sc, totals.years) });
 
-    // The line chart: redraw when the place or the scenario changed, otherwise only move the marker.
+    // The support ratio tile: the selected year, 2020 under it, and the 試算 mark after 2050 (as the figure is then).
+    const supports = deriveSupport(s.series, data.groups);
+    const supportRow = rowFor(supports, sc);
+    const supportNow = supportRow?.[idx] ?? NaN;
+    setKpi(support, SUPPORT_LABEL, formatSupport(supportNow));
+    supportNote.data = support2020Line(supportRow?.[0] ?? NaN);
+    if (estimate && !supportBadge.isConnected) support.note.append(' ', supportBadge);
+    else if (!estimate && supportBadge.isConnected) {
+      supportBadge.previousSibling?.remove();
+      supportBadge.remove();
+    }
+
+    // The line charts: redraw when the place or the scenario changed, otherwise only move the markers.
     let redraw = false;
-    if (selChanged || seriesChanged || !seriesInput) {
+    if (selChanged || seriesChanged || !seriesInput || !supportInput) {
       // The reference line is data-based: seriesPoints keeps it only if the default scenario's numbers differ from the
       // current ones for this place, so a scenario that changes nothing here shows no second line.
-      const baseRow = rowFor(deriveTotals(runner.run(DEFAULT_SCENARIO), data.groups), sc);
+      const defaultSeries = runner.run(DEFAULT_SCENARIO);
+      const baseRow = rowFor(deriveTotals(defaultSeries, data.groups), sc);
       seriesInput = { years: totals.years, official: officialRow, estimate: row, baseline: baseRow };
+      // The ratio has no published series: its solid part up to 2050 is the ratio of the same projection.
+      const supportYears = supports.years;
+      const ratios = supportRow ?? new Float64Array(supportYears.length).fill(NaN);
+      supportInput = {
+        years: supportYears,
+        official: officialPart(supportYears, ratios),
+        estimate: ratios,
+        baseline: rowFor(deriveSupport(defaultSeries, data.groups), sc),
+      };
       redraw = true;
     }
     const points = seriesPoints({ ...seriesInput, year: s.year });
-    if (redraw) chart.setData(points, sc.name);
-    else chart.setMarker(points.marker);
+    const supportPoints = seriesPoints({ ...supportInput!, year: s.year });
+    if (redraw) {
+      chart.setData(points, sc.name);
+      supportChart.setData(supportPoints, sc.name);
+    } else {
+      chart.setMarker(points.marker);
+      supportChart.setMarker(supportPoints.marker);
+    }
 
     // Facilities: only for a town, judged on the unrounded projected population.
     if (sc.level === 'area' && sc.area) {
@@ -373,6 +434,7 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
     unsubscribe();
     pyramid.destroy();
     chart.destroy();
+    supportChart.destroy();
     facilities.destroy();
     if (titleBadge.isConnected) {
       titleBadge.previousSibling?.remove();

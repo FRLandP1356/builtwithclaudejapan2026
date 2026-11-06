@@ -17,6 +17,13 @@
 .town .kpi-row {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+/* The fifth tile (the support ratio) takes a row of its own, so its definition line fits on one line at 390px. */
+.town .town-support-kpi {
+  grid-column: 1 / -1;
+}
+.town-support-def {
+  margin-top: var(--sp-1);
+}
 .town .kpi-note .badge-official,
 .town .kpi-note .badge-estimate {
   vertical-align: baseline;

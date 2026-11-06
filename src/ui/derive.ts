@@ -1,6 +1,6 @@
-// Per-year population totals derived from a projection, for colouring maps and writing headlines.
+// Per-year population totals and support ratios derived from a projection, for colouring maps and writing headlines.
 // Computed once per series object (the runner memoises series per scenario, so this is cheap to key by identity).
-import { total } from '../engine/aggregate';
+import { ages15to64, ages65, supportRatioOf, total } from '../engine/aggregate';
 import type { Groups, Series } from '../engine/types';
 
 export interface Totals {
@@ -46,6 +46,62 @@ export function deriveTotals(series: Map<string, Series>, groups: Groups): Total
   }
   const out: Totals = { years, area, pref, japan };
   memo.set(series, out);
+  return out;
+}
+
+/** Support ratios (15-64 per person aged 65+) per year, in the same shape as `Totals`. NaN where nobody is 65+. */
+export type SupportRatios = Totals;
+
+const supportMemo = new WeakMap<Map<string, Series>, SupportRatios>();
+
+/**
+ * The support ratio of every area, prefecture and the country per year (`supportRatio` in src/engine/aggregate.ts).
+ * A prefecture and the country divide their summed counts, never average their areas' ratios. A group code without
+ * data is skipped, as in deriveTotals. Memoised per series object.
+ */
+export function deriveSupport(series: Map<string, Series>, groups: Groups): SupportRatios {
+  const hit = supportMemo.get(series);
+  if (hit) return hit;
+
+  const first = series.values().next().value;
+  const years = first ? Object.keys(first).map(Number).sort((a, b) => a - b) : [];
+  const n = years.length;
+  const counts = new Map<string, { working: Float64Array; elderly: Float64Array }>();
+  const area = new Map<string, Float64Array>();
+  const jw = new Float64Array(n);
+  const je = new Float64Array(n);
+  for (const [code, s] of series) {
+    const working = new Float64Array(n);
+    const elderly = new Float64Array(n);
+    const row = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const p = s[years[i]];
+      working[i] = p ? ages15to64(p) : NaN;
+      elderly[i] = p ? ages65(p) : NaN;
+      row[i] = supportRatioOf(working[i], elderly[i]);
+      jw[i] += working[i];
+      je[i] += elderly[i];
+    }
+    counts.set(code, { working, elderly });
+    area.set(code, row);
+  }
+  const pref = new Map<string, Float64Array>();
+  for (const [pp, codes] of Object.entries(groups.prefs)) {
+    const w = new Float64Array(n);
+    const e = new Float64Array(n);
+    for (const c of codes) {
+      const k = counts.get(c);
+      if (!k) continue;
+      for (let i = 0; i < n; i++) {
+        w[i] += k.working[i];
+        e[i] += k.elderly[i];
+      }
+    }
+    pref.set(pp, Float64Array.from({ length: n }, (_, i) => supportRatioOf(w[i], e[i])));
+  }
+  const japan = Float64Array.from({ length: n }, (_, i) => supportRatioOf(jw[i], je[i]));
+  const out: SupportRatios = { years, area, pref, japan };
+  supportMemo.set(series, out);
   return out;
 }
 

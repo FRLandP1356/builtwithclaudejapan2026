@@ -7,7 +7,7 @@ import { repoPath } from '../../test/helpers/paths';
 import type { AppData } from '../data/loader';
 import { createRunner, type Runner } from '../data/runner';
 import { total } from '../engine/aggregate';
-import { DEFAULT_SCENARIO, type Area, type Groups, type Scenario } from '../engine/types';
+import { DEFAULT_SCENARIO, type Area, type Groups, type Pop, type Scenario } from '../engine/types';
 import { deriveTotals } from './derive';
 import { evaluateFacilities, PERMANENT_NOTE, summaryLine } from './facilityPanel';
 import { formatPct, formatPop } from './format';
@@ -76,7 +76,7 @@ describe('mountTownPanel: what is shown at each level (Ruling 27)', () => {
   test('nothing selected: the Japan summary with tiles, pyramid and series, and no facility panel', () => {
     const { section, q, kpis } = setup();
     expect(section.textContent).toContain('日本全体');
-    expect(kpis()).toHaveLength(4);
+    expect(kpis()).toHaveLength(5);
     expect(q('.pyramid-svg')).not.toBeNull();
     expect(q('.series-svg')).not.toBeNull();
     expect(q('.town-facilities')).toBeNull();
@@ -121,16 +121,16 @@ describe('mountTownPanel: what is shown at each level (Ruling 27)', () => {
     expect(q('.kpi-value')).toBe(kpiBefore);
   });
 
-  test('the four tiles show population, change since 2020, 65+ share and 0-14 share with the basis badge', () => {
+  test('the five tiles show population, change since 2020, 65+ share, 0-14 share and the support ratio, with the basis badge', () => {
     const { kpis, q, store } = setup({ selectedArea: '30206', year: 2020 });
     const labels = [...document.querySelectorAll('.kpi-label')].map((e) => e.textContent);
-    expect(labels).toEqual(['2020年の人口', '2020年との比較', '65歳以上の割合', '0〜14歳の割合']);
+    expect(labels).toEqual(['2020年の人口', '2020年との比較', '65歳以上の割合', '0〜14歳の割合', '高齢者1人を支える現役世代']);
     expect(q('.kpi .badge-official')?.textContent).toBe('実績（国勢調査）');
     store.set({ year: 2035 });
     expect(q('.kpi .badge-official')?.textContent).toBe('公式推計');
     store.set({ year: 2100 });
     expect(q('.kpi .badge-estimate')?.textContent).toBe('試算');
-    expect(kpis()).toHaveLength(4);
+    expect(kpis()).toHaveLength(5);
   });
 });
 
@@ -194,7 +194,9 @@ describe('mountTownPanel: updates only what changed', () => {
     expect(note.textContent).toContain('公表された仮定から公式の方法で計算し直しています');
     expect(note.textContent).toContain('町では数人、都道府県では数十人ほど違うことがあります');
     expect(note.textContent).not.toContain('予測');
-    expect(section.querySelectorAll('.chart-table-note')).toHaveLength(1); // only the series table has it
+    // only the population table has this note (the support ratio's table has its own; the pyramid's has none)
+    expect([...section.querySelectorAll('.chart-table-note')].filter((n) => n.textContent === TABLE_NOTE)).toHaveLength(1);
+    expect(section.querySelectorAll('.chart-table-note')).toHaveLength(2);
     // laid out as no-break phrases, one span per phrase (2 lines at 390px break between them, not inside)
     const keeps = [...note.querySelectorAll(':scope > .keep')].map((k) => k.textContent);
     expect(keeps).toEqual(phrases(TABLE_NOTE));
@@ -269,7 +271,7 @@ describe('mountTownPanel: facility panel details', () => {
   test('a village without age assumptions (青ヶ島村) still renders every part', () => {
     const { q, kpis } = setup({ selectedArea: '13402', year: 2100 });
     expect(q('.town-name')?.textContent).toBe('青ヶ島村');
-    expect(kpis()).toHaveLength(4);
+    expect(kpis()).toHaveLength(5);
     expect(q('.town-facilities')).not.toBeNull();
   });
 });
@@ -748,3 +750,228 @@ function syntheticWorld(): World {
   };
   return { data: syn, runner: createRunner(syn) };
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// The support ratio: people aged 15-64 per person aged 65+ (tile and chart)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Computed here from the age classes, independently of the app's helpers: 15-64 = classes 3..12, 65+ = 13..19. */
+function ratioOver(pops: Pop[]): number {
+  let w = 0;
+  let o = 0;
+  for (const p of pops) {
+    for (let i = 3; i <= 12; i++) w += p.M[i] + p.F[i];
+    for (let i = 13; i <= 19; i++) o += p.M[i] + p.F[i];
+  }
+  return w / o;
+}
+const defaultSeries = runner.run(DEFAULT_SCENARIO);
+const ratioIn = (codes: string[], year: number, s = defaultSeries) => ratioOver(codes.map((c) => s.get(c)![year]));
+const supportTile = (section: HTMLElement) => section.querySelector<HTMLElement>('.kpi.town-support-kpi')!;
+const supportRows = (section: HTMLElement): Map<number, string[]> => {
+  const rows = new Map<number, string[]>();
+  for (const tr of section.querySelectorAll('.support-figure tbody tr')) {
+    rows.set(Number(tr.querySelector('th')!.textContent!.replace('年', '')), [...tr.querySelectorAll('td')].map((td) => td.textContent!));
+  }
+  return rows;
+};
+
+describe('the support ratio tile', () => {
+  test('田辺市: 1.6 in 2020, 0.9 in 2050, 0.8 in 2100, one decimal, unit 人, with 2020 under it', () => {
+    expect(ratioIn(['30206'], 2020)).toBeCloseTo(1.6098, 4);
+    const { section, store } = setup({ selectedArea: '30206', year: 2020 });
+    const t = supportTile(section);
+    expect(t.querySelector('.kpi-label')!.textContent).toBe('高齢者1人を支える現役世代');
+    expect(t.querySelector('.kpi-value')!.textContent).toBe('1.6人');
+    expect(t.querySelector('.kpi-unit')!.textContent).toBe('人');
+    expect(t.querySelector('.kpi-note')!.textContent).toBe('2020年は1.6人');
+    store.set({ year: 2050 });
+    expect(ratioIn(['30206'], 2050)).toBeCloseTo(0.8863, 4);
+    expect(t.querySelector('.kpi-value')!.textContent).toBe('0.9人');
+    expect(t.querySelector('.kpi-note')!.textContent).toBe('2020年は1.6人');
+    store.set({ year: 2100 });
+    expect(ratioIn(['30206'], 2100)).toBeCloseTo(0.79935, 4);
+    expect(t.querySelector('.kpi-value')!.textContent).toBe('0.8人');
+    expect(supportTile(section)).toBe(t); // the same node, only its text changes
+  });
+
+  test('every year shows the ratio of that year (one decimal of 15-64 / 65+), for a town, a prefecture and Japan', () => {
+    const wakayama = groups.prefs['30'];
+    const { section, store } = setup({ year: 2020 });
+    for (const [sel, codes] of [
+      [{ selectedArea: '30206' }, ['30206']],
+      [{ selectedPref: '30', selectedArea: undefined }, wakayama],
+      [{ selectedPref: undefined }, areas.map((a) => a.code)],
+    ] as const) {
+      store.set(sel);
+      for (let y = 2020; y <= 2100; y += 5) {
+        store.set({ year: y });
+        expect(tile(section, 4), `${JSON.stringify(sel)} ${y}`).toBe(`${ratioIn([...codes], y).toFixed(1)}人`);
+        expect(supportTile(section).querySelector('.kpi-note')!.firstChild!.textContent).toBe(`2020年は${ratioIn([...codes], 2020).toFixed(1)}人`);
+      }
+    }
+  });
+
+  test('Japan 2020 is 2.1 (75,087,865 aged 15-64 for 36,026,632 aged 65+); 和歌山県 1.7, 1.1, 1.1', () => {
+    const { section, store } = setup({ year: 2020 });
+    expect(section.querySelector('.town-name')!.textContent).toBe('日本全体');
+    expect(tile(section, 4)).toBe('2.1人');
+    store.set({ year: 2050 });
+    expect(tile(section, 4)).toBe('1.4人');
+    store.set({ selectedPref: '30', year: 2020 });
+    expect(tile(section, 4)).toBe('1.7人');
+    store.set({ year: 2050 });
+    expect(tile(section, 4)).toBe('1.1人');
+    store.set({ year: 2100 });
+    expect(tile(section, 4)).toBe('1.1人');
+  });
+
+  test('the 試算 mark sits in the tile only after 2050, like the population tile; the definition line is always there', () => {
+    const { section, store } = setup({ selectedArea: '30206', year: 2050 });
+    const t = supportTile(section);
+    expect(t.querySelector('.badge-estimate')).toBeNull();
+    store.set({ year: 2055 });
+    expect(t.querySelector('.kpi-note .badge-estimate')!.textContent).toBe('試算');
+    expect(t.querySelector('.kpi-note')!.textContent).toBe('2020年は1.6人 試算');
+    expect(section.querySelector('.kpi .kpi-note .badge-estimate')!.textContent).toBe('試算'); // the population tile's mark too
+    store.set({ year: 2100 });
+    expect(t.querySelectorAll('.badge-estimate')).toHaveLength(1);
+    store.set({ year: 2020 });
+    expect(t.querySelector('.badge-estimate')).toBeNull();
+    expect(t.querySelector('.kpi-note')!.textContent).toBe('2020年は1.6人');
+    const def = t.querySelector('.town-support-def')!;
+    expect(def.textContent).toBe('15〜64歳の人数 ÷ 65歳以上の人数');
+    expect(def.classList.contains('note')).toBe(true);
+    expect(def.previousElementSibling).toBe(t.querySelector('.kpi-note')); // under the tile's number and its note
+  });
+
+  test('the tile comes right after the 65+ and 0-14 tiles, in the same row of tiles', () => {
+    const { section } = setup({ selectedArea: '30206' });
+    const tiles = [...section.querySelectorAll('.town-kpis .kpi-row > .kpi')];
+    expect(tiles).toHaveLength(5);
+    expect(tiles[4]).toBe(supportTile(section));
+    expect(tiles[2].querySelector('.kpi-label')!.textContent).toBe('65歳以上の割合');
+    expect(tiles[3].querySelector('.kpi-label')!.textContent).toBe('0〜14歳の割合');
+  });
+
+  test('nobody aged 65+ (a made-up town of 499.6 people aged 40-44): 「—」, never Infinity or NaN, in the tile and the chart', () => {
+    const w = syntheticWorld();
+    const { section, store } = setup({ selectedArea: '99001', year: 2020 }, undefined, w);
+    const t = supportTile(section);
+    expect(t.querySelector('.kpi-value')!.textContent).toBe('—');
+    expect(t.querySelector('.kpi-note')!.textContent).toBe('2020年は—');
+    const bad = /NaN|Infinity/;
+    const attrs = () => [...section.querySelectorAll('*')].flatMap((e) => [...e.attributes].map((a) => `${e.tagName}.${a.name}=${a.value}`));
+    expect(section.textContent).not.toMatch(bad);
+    expect(attrs().filter((a) => bad.test(a))).toEqual([]);
+    const marker = section.querySelector('.support-svg circle.dot-marker')!;
+    expect(marker.getAttribute('visibility')).toBe('hidden'); // no value in 2020: no dot
+    const rows = supportRows(section);
+    expect(rows.get(2020)![0]).toBe('—');
+    // The cohort reaches 65 in 2045: from then on there is a ratio, and the line is drawn from there.
+    const ratio2045 = ratioIn(['99001'], 2045, w.runner.run(DEFAULT_SCENARIO));
+    expect(Number.isFinite(ratio2045)).toBe(true);
+    expect(rows.get(2045)![0]).toBe(ratio2045.toFixed(2));
+    const official = section.querySelector('.support-svg path.line-official')!.getAttribute('d')!;
+    expect(official.match(/[ML]/g)).toEqual(['M', 'L']); // 2045 and 2050 only
+    store.set({ year: 2045 });
+    expect(marker.getAttribute('visibility')).toBeNull();
+    expect(t.querySelector('.kpi-value')!.textContent).toBe(`${ratio2045.toFixed(1)}人`);
+    expect(attrs().filter((a) => bad.test(a))).toEqual([]);
+  });
+});
+
+describe('the support ratio chart', () => {
+  test('a town: solid official line 2020..2050, dashed estimate 2050..2100, legend, summary, label and table in the population chart\'s style', () => {
+    const { section } = setup({ selectedArea: '30206', year: 2050 });
+    const fig = section.querySelector('.town-support .support-figure')!;
+    expect(section.querySelector('.town-support .panel-section-title')!.textContent).toBe('高齢者1人を支える現役世代の推移');
+    const svg = fig.querySelector('svg.chart.support-svg')!;
+    expect(svg.getAttribute('role')).toBe('img');
+    const pts = (cls: string) => svg.querySelector(`path.${cls}`)!.getAttribute('d')!.match(/-?\d+(\.\d+)?,-?\d+(\.\d+)?/g)!;
+    expect(pts('line-official')).toHaveLength(7); // 2020, 2025 ... 2050
+    expect(pts('line-estimate')).toHaveLength(11); // 2050 ... 2100
+    expect(svg.querySelector('path.line-baseline')).toBeNull();
+    expect([...fig.querySelectorAll('.chart-legend li')].map((li) => li.textContent)).toEqual(['公式推計（2050年まで）', 'このアプリの試算（2050年より後）']);
+    const r = (y: number) => ratioIn(['30206'], y);
+    const summary = `2020年 ${r(2020).toFixed(1)}人（国勢調査）、2050年 ${r(2050).toFixed(1)}人（公式推計）、2100年 ${r(2100).toFixed(1)}人（このアプリの試算）`;
+    expect(summary).toBe('2020年 1.6人（国勢調査）、2050年 0.9人（公式推計）、2100年 0.8人（このアプリの試算）');
+    expect(fig.querySelector('.chart-summary')!.textContent).toBe(summary);
+    expect(svg.getAttribute('aria-label')).toBe(`田辺市の高齢者1人を支える現役世代の推移。${summary}`);
+    expect([...svg.querySelectorAll('text.chart-end')].map((e) => e.textContent)).toEqual(['0.8人', '1.6人']); // the 2100 end, then 2020
+    // the y axis is the ratio from 0 (not people counts)
+    expect([...svg.querySelectorAll('.chart-tick')].slice(0, 5).map((e) => e.textContent)).toEqual(['0', '0.5', '1', '1.5', '2']);
+
+    const details = fig.querySelector<HTMLDetailsElement>('details.chart-table')!;
+    expect(details.open).toBe(false);
+    expect(details.querySelector('summary')!.textContent).toBe('高齢者1人を支える現役世代の推移の数字を表で見る');
+    expect(details.querySelector('caption')!.textContent).toBe('田辺市の高齢者1人を支える現役世代の推移');
+    expect([...details.querySelectorAll('thead th')].map((th) => th.textContent)).toEqual(['年', '公式推計（人）', 'このアプリの試算（人）']);
+    const rows = supportRows(section);
+    expect([...rows.keys()]).toEqual(Array.from({ length: 17 }, (_, i) => 2020 + 5 * i));
+    expect(rows.get(2020)).toEqual(['1.61', '－']);
+    expect(rows.get(2050)).toEqual([r(2050).toFixed(2), r(2050).toFixed(2)]);
+    expect(rows.get(2050)![0]).toBe('0.89');
+    expect(rows.get(2100)).toEqual(['－', '0.80']);
+    for (const [y, cells] of rows) expect(cells.find((c) => c !== '－'), String(y)).toBe(r(y).toFixed(2));
+    const note = details.querySelector('.note.chart-table-note')!;
+    expect(note.textContent).toBe('15〜64歳の人数を65歳以上の人数で割った値です。公式推計の列も、社人研の発表値ではなく、このアプリが公式の方法で計算し直した年齢別の人口から求めています。');
+  });
+
+  test('points sit at ratio / axis maximum of the way up from the zero gridline, and the marker dot on the line', () => {
+    const { section, store } = setup({ selectedArea: '30206', year: 2020 });
+    const svg = section.querySelector('.support-svg')!;
+    const grid = [...svg.querySelectorAll('line.chart-grid')].map((l) => Number(l.getAttribute('y1')));
+    const y0 = grid[0];
+    const yTop = grid[grid.length - 1];
+    expect(y0).toBe(SERIES_VIEW.height - SERIES_VIEW.bottom);
+    const axisMax = 2; // the last tick
+    const official = svg.querySelector('path.line-official')!.getAttribute('d')!.match(/-?\d+(\.\d+)?,-?\d+(\.\d+)?/g)!.map((p) => Number(p.split(',')[1]));
+    [2020, 2025, 2030, 2035, 2040, 2045, 2050].forEach((year, i) => {
+      expect((y0 - official[i]) / (y0 - yTop)).toBeCloseTo(ratioIn(['30206'], year) / axisMax, 2);
+    });
+    expect(Number(svg.querySelector('circle.dot-marker')!.getAttribute('cy'))).toBeCloseTo(official[0], 1);
+    const path = svg.querySelector('path.line-official');
+    store.set({ year: 2075 });
+    expect(svg.querySelector('path.line-official')).toBe(path); // a new year moves the marker only
+    expect(svg.querySelector('.chart-marker-label')!.textContent).toBe('2075年');
+    const estimate = svg.querySelector('path.line-estimate')!.getAttribute('d')!.match(/-?\d+(\.\d+)?,-?\d+(\.\d+)?/g)!.map((p) => Number(p.split(',')[1]));
+    expect(Number(svg.querySelector('circle.dot-marker')!.getAttribute('cy'))).toBeCloseTo(estimate[5], 1); // 2075 is the 6th estimate point
+    expect(svg.querySelector('circle.dot-marker')!.getAttribute('class')).toContain('dot-estimate');
+  });
+
+  test('a scenario change adds the reference line of the default scenario, and restoring it removes the line', () => {
+    const alt: Scenario = { ...DEFAULT_SCENARIO, cwrMult: 1.4 };
+    const { section, store } = setup({ selectedArea: '30206', year: 2100 });
+    const svg = section.querySelector('.support-svg')!;
+    store.set({ scenario: alt });
+    expect(svg.querySelector('path.line-baseline')).not.toBeNull();
+    expect(section.querySelectorAll('.support-figure .chart-legend li')).toHaveLength(3);
+    const rows = supportRows(section);
+    expect(rows.get(2100)).toEqual(['－', ratioIn(['30206'], 2100, runner.run(alt)).toFixed(2), ratioIn(['30206'], 2100).toFixed(2)]);
+    expect(rows.get(2100)![1]).not.toBe(rows.get(2100)![2]);
+    expect(tile(section, 4)).toBe(`${ratioIn(['30206'], 2100, runner.run(alt)).toFixed(1)}人`);
+    store.set({ scenario: DEFAULT_SCENARIO });
+    expect(svg.querySelector('path.line-baseline')).toBeNull();
+    expect(supportRows(section).get(2100)).toEqual(['－', '0.80']);
+  });
+
+  test('Japan and a prefecture divide their sums (not an average of their towns\' ratios)', () => {
+    const { section, store } = setup({ year: 2020 });
+    const all = areas.map((a) => a.code);
+    expect(supportRows(section).get(2020)![0]).toBe(ratioIn(all, 2020).toFixed(2));
+    expect(supportRows(section).get(2020)![0]).toBe('2.08');
+    store.set({ selectedPref: '30' });
+    const wakayama = groups.prefs['30'];
+    const mean = wakayama.reduce((s, c) => s + ratioIn([c], 2100), 0) / wakayama.length;
+    expect(supportRows(section).get(2100)![1]).toBe(ratioIn(wakayama, 2100).toFixed(2));
+    expect(supportRows(section).get(2100)![1]).not.toBe(mean.toFixed(2));
+    expect(section.querySelector('.support-svg')!.getAttribute('aria-label')).toMatch(/^和歌山県の高齢者1人を支える現役世代の推移。/);
+  });
+
+  test('the panel keeps the order: tiles, pyramid, population chart, support chart, facilities', () => {
+    const { section } = setup({ selectedArea: '30206' });
+    const order = [...section.querySelectorAll('.town > .panel-section')].map((e) => e.classList[1]);
+    expect(order).toEqual(['town-kpis', 'town-pyramid', 'town-series', 'town-support', 'town-facilities']);
+  });
+});

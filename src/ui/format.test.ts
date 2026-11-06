@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { formatDeltaPct, formatPct, formatPop, formatYear } from './format';
+import { formatDeltaPct, formatPct, formatPop, formatSupport, formatSupportExact, formatYear, SUPPORT_NONE } from './format';
 
 describe('formatDeltaPct', () => {
   test('one decimal normally, two below 0.1, ±0 near zero', () => {
@@ -51,5 +51,25 @@ describe('formatPct', () => {
 describe('formatYear', () => {
   test('appends 年', () => {
     expect(formatYear(2050)).toBe('2050年');
+  });
+});
+
+describe('formatSupport and formatSupportExact', () => {
+  test('one decimal with 人 on screen, two decimals without a unit in the table', () => {
+    expect(formatSupport(2.084232)).toBe('2.1人');
+    expect(formatSupport(0.886342)).toBe('0.9人');
+    expect(formatSupport(0.79935)).toBe('0.8人');
+    expect(formatSupport(1)).toBe('1.0人');
+    expect(formatSupport(0)).toBe('0.0人');
+    expect(formatSupportExact(2.084232)).toBe('2.08');
+    expect(formatSupportExact(0.79935)).toBe('0.80');
+  });
+
+  test('no ratio (nobody aged 65+) is an em dash, never Infinity or NaN', () => {
+    expect(SUPPORT_NONE).toBe('—');
+    for (const v of [Number.NaN, Infinity, -Infinity]) {
+      expect(formatSupport(v)).toBe('—');
+      expect(formatSupportExact(v)).toBe('—');
+    }
   });
 });
