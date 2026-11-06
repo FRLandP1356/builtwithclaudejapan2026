@@ -21,7 +21,7 @@ export interface Legend {
 
 const RATIO_TITLE = '色は2020年の人口との比（濃い赤ほど減り、青は増えた所）';
 const ALLOCATION_TITLE = '割り振りによる人口の変化（%）（赤は減り、青は増えた所）';
-export const SUPPORT_TITLE = '色は高齢者1人を支える現役世代の人数（濃いほど多い）';
+export const SUPPORT_TITLE = '色は高齢者1人を支える人数（濃いほど多い）';
 
 interface RenderOptions {
   /** The first and last ticks sit on the bar's ends (aligned inward); off for ticks that all sit between classes. */

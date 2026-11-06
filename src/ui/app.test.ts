@@ -929,7 +929,7 @@ describe('the map colour mode: the change since 2020 or the support ratio', () =
     const legend = root.querySelector<HTMLElement>('.legend')!;
     expect(legend.dataset.mode).toBe('support');
     expect(legend.querySelector('.legend-title')!.textContent).toBe(SUPPORT_TITLE);
-    expect(SUPPORT_TITLE).toBe('色は高齢者1人を支える現役世代の人数（濃いほど多い）');
+    expect(SUPPORT_TITLE).toBe('色は高齢者1人を支える人数（濃いほど多い）');
     expect([...legend.querySelectorAll('.legend-tick')].map((t) => t.textContent)).toEqual(['0.8人', '1人', '1.5人', '2人', '3人']);
     expect([...legend.querySelectorAll('.legend-tick')].some((t) => (t as HTMLElement).dataset.edge)).toBe(false); // all between classes
     expect(legend.getAttribute('aria-label')).toBe(`${SUPPORT_TITLE}。左から 0.8人未満、0.8〜1人、1〜1.5人、1.5〜2人、2〜3人、3人以上。`);

@@ -20,7 +20,8 @@ export const SUPPORT_CHART: SeriesChartSpec = {
   title: `${SUPPORT_LABEL}の推移`,
   format: formatSupport,
   cell: formatSupportExact,
-  tableSummary: `${SUPPORT_LABEL}の推移の数字を表で見る`,
+  // Short enough for one line at 390px (the full name would break 「見る」 apart); the heading above says the full name.
+  tableSummary: '支える人数の推移の数字を表で見る',
   columns: ['公式推計（人）', 'このアプリの試算（人）', '前提を変える前（人）'],
   tableNote: SUPPORT_TABLE_NOTE,
 };

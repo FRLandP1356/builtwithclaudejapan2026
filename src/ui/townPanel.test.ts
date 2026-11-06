@@ -904,7 +904,7 @@ describe('the support ratio chart', () => {
 
     const details = fig.querySelector<HTMLDetailsElement>('details.chart-table')!;
     expect(details.open).toBe(false);
-    expect(details.querySelector('summary')!.textContent).toBe('高齢者1人を支える現役世代の推移の数字を表で見る');
+    expect(details.querySelector('summary')!.textContent).toBe('支える人数の推移の数字を表で見る');
     expect(details.querySelector('caption')!.textContent).toBe('田辺市の高齢者1人を支える現役世代の推移');
     expect([...details.querySelectorAll('thead th')].map((th) => th.textContent)).toEqual(['年', '公式推計（人）', 'このアプリの試算（人）']);
     const rows = supportRows(section);
