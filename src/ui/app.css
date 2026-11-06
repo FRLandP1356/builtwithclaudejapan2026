@@ -348,6 +348,17 @@
 .alloc-bar .btn {
   min-height: 40px; /* a quieter row than the 44px default, still a comfortable target */
 }
+/* What the map colours by: the shared segmented choice (theme.css .choice) right above the map. Hidden while an
+   allocation is drawn, because the allocation's colours win then. */
+.map-mode {
+  padding: 0 0 var(--sp-2);
+}
+.map-mode[hidden] {
+  display: none;
+}
+.map-mode .choice button {
+  font-size: var(--fs-15);
+}
 .inset-bg {
   fill: var(--map-sea);
 }
@@ -643,8 +654,10 @@
   .map-bar {
     padding: var(--sp-2) 0;
   }
+  /* 422px: everything of the column but the map at a first, unscrolled view (header, place bar, headline, the 50px
+     colour choice or the allocation bar that replaces it, legend and year). */
   .map-svg {
-    max-height: max(360px, calc(100vh - 372px));
+    max-height: max(360px, calc(100vh - 422px));
   }
   .map-foot {
     grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);

@@ -29,6 +29,22 @@ export function formatYear(year: number): string {
   return `${year}年`;
 }
 
+/** Shown for a support ratio that cannot be computed (nobody aged 65+): an em dash, never Infinity or NaN. */
+export const SUPPORT_NONE = '—';
+
+/**
+ * The support ratio, people aged 15-64 per person aged 65+, with one decimal: 2.1人 / 0.8人; 「—」 without a ratio.
+ * The map colours by this same rounded value (supportClass in src/map/colors.ts), so a label and its colour agree.
+ */
+export function formatSupport(ratio: number): string {
+  return Number.isFinite(ratio) ? `${ratio.toFixed(1)}人` : SUPPORT_NONE;
+}
+
+/** The support ratio with two decimals and no unit, for the data table: 2.08 / 0.89; 「—」 without a ratio. */
+export function formatSupportExact(ratio: number): string {
+  return Number.isFinite(ratio) ? ratio.toFixed(2) : SUPPORT_NONE;
+}
+
 /** A signed change in percent points: +10.0% / −0.04% (two decimals below 0.1) / ±0%. */
 export function formatDeltaPct(p: number): string {
   if (!Number.isFinite(p)) return DASH;

@@ -197,3 +197,36 @@ describe('one name per facility (Ruling 16: looked up by id from facilities.json
     await settle();
   }, 60_000);
 });
+
+describe('the support ratio on the real maps (people aged 15-64 per person aged 65+)', () => {
+  test('Japan 2.1 / 1.4 / 1.4, 和歌山県 1.7 / 1.1 / 1.1 and 田辺市 1.6 / 0.9 / 0.8 in 2020 / 2050 / 2100', async () => {
+    const { store } = handle.ctx;
+    store.set({ allocation: undefined, selectedPref: undefined, mapMode: 'support' });
+    await settle();
+    const head = () => root.querySelector('.map-headline-num b')!.textContent;
+    const national = root.querySelector('.map-host-national svg')!;
+    const want = { 2020: ['2.1', '1.7', '1.6'], 2050: ['1.4', '1.1', '0.9'], 2100: ['1.4', '1.1', '0.8'] } as const;
+    for (const year of [2020, 2050, 2100] as const) {
+      store.set({ year });
+      expect(head(), `Japan ${year}`).toBe(`${want[year][0]}人`);
+      expect(label(national, '30')).toContain(`${year}年 高齢者1人を支える現役世代 ${want[year][1]}人`);
+      expect(root.querySelector('#panel-town .town-support-kpi .kpi-value')!.textContent).toBe(`${want[year][0]}人`); // the panel says the same
+    }
+    store.set({ selectedPref: '30' });
+    await settle();
+    const pref = root.querySelector('.map-host:not([hidden]):not(.map-host-national) svg')!;
+    for (const year of [2020, 2050, 2100] as const) {
+      store.set({ year });
+      expect(head(), `和歌山県 ${year}`).toBe(`${want[year][1]}人`);
+      expect(label(pref, '30206')).toContain(`${year}年 高齢者1人を支える現役世代 ${want[year][2]}人`);
+    }
+    store.set({ selectedArea: '30206' });
+    expect(head()).toBe('0.8人');
+    expect(root.querySelector('#panel-town .town-support-kpi .kpi-value')!.textContent).toBe('0.8人');
+    // every area has a colour from the ramp (no area without anyone aged 65+ in the real data)
+    const fills = new Set([...pref.querySelectorAll('path.area')].map((p) => p.getAttribute('fill')));
+    for (const f of fills) expect(['#a0afc3', '#889ab5', '#7086a8', '#58739a', '#415f8c', '#2b4c7e']).toContain(f);
+    store.set({ mapMode: 'change', selectedArea: undefined });
+    await settle();
+  }, 30_000);
+});

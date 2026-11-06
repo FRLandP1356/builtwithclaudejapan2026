@@ -7,11 +7,15 @@ export const FIRST_WORKING_AGE = 3;
 /** First 5-year class that counts as 65+ (class 13 = 65-69). */
 export const FIRST_65_PLUS = 13;
 
+function sumRange(v: AgeVec, from: number, to: number): number {
+  let s = 0;
+  for (let j = from; j < to && j < v.length; j++) s += v[j];
+  return s;
+}
+
 /** Sum of the classes from `from` up to (not including) `to`; `to` defaults to the end of the vector (95+). */
 function sumFrom(v: AgeVec, from: number, to: number = v.length): number {
-  let s = 0;
-  for (let j = from; j < to; j++) s += v[j];
-  return s;
+  return sumRange(v, from, to);
 }
 
 /** Total population, both sexes, all ages. */
@@ -44,6 +48,30 @@ export function ageGroups(p: Pop): AgeGroups {
     age15to64: sum(FIRST_WORKING_AGE, FIRST_65_PLUS),
     age65plus: sum(FIRST_65_PLUS),
   };
+}
+
+/** Population aged 15-64 (class index 3 to 12), both sexes. */
+export function ages15to64(p: Pop): number {
+  return sumFrom(p.M, FIRST_WORKING_AGE, FIRST_65_PLUS) + sumFrom(p.F, FIRST_WORKING_AGE, FIRST_65_PLUS);
+}
+
+/**
+ * How many people aged 15-64 there are for each person aged 65 and over: working / elderly. NaN when there is nobody
+ * aged 65 and over (the screen shows 「—」 then, never Infinity). Summed places (a prefecture, the country) divide
+ * their sums: add the two counts first, then call this.
+ */
+export function supportRatioOf(working: number, elderly: number): number {
+  if (!(elderly > 0) || !Number.isFinite(working)) return NaN;
+  return working / elderly;
+}
+
+/**
+ * The support ratio of one population (高齢者1人を支える現役世代の人数): ages15to64 / ages65, NaN without anyone 65+.
+ * The AI tool get_age_groups (src/ai/tools.ts) returns the age groups; it could expose this ratio next to them by
+ * calling this on the same summed Pop it already builds.
+ */
+export function supportRatio(p: Pop): number {
+  return supportRatioOf(ages15to64(p), ages65(p));
 }
 
 /**

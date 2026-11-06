@@ -1,5 +1,6 @@
-// The population line chart of the town panel: the official line (solid, 2020 census to 2050), this app's estimate
-// (dashed, 2050 to 2100) and, when the scenario differs from the default, the default estimate as a dotted reference.
+// The line charts of the town panel (population, and the support ratio through the same view with its own
+// SeriesChartSpec): the official line (solid, 2020 census to 2050), this app's estimate (dashed, 2050 to 2100) and,
+// when the scenario differs from the default, the default estimate as a dotted reference.
 // Pure builders (seriesPoints, niceScale, formatAxisCount, seriesSummary) are separate from the SVG view so they can be
 // tested without a DOM. Colours come from the theme tokens through CSS classes (src/ui/townPanel.css); nothing here
 // writes a raw colour.
@@ -151,22 +152,25 @@ export function seriesPoints(input: SeriesPointsInput): SeriesPoints {
   };
 }
 
-/** The three figures that carry the whole line: 2020 (census), 2050 (official) and 2100 (this app's estimate). */
-export function seriesSummaryParts(p: SeriesPoints): string[] {
+/**
+ * The three figures that carry the whole line: 2020 (census), 2050 (official) and 2100 (this app's estimate), each
+ * written with `format` (the population chart's formatPop by default).
+ */
+export function seriesSummaryParts(p: SeriesPoints, format: (v: number) => string = formatPop): string[] {
   const first = p.official[0];
   const last = p.official[p.official.length - 1];
   const end = p.estimate[p.estimate.length - 1];
   if (!first || !last || !end) return [];
   return [
-    `${first.year}年 ${formatPop(first.value)}（国勢調査）`,
-    `${last.year}年 ${formatPop(last.value)}（公式推計）`,
-    `${end.year}年 ${formatPop(end.value)}（このアプリの試算）`,
+    `${first.year}年 ${format(first.value)}（国勢調査）`,
+    `${last.year}年 ${format(last.value)}（公式推計）`,
+    `${end.year}年 ${format(end.value)}（このアプリの試算）`,
   ];
 }
 
 /** One sentence that carries the whole line for a screen reader (and for anyone who skips the picture). */
-export function seriesSummary(p: SeriesPoints): string {
-  return seriesSummaryParts(p).join('、');
+export function seriesSummary(p: SeriesPoints, format: (v: number) => string = formatPop): string {
+  return seriesSummaryParts(p, format).join('、');
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -185,6 +189,38 @@ export interface SeriesChartView {
 export const TABLE_NOTE =
   '公式推計の列は、社人研が発表した値です。このアプリは、公表された仮定から公式の方法で計算し直しています。そのため、2050年までの地図や町の数字は、発表値と、町では数人、都道府県では数十人ほど違うことがあります。';
 
+/**
+ * One chart of the family: what it shows and how its values are printed. The picture (axes, the 2050 border, solid
+ * official / dashed estimate / dotted reference lines, legend, summary and table disclosure) is the same for all.
+ */
+export interface SeriesChartSpec {
+  /** Class of the <figure> and the <svg> (`${kind}-figure`, `${kind}-svg`), so two charts in one panel stay apart. */
+  kind: string;
+  /** What the line is: 「人口の推移」. The picture's label and the table caption are 「<place>の<title>」. */
+  title: string;
+  /** A value in the end labels, under the marker and in the summary: 4.2万人 / 0.8人. */
+  format(v: number): string;
+  /** A value in a table cell: 42,311 / 0.80. */
+  cell(v: number): string;
+  /** The text of the disclosure that opens the table. */
+  tableSummary: string;
+  /** The column headings after 年: the official line, the estimate, the reference line. */
+  columns: readonly [string, string, string];
+  /** The quiet note under the table. */
+  tableNote: string;
+}
+
+/** The population chart (Task 9). */
+export const POPULATION_CHART: SeriesChartSpec = {
+  kind: 'series',
+  title: '人口の推移',
+  format: formatPop,
+  cell: (v) => exact.format(Math.round(v)),
+  tableSummary: '人口の推移の数字を表で見る',
+  columns: ['公式推計（人）', 'このアプリの試算（人）', '前提を変える前（人）'],
+  tableNote: TABLE_NOTE,
+};
+
 const W = 360;
 const H = 232;
 const TOP = 32;
@@ -196,10 +232,10 @@ export const SERIES_VIEW = { width: W, height: H, top: TOP, bottom: BOTTOM } as 
 const FIRST_YEAR = 2020;
 const LAST_YEAR = 2100;
 
-export function mountSeriesChart(host: HTMLElement): SeriesChartView {
+export function mountSeriesChart(host: HTMLElement, spec: SeriesChartSpec = POPULATION_CHART): SeriesChartView {
   const fig = document.createElement('figure');
-  fig.className = 'chart-figure series-figure';
-  const svg = svgEl('svg', { class: 'chart series-svg', viewBox: `0 0 ${W} ${H}`, role: 'img', focusable: 'false' });
+  fig.className = `chart-figure ${spec.kind}-figure`;
+  const svg = svgEl('svg', { class: `chart ${spec.kind}-svg`, viewBox: `0 0 ${W} ${H}`, role: 'img', focusable: 'false' });
   const legend = document.createElement('ul');
   legend.className = 'chart-legend';
   const keyOfficial = legendItem('key-official', '公式推計（2050年まで）');
@@ -211,7 +247,7 @@ export function mountSeriesChart(host: HTMLElement): SeriesChartView {
   const details = document.createElement('details');
   details.className = 'chart-table';
   const sum = document.createElement('summary');
-  sum.textContent = '人口の推移の数字を表で見る';
+  sum.textContent = spec.tableSummary;
   const wrap = document.createElement('div');
   wrap.className = 'table-wrap';
   const table = document.createElement('table');
@@ -219,7 +255,7 @@ export function mountSeriesChart(host: HTMLElement): SeriesChartView {
   wrap.append(table);
   const tableNote = document.createElement('p');
   tableNote.className = 'note chart-table-note';
-  tableNote.replaceChildren(...phraseNodes(TABLE_NOTE));
+  tableNote.replaceChildren(...phraseNodes(spec.tableNote));
   details.append(sum, wrap, tableNote);
   fig.append(svg, legend, summary, details);
   host.append(fig);
@@ -260,7 +296,21 @@ export function mountSeriesChart(host: HTMLElement): SeriesChartView {
     kids.push(svgEl('text', { class: 'chart-caption', x: bx - 6, y: TOP - 12, 'text-anchor': 'end' }, '公式推計'));
     kids.push(svgEl('text', { class: 'chart-caption', x: bx + 6, y: TOP - 12, 'text-anchor': 'start' }, 'このアプリの試算'));
 
-    const path = (pts: Point[]) => pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.year).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
+    // A value that cannot be computed (a support ratio without anyone aged 65+) is left out: the line breaks there
+    // and no dot or label is drawn for it, so no attribute ever says NaN.
+    const path = (pts: Point[]) => {
+      let d = '';
+      let pen = false;
+      for (const p of pts) {
+        if (!Number.isFinite(p.value)) {
+          pen = false;
+          continue;
+        }
+        d += `${d ? ' ' : ''}${pen ? 'L' : 'M'}${x(p.year).toFixed(1)},${y(p.value).toFixed(1)}`;
+        pen = true;
+      }
+      return d;
+    };
     if (points.baseline) kids.push(svgEl('path', { class: 'line line-baseline', d: path(points.baseline) }));
     kids.push(svgEl('path', { class: 'line line-estimate', d: path(points.estimate) }));
     kids.push(svgEl('path', { class: 'line line-official', d: path(points.official) }));
@@ -271,10 +321,11 @@ export function mountSeriesChart(host: HTMLElement): SeriesChartView {
 
     // End dots and end labels; the two labels at the right edge are kept 14 units apart.
     const dot = (p: Point, cls: string) => svgEl('circle', { class: `dot ${cls}`, cx: x(p.year), cy: y(p.value), r: 5 });
-    const firstO = points.official[0];
-    const lastO = points.official[points.official.length - 1];
-    const endE = points.estimate[points.estimate.length - 1];
-    const endB = points.baseline?.[points.baseline.length - 1];
+    const drawn = (p: Point | undefined) => (p && Number.isFinite(p.value) ? p : undefined);
+    const firstO = drawn(points.official[0]);
+    const lastO = drawn(points.official[points.official.length - 1]);
+    const endE = drawn(points.estimate[points.estimate.length - 1]);
+    const endB = drawn(points.baseline?.[points.baseline.length - 1]);
     if (firstO) kids.push(dot(firstO, 'dot-official'));
     if (lastO) kids.push(dot(lastO, 'dot-official'));
     if (endB) kids.push(dot(endB, 'dot-baseline'));
@@ -288,8 +339,8 @@ export function mountSeriesChart(host: HTMLElement): SeriesChartView {
       ends[0].ty -= push;
       ends[1].ty += push;
     }
-    for (const e of ends) kids.push(svgEl('text', { class: `chart-end ${e.cls}`, x: right + 8, y: e.ty, 'text-anchor': 'start' }, formatPop(e.p.value)));
-    if (firstO) kids.push(svgEl('text', { class: 'chart-end', x: x(firstO.year) + 8, y: y(firstO.value) - 10, 'text-anchor': 'start' }, formatPop(firstO.value)));
+    for (const e of ends) kids.push(svgEl('text', { class: `chart-end ${e.cls}`, x: right + 8, y: e.ty, 'text-anchor': 'start' }, spec.format(e.p.value)));
+    if (firstO) kids.push(svgEl('text', { class: 'chart-end', x: x(firstO.year) + 8, y: y(firstO.value) - 10, 'text-anchor': 'start' }, spec.format(firstO.value)));
 
     // Marker dot and label go last so they sit on top.
     const mDot = svgEl('circle', { class: 'dot dot-marker', r: 6 });
@@ -299,9 +350,9 @@ export function mountSeriesChart(host: HTMLElement): SeriesChartView {
     svg.replaceChildren(...kids);
     markerEls = { line: mLine, dot: mDot, label: mLabel };
 
-    const text = seriesSummary(points);
-    svg.setAttribute('aria-label', `${place}の人口の推移。${text}`);
-    summary.replaceChildren(...phraseNodes(seriesSummaryParts(points).map((part, i, all) => (i < all.length - 1 ? `${part}、` : part))));
+    const text = seriesSummary(points, spec.format);
+    svg.setAttribute('aria-label', `${place}の${spec.title}。${text}`);
+    summary.replaceChildren(...phraseNodes(seriesSummaryParts(points, spec.format).map((part, i, all) => (i < all.length - 1 ? `${part}、` : part))));
     legend.replaceChildren(keyOfficial, keyEstimate, ...(points.baseline ? [keyBaseline] : []));
     renderTable(points, place);
     setMarker(points.marker);
@@ -313,7 +364,14 @@ export function mountSeriesChart(host: HTMLElement): SeriesChartView {
     markerEls.line.setAttribute('x1', String(mx));
     markerEls.line.setAttribute('x2', String(mx));
     markerEls.dot.setAttribute('cx', String(mx));
-    markerEls.dot.setAttribute('cy', String(plot.y(m.value)));
+    // No value this year: the marker's line still shows the year, the dot has nowhere to sit.
+    if (Number.isFinite(m.value)) {
+      markerEls.dot.setAttribute('cy', String(plot.y(m.value)));
+      markerEls.dot.removeAttribute('visibility');
+    } else {
+      markerEls.dot.setAttribute('cy', String(plot.y(0)));
+      markerEls.dot.setAttribute('visibility', 'hidden');
+    }
     markerEls.dot.setAttribute('class', `dot dot-marker ${m.line === 'official' ? 'dot-official' : 'dot-estimate'}`);
     markerEls.label.setAttribute('x', String(Math.min(Math.max(mx, 30), W - 30)));
     // The axis already prints this year when it is a tick (2100年 under the marker): say it once.
@@ -328,15 +386,16 @@ export function mountSeriesChart(host: HTMLElement): SeriesChartView {
     const cell = (v: number | undefined) => {
       const td = document.createElement('td');
       td.className = 'num';
-      td.textContent = v === undefined ? '－' : exact.format(Math.round(v));
+      td.textContent = v === undefined ? '－' : spec.cell(v);
       return td;
     };
     const caption = document.createElement('caption');
     caption.className = 'sr-only';
-    caption.textContent = `${place}の人口の推移`;
+    caption.textContent = `${place}の${spec.title}`;
     const head = document.createElement('thead');
     const hr = document.createElement('tr');
-    for (const [text, num] of [['年', false], ['公式推計（人）', true], ['このアプリの試算（人）', true], ...(points.baseline ? [['前提を変える前（人）', true] as const] : [])] as const) {
+    const [colOfficial, colEstimate, colBaseline] = spec.columns;
+    for (const [text, num] of [['年', false], [colOfficial, true], [colEstimate, true], ...(points.baseline ? [[colBaseline, true] as const] : [])] as const) {
       const th = document.createElement('th');
       th.scope = 'col';
       if (num) th.className = 'num';

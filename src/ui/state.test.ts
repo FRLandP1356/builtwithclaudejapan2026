@@ -7,7 +7,7 @@ import type { Series } from '../engine/types';
 import { createAppStore, createStore, isValidYear, type AppState } from './state';
 
 function initial(): AppState {
-  return { year: 2050, scenario: DEFAULT_SCENARIO, series: new Map<string, Series>() };
+  return { year: 2050, scenario: DEFAULT_SCENARIO, series: new Map<string, Series>(), mapMode: 'change' };
 }
 
 describe('createStore', () => {
@@ -267,5 +267,49 @@ describe('createAppStore', () => {
   test('the initial selection is normalised too', () => {
     const store = createAppStore(runner, data, { selectedArea: '13101' });
     expect(store.get()).toMatchObject({ selectedPref: '13', selectedArea: '13101' });
+  });
+});
+
+describe('createAppStore: the map colour mode', () => {
+  const areas = loadSampleAreas();
+  const runner = createRunner({ areas, facilities: loadFacilities() });
+  const data = { areas, prefNames: new Map(areas.map((a) => [a.prefCode, a.prefName])) };
+  afterEach(() => vi.restoreAllMocks());
+
+  test('starts on the change since 2020, switches to the support ratio and back, notifying once each', () => {
+    const store = createAppStore(runner, data);
+    expect(store.get().mapMode).toBe('change');
+    const seen: string[] = [];
+    store.subscribe((s, prev) => seen.push(`${prev.mapMode}>${s.mapMode}`));
+    expect(store.set({ mapMode: 'support' })).toBe(true);
+    expect(store.set({ mapMode: 'support' })).toBe(false); // same value: no notification
+    expect(store.set({ mapMode: 'change' })).toBe(true);
+    expect(seen).toEqual(['change>support', 'support>change']);
+  });
+
+  test('an unknown mode is rejected: state unchanged, no notification, a warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const store = createAppStore(runner, data, { mapMode: 'support' });
+    expect(store.get().mapMode).toBe('support');
+    let calls = 0;
+    store.subscribe(() => calls++);
+    for (const bad of ['ratio', '', undefined, null, 1]) {
+      expect(store.set({ mapMode: bad as never })).toBe(false);
+      expect(store.get().mapMode).toBe('support');
+    }
+    expect(calls).toBe(0);
+    expect(warn).toHaveBeenCalledTimes(5);
+    expect(String(warn.mock.calls[0][0])).toContain('mapMode');
+    expect(() => createAppStore(runner, data, { mapMode: 'other' as never })).toThrow(RangeError);
+  });
+
+  test('a year, a scenario or an allocation leave the mode alone', () => {
+    const store = createAppStore(runner, data, { mapMode: 'support' });
+    store.set({ year: 2100 });
+    store.set({ scenario: { ...DEFAULT_SCENARIO, cwrMult: 1.2 } });
+    store.set({ allocation: { year: 2100, label: 'x', changePercent: { [areas[0].code]: 5 }, flips: [] } });
+    expect(store.get().mapMode).toBe('support');
+    store.set({ allocation: undefined });
+    expect(store.get().mapMode).toBe('support');
   });
 });

@@ -2,25 +2,29 @@
 // the panel slots (#panel-town, #panel-controls, #panel-allocation, #panel-ai; Ruling 25) and the footer.
 // While `store.get().allocation` is set the maps colour by the allocation's change in percent, draw rings on the towns
 // that crossed a focused facility's guide and count markers per prefecture, and the headline says 割り振り後.
+// Otherwise a segmented control above the map chooses what the maps colour by (`store.get().mapMode`): the change since
+// 2020 (default) or the support ratio, people aged 15-64 per person aged 65+; the headline, the tooltips, the areas'
+// labels and the legend follow it. The control is hidden while an allocation is drawn (the allocation wins).
 import type { Topology } from 'topojson-specification';
 import { loadAll, loadPrefGeo, type AppData, type LoadOptions } from '../data/loader';
 import { createRunner } from '../data/runner';
 import type { Choropleth, TooltipContent } from '../map/choropleth';
-import { allocationColor, changeColor } from '../map/colors';
+import { allocationColor, changeColor, supportColor } from '../map/colors';
 import { mountLegend } from '../map/legend';
 import { mountNationalMap } from '../map/nationalMap';
 import { mountPrefectureMap } from '../map/prefectureMap';
 import { mountAllocation } from './allocationPanel';
 import { mountControls } from './controls';
 import { allocationLines, allocationView, changeOf, countMarkers, figureChanged, placeNumbers, type AllocationView, type PlaceKind, type PlaceNumbers } from './allocationView';
-import { deriveTotals, ratioAt, yearIndex, type Totals } from './derive';
-import { formatPct, formatPop } from './format';
+import { deriveSupport, deriveTotals, ratioAt, yearIndex, type SupportRatios, type Totals } from './derive';
+import { formatPct, formatPop, formatSupport } from './format';
 import { breadcrumbs, buildSearchIndex, goUp, levelOf, pickArea, pickPref, prefOfArea, type Selection } from './nav';
 import { mountSearch } from './search';
 import { phrases } from './phrases';
 import { mountAIPanel } from './aiPanel';
 import { allocatedBasisNote, APP_LEAD, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, SOURCES, type SourceLine } from './sources';
-import { createAppStore, DEFAULT_YEAR, type AllocationOverlay, type AppState, type PanelContext, type Store } from './state';
+import { createAppStore, DEFAULT_YEAR, MAP_MODES, type AllocationOverlay, type AppState, type MapMode, type PanelContext, type Store } from './state';
+import { MAP_MODE_GROUP, MAP_MODE_LABELS, SUPPORT_LABEL, support2020Line, supportLine } from './support';
 import { mountTownPanel } from './townPanel';
 import { mountYearSlider } from './yearSlider';
 
@@ -166,6 +170,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   };
   const geoOpts = { fetch: options.fetch, base: options.base, timeoutMs: options.timeoutMs, cache: options.prefGeoCache };
   let totals: Totals = deriveTotals(store.get().series, data.groups);
+  let supports: SupportRatios = deriveSupport(store.get().series, data.groups);
 
   root.innerHTML = `${headerHtml()}
     <main class="app-body">
@@ -184,6 +189,11 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
           <span class="alloc-bar-label">地図に反映中の割り振り：<b class="alloc-bar-name"></b></span>
           <span class="alloc-bar-stale note" hidden></span>
           <button type="button" class="btn btn-quiet alloc-clear">${ALLOC_CLEAR}</button>
+        </div>
+        <div class="map-mode">
+          <div class="choice" role="group" aria-label="${MAP_MODE_GROUP}">${MAP_MODES.map(
+            (m) => `<button type="button" data-map-mode="${m}" aria-pressed="false">${MAP_MODE_LABELS[m]}</button>`,
+          ).join('')}</div>
         </div>
         <div class="map-stage">
           <a class="skip-link" href="#year-range">${SKIP_TO_YEAR}</a>
@@ -219,6 +229,8 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   const allocStale = q<HTMLElement>('.alloc-bar-stale');
   const allocClear = q<HTMLButtonElement>('.alloc-clear');
   const skipLink = q<HTMLAnchorElement>('.skip-link');
+  const modeBox = q<HTMLDivElement>('.map-mode');
+  const modeButtons = [...modeBox.querySelectorAll<HTMLButtonElement>('[data-map-mode]')];
   const stage = q<HTMLDivElement>('.map-stage');
   const nationalHost = q<HTMLDivElement>('.map-host-national');
   const overlay = q<HTMLDivElement>('.map-overlay');
@@ -238,6 +250,16 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     n.allocated && formatPop(n.popBefore) !== formatPop(n.pop) ? `（割り振り前 ${formatPop(n.popBefore)}）` : '';
   const popText = (n: PlaceNumbers) => `${formatPop(n.pop)}${beforeText(n)}`;
 
+  // ---- support ratio mode: the map, the headline, the tooltips and the labels say the ratio instead -----------------
+  /** Whether the maps show the support ratio now (an allocation on the map takes precedence). */
+  const supportShown = (s: AppState = store.get()) => s.mapMode === 'support' && !s.allocation;
+  /** The support ratio of a place in the year shown and in 2020 (NaN without one). */
+  function supportOf(kind: PlaceKind, code: string): { now: number; base: number } {
+    const row = kind === 'japan' ? supports.japan : kind === 'pref' ? supports.pref.get(code) : supports.area.get(code);
+    const i = yearIndex(supports.years, store.get().year);
+    return { now: row && i >= 0 ? row[i] : NaN, base: row ? row[0] : NaN };
+  }
+
   /** Lines added to tooltips and labels while an allocation is drawn. */
   function allocLines(kind: PlaceKind, code: string): string[] {
     const v = allocViewFor(store.get().allocation);
@@ -245,6 +267,14 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   }
 
   function tooltipFor(kind: PlaceKind, code: string, name: string): TooltipContent | null {
+    if (supportShown()) {
+      const r = supportOf(kind, code);
+      return {
+        title: name,
+        lines: [supportLine(store.get().year, r.now), support2020Line(r.base)],
+        badge: isEstimate() ? ESTIMATE_BADGE : undefined,
+      };
+    }
     const n = numbersOf(kind, code);
     if (!n) return null;
     return {
@@ -255,6 +285,10 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     };
   }
   function ariaFor(kind: PlaceKind, code: string, name: string): string {
+    if (supportShown()) {
+      const r = supportOf(kind, code);
+      return `${name}、${supportLine(store.get().year, r.now)}、${support2020Line(r.base)}${isEstimate() ? '（このアプリの試算）' : ''}`;
+    }
     const n = numbersOf(kind, code);
     if (!n) return name;
     const marks = `${isEstimate() ? '（このアプリの試算）' : ''}${n.allocated ? `（${ALLOC_BADGE}）` : ''}`;
@@ -320,6 +354,11 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
       current.update((code) => allocationColor(changeOf(v, kind, code), v.scale));
       current.setRings(isNational ? [] : v.gained, isNational ? [] : v.lost);
       current.setMarkers(isNational ? countMarkers(v) : []);
+    } else if (supportShown(s)) {
+      const rows = isNational ? supports.pref : supports.area;
+      current.update((code) => supportColor(i < 0 ? NaN : (rows.get(code)?.[i] ?? NaN)));
+      current.setRings([], []);
+      current.setMarkers([]);
     } else {
       const rows = isNational ? totals.pref : totals.area;
       current.update((code) => changeColor(i < 0 ? NaN : ratioAt(rows.get(code) ?? new Float64Array(0), i)));
@@ -429,6 +468,10 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   function renderHeadline(s: AppState): void {
     const place = placeOf(s);
     headName.textContent = place.name;
+    if (supportShown(s)) {
+      renderSupportHeadline(s, place);
+      return;
+    }
     const n = numbersOf(place.kind, place.code);
     if (!n) {
       headNum.textContent = '';
@@ -474,6 +517,41 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     headNum.replaceChildren(...parts);
   }
 
+  /** In the support ratio mode: 「2050年 高齢者1人を支える現役世代 1.4人　2020年は2.1人　公式推計」 for the place shown. */
+  function renderSupportHeadline(s: AppState, place: { kind: PlaceKind; code: string }): void {
+    const r = supportOf(place.kind, place.code);
+    const b = document.createElement('b');
+    b.textContent = formatSupport(r.now);
+    const keep = (...nodes: Array<Node | string>) => {
+      const span = document.createElement('span');
+      span.className = 'head-keep';
+      span.append(...nodes);
+      return span;
+    };
+    const info = badgeFor(s.year);
+    const badge = document.createElement('span');
+    badge.className = info.estimate ? 'badge-estimate' : 'badge-official';
+    badge.textContent = info.text;
+    headNum.replaceChildren(
+      keep(`${s.year}年 ${SUPPORT_LABEL} `, b),
+      document.createTextNode('　'),
+      keep(support2020Line(r.base)),
+      document.createTextNode('　'),
+      badge,
+    );
+  }
+
+  /** The colour-mode control: the pressed button follows the store; hidden while an allocation is drawn. */
+  function renderMapMode(s: AppState): void {
+    for (const b of modeButtons) b.setAttribute('aria-pressed', String(b.dataset.mapMode === s.mapMode));
+    const hide = s.allocation !== undefined;
+    if (hide === modeBox.hidden) return;
+    // Do not leave keyboard focus on a button that goes away.
+    const hadFocus = hide && modeBox.contains(document.activeElement);
+    modeBox.hidden = hide;
+    if (hadFocus) headName.focus({ preventScroll: true });
+  }
+
   function renderAllocBar(s: AppState): void {
     const a = s.allocation;
     if (!a) {
@@ -493,6 +571,11 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   /** Announce a new place once (the headline itself is not a live region). */
   function announcePlace(s: AppState): void {
     const place = placeOf(s);
+    if (supportShown(s)) {
+      const r = supportOf(place.kind, place.code);
+      placeStatus.textContent = `${place.name}、${supportLine(s.year, r.now)}、${support2020Line(r.base)}`;
+      return;
+    }
     const n = numbersOf(place.kind, place.code);
     placeStatus.textContent = n
       ? `${place.name}、${s.year}年 ${popText(n)}、2020年比 ${formatPct(n.ratio)}${n.allocated ? `（${ALLOC_BADGE}）` : ''}`
@@ -502,6 +585,9 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   const ac = new AbortController();
   backBtn.addEventListener('click', () => store.set(goUp(store.get())), { signal: ac.signal });
   allocClear.addEventListener('click', () => store.set({ allocation: undefined }), { signal: ac.signal });
+  for (const b of modeButtons) {
+    b.addEventListener('click', () => store.set({ mapMode: b.dataset.mapMode as MapMode }), { signal: ac.signal });
+  }
   skipLink.addEventListener(
     'click',
     (e) => {
@@ -532,7 +618,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
 
   function updateLegend(s: AppState): void {
     const v = allocViewFor(s.allocation);
-    legend.setMode(v ? { kind: 'allocation', scale: v.scale } : { kind: 'ratio' });
+    legend.setMode(v ? { kind: 'allocation', scale: v.scale } : supportShown(s) ? { kind: 'support' } : { kind: 'ratio' });
   }
 
   const slots: PanelSlots = {
@@ -546,11 +632,13 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   const unsubscribe = store.subscribe((s, prev) => {
     if (s.series !== prev.series) {
       totals = deriveTotals(s.series, data.groups);
+      supports = deriveSupport(s.series, data.groups);
       allocView = undefined; // the overlay year's populations may have changed
     }
     const prefChanged = s.selectedPref !== prev.selectedPref;
     const selChanged = prefChanged || s.selectedArea !== prev.selectedArea;
     const allocChanged = s.allocation !== prev.allocation;
+    const modeChanged = s.mapMode !== prev.mapMode;
     if (selChanged) {
       renderPlace(s);
       void showLevel(s);
@@ -564,8 +652,9 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
         m.setMarkers([]);
       }
     }
-    if (s.year !== prev.year || s.series !== prev.series || allocChanged) recolor();
-    if (allocChanged || s.series !== prev.series) updateLegend(s);
+    if (s.year !== prev.year || s.series !== prev.series || allocChanged || modeChanged) recolor();
+    if (allocChanged || s.series !== prev.series || modeChanged) updateLegend(s);
+    if (allocChanged || modeChanged) renderMapMode(s);
     if (allocChanged || s.year !== prev.year) renderAllocBar(s);
     renderHeadline(s);
     if (selChanged) announcePlace(s);
@@ -577,6 +666,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   renderPlace(s0);
   renderHeadline(s0);
   renderAllocBar(s0);
+  renderMapMode(s0);
   updateLegend(s0);
   void showLevel(s0);
 

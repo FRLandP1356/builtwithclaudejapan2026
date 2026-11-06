@@ -25,6 +25,14 @@
   --decline-soft: #f2ddd6;
   --growth: #376daf;
   --growth-soft: #dde6f2;
+  /* Support ratio (people aged 15-64 per person aged 65+), six classes light to dark: --accent mixed into --paper in
+     OKLab at 40 / 52 / 64 / 76 / 88 / 100 %. Mirrors SUPPORT_COLORS in src/map/colors.ts (the source of truth). */
+  --support-1: #a0afc3;
+  --support-2: #889ab5;
+  --support-3: #7086a8;
+  --support-4: #58739a;
+  --support-5: #415f8c;
+  --support-6: #2b4c7e;
   --map-sea: var(--paper);
   --map-border: var(--paper);
   --map-coast: var(--line-2);
