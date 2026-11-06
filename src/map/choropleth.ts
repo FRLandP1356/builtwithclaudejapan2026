@@ -14,7 +14,7 @@ import { geoMercator, geoPath, type GeoPath, type GeoProjection } from 'd3';
 import type { Feature, FeatureCollection, Geometry, MultiPoint, Position } from 'geojson';
 import type { GeometryCollection, GeometryObject, Topology } from 'topojson-specification';
 import { feature, mesh } from 'topojson-client';
-import { changeColor } from './colors';
+import { MAP_NEUTRAL } from './colors';
 import { isNavigationKey, tabStopFor, targetForKey, type Anchor } from './keyboard';
 
 export interface AreaProps {
@@ -341,7 +341,7 @@ export function mountChoropleth(container: HTMLElement, opts: ChoroplethOptions)
   const nameByCode = new Map<string, string>();
   const anchorByCode = new Map<string, [number, number]>(); // viewBox coordinates of the largest polygon's centroid
   const lastFill = new Map<string, string>();
-  const neutral = changeColor(1);
+  const neutral = MAP_NEUTRAL;
   const indexByFeature = new Map(all.map((f, i) => [f, i] as const));
 
   function drawGroup(features: AreaFeature[], gen: GeoPath, inMain: boolean, parent: SVGGElement): void {

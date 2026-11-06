@@ -18,24 +18,39 @@
   --accent-ink: #f6f5f0;
   --accent-soft: #e4eaf3;
 
-  /* Map scale endpoints (src/map/colors.ts is the source of truth; these mirror it for tags and legends). */
+  /* Map colours (src/map/colors.ts is the source of truth; these mirror it for tags and legends). */
   --map-neutral: #d0c9c4;
+  /* Population relative to 2020, eight classes palest (fewest remain) to darkest (grew): --accent mixed into --paper
+     in OKLab at 12 / 26.7 / 41.4 / 56.1 / 70.9 / 85.6 / 100 / 115 %, even steps of 0.08 in OKLab lightness.
+     Mirrors CHANGE_COLORS in src/map/colors.ts. */
+  --change-1: #dce0e2;
+  --change-2: #bcc6d2;
+  --change-3: #9dacc1;
+  --change-4: #7f94b1;
+  --change-5: #627ba0;
+  --change-6: #46638f;
+  --change-7: #2b4c7e;
+  --change-8: #0d346c;
+  /* Allocation overlay (change in percent): the diverging rust / blue scale around the neutral. */
   --decline: #a43d2b;
   --decline-deep: #721d14;
   --decline-soft: #f2ddd6;
   --growth: #376daf;
   --growth-soft: #dde6f2;
-  /* Support ratio (people aged 15-64 per person aged 65+), six classes light to dark: --accent mixed into --paper in
-     OKLab at 40 / 52 / 64 / 76 / 88 / 100 %. Mirrors SUPPORT_COLORS in src/map/colors.ts (the source of truth). */
-  --support-1: #a0afc3;
-  --support-2: #889ab5;
-  --support-3: #7086a8;
-  --support-4: #58739a;
-  --support-5: #415f8c;
-  --support-6: #2b4c7e;
+  /* Support ratio (people aged 15-64 per person aged 65+), six classes fewest (near black) to most (greyed paper):
+     #14181f mixed into --paper in OKLab at 100 / 83 / 66 / 49 / 32 / 15 %. Mirrors SUPPORT_COLORS in src/map/colors.ts. */
+  --support-1: #14181f;
+  --support-2: #34383d;
+  --support-3: #575a5e;
+  --support-4: #7d7f82;
+  --support-5: #a5a7a6;
+  --support-6: #cfd0cd;
   --map-sea: var(--paper);
   --map-border: var(--paper);
   --map-coast: var(--line-2);
+  /* The population map's lines: the palest classes are almost paper, so paper lines would vanish there. A translucent
+     ink line stays darker than every class (1.1 .. 1.9:1 over the fills). app.css switches to it in that mode. */
+  --map-line-pale: rgba(27, 36, 48, 0.32);
 
   /* Chart series for later panels: official = ink solid, estimate = accent dashed, reference = warm grey dotted. */
   --series-official: var(--ink);
