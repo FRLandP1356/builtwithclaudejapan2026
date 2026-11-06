@@ -20,6 +20,7 @@ export const TOOL_LABELS: Readonly<Record<string, string>> = {
   run_allocation: '人口の割り振りを計算する',
   find_similar_now: '似た町をさがす',
   count_areas: '町の数を数える',
+  get_age_groups: '年齢別の人口を取る',
 };
 
 /** The Japanese label of a tool; a name that is not one of ours is shown as plain text inside a generic label. */
@@ -191,7 +192,7 @@ export function mapTargets(trace: TraceItem[], places: PlaceNames, max: number =
 // The scenario an answer was computed under
 // ---------------------------------------------------------------------------------------------------------------
 
-const SCENARIO_TOOLS = new Set(['run_projection', 'get_series', 'compare_sources', 'facility_check', 'find_similar_now', 'count_areas', 'run_allocation']);
+const SCENARIO_TOOLS = new Set(['run_projection', 'get_series', 'compare_sources', 'facility_check', 'find_similar_now', 'count_areas', 'run_allocation', 'get_age_groups']);
 const SCENARIO_KEYS = ['cwrMult', 'migMode', 'migScale', 'infraStrength'] as const;
 export const MAX_SCENARIO_OFFERS = 3;
 

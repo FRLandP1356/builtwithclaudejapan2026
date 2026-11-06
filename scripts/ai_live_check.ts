@@ -4,7 +4,7 @@
 // public/data, and a fetch wrapper that adds the page Origin, paces the requests, retries a 429/503 after a pause and
 // tees every upstream response into a machine log. Phases (pick with --phases, default 1,2,3,3b,7):
 //   1  the five sample questions, each in a fresh conversation -> public/data/cached_answers.json (status stays 'pending')
-//   2  tool coverage: a question per tool until all 8 tools were called successfully by the real model
+//   2  tool coverage: a question per tool until all 9 tools were called successfully by the real model
 //   3  one long conversation (12 to 20 questions, history passed on) with tool calls, to see trimming
 //   3b a second long conversation whose questions ask for derived numbers (differences, shares, ratios): the model then
 //      tends to think before a tool call, so more thinking blocks end up in the history that is trimmed
@@ -64,7 +64,7 @@ const TOOL_QUESTIONS: Array<[string, string[]]> = [
   ['find_area', ['「高野町」は何県にありますか？コードも教えてください。', '「白浜町」という町の、都道府県とコードを教えてください。']],
   [
     'get_series',
-    ['田辺市の2020年、2050年、2100年の総人口と、65歳以上の割合を教えてください。', '白浜町の2020年から2100年までの総人口の推移を教えてください。'],
+    ['田辺市の2020年、2050年、2100年の総人口を教えてください。', '白浜町の2020年から2100年までの総人口の推移を教えてください。'],
   ],
   [
     'compare_sources',
@@ -95,6 +95,22 @@ const TOOL_QUESTIONS: Array<[string, string[]]> = [
   [
     'count_areas',
     ['2075年に人口が1,000人を下回る市区町村は、全国で何件ありますか？', '2100年に人口が3,000人以上の市区町村は、和歌山県に何件ありますか？'],
+  ],
+  [
+    'get_age_groups',
+    [
+      '田辺市の2100年の子ども（0〜14歳）の人数と、65歳以上の割合を教えてください。',
+      '和歌山県の2050年の、0〜14歳、15〜64歳、65歳以上の人数を教えてください。',
+    ],
+  ],
+  // A second question for run_allocation: the answer has to come from the list of areas that lose people (largestDecreases).
+  // The tool is already covered above, so this row only checks that the model reads the losing side.
+  [
+    'run_allocation',
+    [
+      '和歌山県の2100年の人口を10%増やし、その分を全国から人口比で引くと、人口が減る地域はどこで、いくつありますか？',
+      '和歌山県の2100年の人口を10%増やし、その分を大阪府だけから引くと、人口が減る地域はどこですか？',
+    ],
   ],
 ];
 
@@ -954,6 +970,7 @@ async function dryRun(h: Harness): Promise<void> {
     ['run_allocation', { target: { kind: 'pref', code: '30' }, deltaPercent: 10, year: 2050 }],
     ['find_similar_now', { areaCode: tanabe.code, year: 2100 }],
     ['count_areas', { year: 2075, below: 1000 }],
+    ['get_age_groups', { areaCode: tanabe.code }],
   ];
   for (const [name, input] of inputs) {
     const r = runTool(name, input, h.ctx);

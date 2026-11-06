@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TOOL_DEFS, TOOL_NAMES } from '../src/ai/toolDefs';
 
 // The Worker sends TOOL_DEFS to Claude on every request. These budgets keep that upstream request small
-// (and so cheap): 8 tools at most 400 + 2,000 characters each.
+// (and so cheap): 9 tools at most 400 + 2,000 characters each.
 const MAX_DESCRIPTION_CHARS = 400;
 const MAX_SCHEMA_CHARS = 2000;
 
