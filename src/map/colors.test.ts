@@ -11,7 +11,18 @@ import {
   RATIO_MAX,
   RATIO_MIN,
   ratioToT,
+  SUPPORT_BREAKS,
+  SUPPORT_COLORS,
+  SUPPORT_NO_DATA,
+  supportClass,
+  supportClassNames,
+  supportColor,
+  supportLegendRamp,
+  supportLegendStops,
 } from './colors';
+import { readFileSync } from 'node:fs';
+import { repoPath } from '../../test/helpers/paths';
+import { formatSupport } from '../ui/format';
 
 const HEX = /^#[0-9a-f]{6}$/;
 
@@ -160,5 +171,111 @@ describe('legendStops', () => {
     expect(neutral).toBeDefined();
     expect(neutral!.label).toBeTruthy();
     for (const s of stops) expect(typeof s.label).toBe('string');
+  });
+});
+
+// -----------------------------------------------------------------------------------------------------------------
+// Support ratio classes
+// -----------------------------------------------------------------------------------------------------------------
+
+const lin = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+/** sRGB hex -> OKLab (Björn Ottosson's matrices), written here independently of colors.ts. */
+function oklab(hex: string): [number, number, number] {
+  const [r, g, b] = [1, 3, 5].map((i) => lin(parseInt(hex.slice(i, i + 2), 16) / 255));
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
+}
+const contrast = (a: string, b: string) => {
+  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+};
+const PAPER = '#f6f5f0';
+const ACCENT = '#2b4c7e';
+
+describe('support ratio classes', () => {
+  test('six classes split at 0.8, 1, 1.5, 2 and 3 people per person aged 65+', () => {
+    expect(SUPPORT_BREAKS).toEqual([0.8, 1, 1.5, 2, 3]);
+    expect(SUPPORT_COLORS).toHaveLength(SUPPORT_BREAKS.length + 1);
+    const cases: Array<[number, number]> = [
+      [0, 0], [0.3, 0], [0.74, 0], // shown 0.7
+      [0.75, 1], [0.8, 1], [0.94, 1], // shown 0.8 .. 0.9
+      [0.96, 2], [1, 2], [1.44, 2], // shown 1.0 .. 1.4
+      [1.46, 3], [1.5, 3], [1.94, 3],
+      [1.96, 4], [2, 4], [2.94, 4],
+      [2.96, 5], [3, 5], [5.08, 5], [100, 5],
+    ];
+    for (const [v, k] of cases) expect(supportClass(v), String(v)).toBe(k);
+  });
+
+  test('the class always agrees with the one-decimal number printed for the same area', () => {
+    for (let i = 0; i <= 6000; i++) {
+      const v = i / 1000;
+      const shown = Number(formatSupport(v).replace('人', ''));
+      const k = supportClass(v);
+      const lo = k === 0 ? -Infinity : SUPPORT_BREAKS[k - 1];
+      const hi = k === SUPPORT_BREAKS.length ? Infinity : SUPPORT_BREAKS[k];
+      expect(shown >= lo && shown < hi, `${v} shown ${shown} in class ${k}`).toBe(true);
+    }
+  });
+
+  test('each class has its own colour; no ratio (nobody aged 65+) is the neutral grey, outside the ramp', () => {
+    SUPPORT_COLORS.forEach((c) => expect(c).toMatch(HEX));
+    expect(new Set(SUPPORT_COLORS).size).toBe(6);
+    expect(supportColor(0.5)).toBe(SUPPORT_COLORS[0]);
+    expect(supportColor(1.2)).toBe(SUPPORT_COLORS[2]);
+    expect(supportColor(4)).toBe(SUPPORT_COLORS[5]);
+    for (const v of [Number.NaN, Infinity, -Infinity]) {
+      expect(supportClass(v)).toBe(-1);
+      expect(supportColor(v)).toBe(SUPPORT_NO_DATA);
+    }
+    expect(SUPPORT_NO_DATA).toBe(changeColor(1));
+    expect(SUPPORT_COLORS).not.toContain(SUPPORT_NO_DATA);
+  });
+
+  test('the ramp is the accent mixed into the paper in OKLab at 40, 52, 64, 76, 88 and 100 %', () => {
+    const p = oklab(PAPER);
+    const a = oklab(ACCENT);
+    [0.4, 0.52, 0.64, 0.76, 0.88, 1].forEach((share, k) => {
+      const want = p.map((v, i) => v + (a[i] - v) * share);
+      const got = oklab(SUPPORT_COLORS[k]);
+      const dE = Math.hypot(...got.map((v, i) => v - want[i]));
+      expect(dE, `step ${k + 1}`).toBeLessThan(0.004); // within the 8-bit rounding of the hex
+    });
+    expect(SUPPORT_COLORS[5]).toBe(ACCENT);
+  });
+
+  test('light to dark in even steps that neighbours can tell apart, the palest clear of the paper, one hue', () => {
+    const L = SUPPORT_COLORS.map((c) => oklab(c)[0]);
+    for (let k = 1; k < L.length; k++) {
+      expect(L[k - 1] - L[k], `ΔL ${k}`).toBeGreaterThanOrEqual(0.06);
+      expect(contrast(SUPPORT_COLORS[k - 1], SUPPORT_COLORS[k]), `contrast ${k}`).toBeGreaterThanOrEqual(1.25);
+    }
+    expect(contrast(SUPPORT_COLORS[0], PAPER)).toBeGreaterThanOrEqual(2); // the palest class never reads as sea
+    expect(contrast(SUPPORT_COLORS[0], changeColor(1))).toBeGreaterThan(1.3); // nor as the no-data grey
+    const hues = SUPPORT_COLORS.map((c) => {
+      const [, x, y] = oklab(c);
+      return (Math.atan2(y, x) * 180) / Math.PI;
+    });
+    expect(Math.max(...hues) - Math.min(...hues)).toBeLessThan(10);
+  });
+
+  test('theme.css mirrors the ramp as --support-1 ... --support-6', () => {
+    const css = readFileSync(repoPath('src/ui/theme.css'), 'utf8');
+    SUPPORT_COLORS.forEach((c, k) => expect(css).toMatch(new RegExp(`--support-${k + 1}:\\s*${c};`)));
+  });
+
+  test('the legend: one even block per class with hard edges, a tick at each break, the classes in words', () => {
+    const ramp = supportLegendRamp();
+    expect(ramp).toHaveLength(12);
+    SUPPORT_COLORS.forEach((c, k) => {
+      expect(ramp[2 * k]).toEqual({ offset: k / 6, color: c });
+      expect(ramp[2 * k + 1]).toEqual({ offset: (k + 1) / 6, color: c });
+    });
+    const stops = supportLegendStops();
+    expect(stops.map((s) => s.label)).toEqual(['0.8人', '1人', '1.5人', '2人', '3人']);
+    stops.forEach((s, i) => expect(s.offset).toBeCloseTo((i + 1) / 6, 12));
+    expect(supportClassNames()).toEqual(['0.8人未満', '0.8〜1人', '1〜1.5人', '1.5〜2人', '2〜3人', '3人以上']);
   });
 });

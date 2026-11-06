@@ -42,4 +42,9 @@ describe('app.css: the rules that behaviour depends on', () => {
     expect(box).toBe(52);
     expect(box).toBeGreaterThanOrEqual(line + 2 + 21); // tick line, its margin and one 21px text line
   });
+
+  test('the map colour choice really goes away while an allocation is drawn (the hidden attribute is not overridden)', () => {
+    expect(declarations('.map-mode[hidden]')).toMatch(/display:\s*none/);
+    expect(declarations('.map-mode')).not.toMatch(/display:/);
+  });
 });

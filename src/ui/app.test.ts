@@ -3,7 +3,9 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { loadSampleAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
 import { makeTopology } from '../../test/helpers/makeTopology';
-import { allocationColor, changeColor, RATIO_MAX } from '../map/colors';
+import { allocationColor, changeColor, RATIO_MAX, SUPPORT_COLORS, supportColor } from '../map/colors';
+import { SUPPORT_TITLE } from '../map/legend';
+import type { Pop } from '../engine/types';
 import { ALLOC_BADGE, ALLOC_CLEAR, mountApp, SKIP_TO_YEAR, sourceHtml, type AppHandle } from './app';
 import { SOURCES } from './sources';
 import { total } from '../engine/aggregate';
@@ -870,5 +872,190 @@ describe('allocation overlay on the map', () => {
     expect(store.get().allocation).toBeUndefined();
     expect(root.querySelector<HTMLElement>('.alloc-bar')!.hidden).toBe(true);
     expect(root.querySelector('.legend')!.textContent).toContain('2020年の人口との比');
+  });
+});
+
+describe('the map colour mode: the change since 2020 or the support ratio', () => {
+  /** 15-64 / 65+ of the summed populations, computed here from the age classes (3..12 and 13..19). */
+  const ratioOver = (pops: Pop[]) => {
+    let w = 0;
+    let o = 0;
+    for (const p of pops) {
+      for (let i = 3; i <= 12; i++) w += p.M[i] + p.F[i];
+      for (let i = 13; i <= 19; i++) o += p.M[i] + p.F[i];
+    }
+    return w / o;
+  };
+  const codesOf = (pp: string) => sample.filter((a) => a.prefCode === pp).map((a) => a.code);
+  const overlay = (): AllocationOverlay => ({ year: 2100, label: '和歌山県 +10%', changePercent: { '30206': 10, '30201': 10, '30427': 10 }, flips: [] });
+  const buttons = (root: HTMLElement) => [...root.querySelectorAll<HTMLButtonElement>('.map-mode .choice button')];
+  const pressed = (root: HTMLElement) => buttons(root).map((b) => b.getAttribute('aria-pressed'));
+
+  test('a two-way choice right above the map, the change since 2020 pressed, both plain buttons in the Tab order', async () => {
+    const { root, store } = await mount();
+    const box = root.querySelector<HTMLElement>('.map-mode')!;
+    expect(box.nextElementSibling).toBe(root.querySelector('.map-stage'));
+    const group = box.querySelector('.choice')!;
+    expect(group.getAttribute('role')).toBe('group');
+    expect(group.getAttribute('aria-label')).toBe('地図の色');
+    expect(buttons(root).map((b) => b.textContent)).toEqual(['人口の変化', '高齢者1人を支える人数']);
+    expect(pressed(root)).toEqual(['true', 'false']);
+    for (const b of buttons(root)) {
+      expect(b.type).toBe('button');
+      expect(b.disabled).toBe(false);
+      expect(b.tabIndex).toBe(0);
+    }
+    expect(box.hidden).toBe(false);
+    expect(store.get().mapMode).toBe('change');
+  });
+
+  test('pressing 高齢者1人を支える人数 colours the national map by each prefecture\'s ratio, in place, and switches the legend', async () => {
+    const { root, store } = await mount();
+    store.set({ year: 2020 });
+    const svg = root.querySelector('.map-host-national svg')!;
+    const paths = [...svg.querySelectorAll('path.area')];
+    const changeFill = svg.querySelector('path.area[data-code="30"]')!.getAttribute('fill');
+    buttons(root)[1].click();
+    expect(store.get().mapMode).toBe('support');
+    expect(pressed(root)).toEqual(['false', 'true']);
+    expect([...svg.querySelectorAll('path.area')]).toEqual(paths); // no DOM rebuild
+    const series = store.get().series;
+    for (const pp of ['30', '13', '01']) {
+      const r = ratioOver(codesOf(pp).map((c) => series.get(c)![2020]));
+      expect(svg.querySelector(`path.area[data-code="${pp}"]`)!.getAttribute('fill'), pp).toBe(supportColor(r));
+      expect(SUPPORT_COLORS).toContain(supportColor(r));
+    }
+    expect(svg.querySelector('path.area[data-code="30"]')!.getAttribute('fill')).not.toBe(changeFill);
+    const legend = root.querySelector<HTMLElement>('.legend')!;
+    expect(legend.dataset.mode).toBe('support');
+    expect(legend.querySelector('.legend-title')!.textContent).toBe(SUPPORT_TITLE);
+    expect(SUPPORT_TITLE).toBe('色は高齢者1人を支える現役世代の人数（濃いほど多い）');
+    expect([...legend.querySelectorAll('.legend-tick')].map((t) => t.textContent)).toEqual(['0.8人', '1人', '1.5人', '2人', '3人']);
+    expect([...legend.querySelectorAll('.legend-tick')].some((t) => (t as HTMLElement).dataset.edge)).toBe(false); // all between classes
+    expect(legend.getAttribute('aria-label')).toBe(`${SUPPORT_TITLE}。左から 0.8人未満、0.8〜1人、1〜1.5人、1.5〜2人、2〜3人、3人以上。`);
+    expect(legend.querySelector<HTMLElement>('.legend-bar')!.style.background).toContain('linear-gradient');
+
+    buttons(root)[0].click();
+    expect(store.get().mapMode).toBe('change');
+    expect(pressed(root)).toEqual(['true', 'false']);
+    expect(svg.querySelector('path.area[data-code="30"]')!.getAttribute('fill')).toBe(changeFill);
+    expect(legend.dataset.mode).toBe('ratio');
+    expect(legend.textContent).toContain('2020年の人口との比');
+  });
+
+  test('the headline shows the national ratio, with 2020 and the year\'s mark; the labels and the tooltip say the area\'s ratio', async () => {
+    const { root, store } = await mount();
+    const series = store.get().series;
+    const all = sample.map((a) => a.code);
+    const japan = (y: number) => ratioOver(all.map((c) => series.get(c)![y]));
+    store.set({ mapMode: 'support', year: 2020 });
+    const num = () => root.querySelector('.map-headline-num')!;
+    expect(root.querySelector('.map-headline-name')!.textContent).toBe('日本');
+    expect(num().querySelector('b')!.textContent).toBe(`${japan(2020).toFixed(1)}人`);
+    expect(num().textContent).toBe(`2020年 高齢者1人を支える現役世代 ${japan(2020).toFixed(1)}人　2020年は${japan(2020).toFixed(1)}人　実績（国勢調査）`);
+    store.set({ year: 2050 });
+    expect(num().textContent).toBe(`2050年 高齢者1人を支える現役世代 ${japan(2050).toFixed(1)}人　2020年は${japan(2020).toFixed(1)}人　公式推計`);
+    store.set({ year: 2100 });
+    expect(num().querySelector('.badge-estimate')!.textContent).toBe('試算');
+    expect(num().textContent).not.toContain('2020年比'); // the population figures are not mixed in
+
+    const svg = root.querySelector('.map-host-national svg')!;
+    const wk = (y: number) => ratioOver(codesOf('30').map((c) => series.get(c)![y]));
+    const label = svg.querySelector('path.area[data-code="30"]')!.getAttribute('aria-label')!;
+    expect(label).toBe(`和歌山県、2100年 高齢者1人を支える現役世代 ${wk(2100).toFixed(1)}人、2020年は${wk(2020).toFixed(1)}人（このアプリの試算）`);
+    svg.querySelector('path.area[data-code="30"]')!.dispatchEvent(new Event('pointerover', { bubbles: true }));
+    const tip = root.querySelector<HTMLElement>('.map-host-national .map-tip')!;
+    expect([...tip.querySelectorAll('div')].map((d) => d.textContent)).toEqual([
+      `2100年 高齢者1人を支える現役世代 ${wk(2100).toFixed(1)}人`,
+      `2020年は${wk(2020).toFixed(1)}人`,
+    ]);
+    expect(tip.querySelector('.badge-estimate')!.textContent).toBe('試算');
+    store.set({ year: 2040 }); // the open tooltip and the labels follow the year
+    expect(tip.querySelector('div')!.textContent).toBe(`2040年 高齢者1人を支える現役世代 ${wk(2040).toFixed(1)}人`);
+    expect(tip.querySelector('.badge-estimate')).toBeNull();
+    expect(svg.querySelector('path.area[data-code="30"]')!.getAttribute('aria-label')).not.toContain('試算');
+  });
+
+  test('a year change recolours in this mode; the prefecture map colours by each town\'s own ratio', async () => {
+    const { root, store, visibleHost } = await mount();
+    store.set({ mapMode: 'support', year: 2020, selectedPref: '30' });
+    await settle();
+    const svg = visibleHost()!.querySelector('svg')!;
+    const series = store.get().series;
+    for (const y of [2020, 2050, 2100]) {
+      store.set({ year: y });
+      for (const c of codesOf('30')) {
+        const r = ratioOver([series.get(c)![y]]);
+        expect(svg.querySelector(`path.area[data-code="${c}"]`)!.getAttribute('fill'), `${c} ${y}`).toBe(supportColor(r));
+        expect(svg.querySelector(`path.area[data-code="${c}"]`)!.getAttribute('aria-label')).toContain(`${y}年 高齢者1人を支える現役世代 ${r.toFixed(1)}人`);
+      }
+    }
+    // 田辺市: 1.6 in 2020 and 0.8 in 2100 are in different classes
+    store.set({ year: 2020 });
+    const tanabe2020 = svg.querySelector('path.area[data-code="30206"]')!.getAttribute('fill');
+    store.set({ year: 2100 });
+    expect(svg.querySelector('path.area[data-code="30206"]')!.getAttribute('fill')).not.toBe(tanabe2020);
+    expect(root.querySelector('.map-headline-num b')!.textContent).toBe(`${ratioOver(codesOf('30').map((c) => series.get(c)![2100])).toFixed(1)}人`);
+    // the national map, shown again, is in the same mode
+    store.set({ selectedPref: undefined });
+    await settle();
+    const national = root.querySelector('.map-host-national svg')!;
+    expect(national.querySelector('path.area[data-code="13"]')!.getAttribute('fill')).toBe(supportColor(ratioOver(codesOf('13').map((c) => series.get(c)![2100]))));
+  });
+
+  test('a new place is announced with its ratio in this mode', async () => {
+    const { root, store } = await mount();
+    store.set({ mapMode: 'support', year: 2050 });
+    store.set({ selectedPref: '30' });
+    await settle();
+    const series = store.get().series;
+    const wk = (y: number) => ratioOver(codesOf('30').map((c) => series.get(c)![y]));
+    expect(root.querySelector('.place-status')!.textContent).toBe(`和歌山県、2050年 高齢者1人を支える現役世代 ${wk(2050).toFixed(1)}人、2020年は${wk(2020).toFixed(1)}人`);
+  });
+
+  test('an allocation on the map wins: the choice hides, the allocation colours and legend show; clearing it brings the ratio back', async () => {
+    const { root, store } = await mount();
+    store.set({ year: 2100, mapMode: 'support' });
+    const box = root.querySelector<HTMLElement>('.map-mode')!;
+    const svg = root.querySelector('.map-host-national svg')!;
+    const wakayama = svg.querySelector('path.area[data-code="30"]')!;
+    const supportFill = wakayama.getAttribute('fill');
+    buttons(root)[1].focus(); // a keyboard user is on the choice when the allocation arrives
+    store.set({ allocation: overlay() });
+    expect(box.hidden).toBe(true);
+    expect(document.activeElement).toBe(root.querySelector('.map-headline-name')); // focus does not stay on a hidden button
+    expect(store.get().mapMode).toBe('support'); // kept for later
+    expect(wakayama.getAttribute('fill')).toBe(allocationColor(10, 10));
+    expect(root.querySelector<HTMLElement>('.legend')!.dataset.mode).toBe('allocation');
+    expect(root.querySelector('.map-headline-num .badge-alloc')!.textContent).toBe(ALLOC_BADGE);
+    expect(root.querySelector('.map-headline-num')!.textContent).toContain('2020年比');
+    expect(wakayama.getAttribute('aria-label')).toContain('割り振りによる変化 +10.0%');
+    expect(wakayama.getAttribute('aria-label')).not.toContain('高齢者1人');
+    store.set({ year: 2095 }); // a year change keeps the allocation colours
+    expect(wakayama.getAttribute('fill')).toBe(allocationColor(10, 10));
+    store.set({ year: 2100 });
+
+    store.set({ allocation: undefined });
+    expect(box.hidden).toBe(false);
+    expect(pressed(root)).toEqual(['false', 'true']);
+    expect(wakayama.getAttribute('fill')).toBe(supportFill);
+    expect(root.querySelector<HTMLElement>('.legend')!.dataset.mode).toBe('support');
+    expect(root.querySelector('.map-headline-num')!.textContent).toContain('高齢者1人を支える現役世代');
+
+    // the change mode under an allocation, too
+    store.set({ mapMode: 'change', allocation: overlay() });
+    expect(box.hidden).toBe(true);
+    store.set({ allocation: undefined });
+    expect(box.hidden).toBe(false);
+    expect(root.querySelector<HTMLElement>('.legend')!.dataset.mode).toBe('ratio');
+  });
+
+  test('the change mode is untouched by the new choice: same fills, labels and headline as before', async () => {
+    const { root, store } = await mount();
+    store.set({ year: 2100 });
+    const svg = root.querySelector('.map-host-national svg')!;
+    const label = svg.querySelector('path.area[data-code="30"]')!.getAttribute('aria-label')!;
+    expect(label).toMatch(/^和歌山県、2100年 [\d.,万]+人、2020年比 −[\d.]+%（このアプリの試算）$/);
+    expect(root.querySelector('.map-headline-num')!.textContent).toContain('2020年比');
   });
 });

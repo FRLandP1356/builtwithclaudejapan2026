@@ -348,6 +348,17 @@
 .alloc-bar .btn {
   min-height: 40px; /* a quieter row than the 44px default, still a comfortable target */
 }
+/* What the map colours by: the shared segmented choice (theme.css .choice) right above the map. Hidden while an
+   allocation is drawn, because the allocation's colours win then. */
+.map-mode {
+  padding: 0 0 var(--sp-2);
+}
+.map-mode[hidden] {
+  display: none;
+}
+.map-mode .choice button {
+  font-size: var(--fs-15);
+}
 .inset-bg {
   fill: var(--map-sea);
 }

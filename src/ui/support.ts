@@ -3,6 +3,7 @@
 // itself is supportRatio in src/engine/aggregate.ts; deriveSupport in derive.ts computes it for every place and year.
 import { formatSupport, formatSupportExact } from './format';
 import type { SeriesChartSpec } from './seriesChart';
+import type { MapMode } from './state';
 
 /** The tile's label and the measure's name in sentences. */
 export const SUPPORT_LABEL = '高齢者1人を支える現役世代';
@@ -23,11 +24,6 @@ export const SUPPORT_CHART: SeriesChartSpec = {
   columns: ['公式推計（人）', 'このアプリの試算（人）', '前提を変える前（人）'],
   tableNote: SUPPORT_TABLE_NOTE,
 };
-
-/** The map's colour modes: the change since 2020 (the default) and the support ratio. */
-export type MapMode = 'change' | 'support';
-export const MAP_MODES: ReadonlyArray<MapMode> = ['change', 'support'];
-export const DEFAULT_MAP_MODE: MapMode = 'change';
 
 /** The segmented control above the map: its group label and the two buttons' text. */
 export const MAP_MODE_GROUP = '地図の色';

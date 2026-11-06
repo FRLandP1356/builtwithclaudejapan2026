@@ -6,6 +6,7 @@
 // - `set({ selectedArea })` also sets `selectedPref` to that area's prefecture; changing `selectedPref` to another
 //   prefecture clears an area that does not belong to it; clearing `selectedPref` clears the area;
 // - `year` must be 2020..2100 in steps of 5;
+// - `mapMode` must be 'change' or 'support' (what the map colours by);
 // - `set({ allocation })` is checked (known area codes, finite numbers, a year on the grid, a focus that names one
 //   of its flips) and copied; `set({ allocation: undefined })` clears it; a scenario change clears it as well.
 // A patch that fails these rules is rejected: the state does not change, nobody is notified, `set` returns false
@@ -39,6 +40,18 @@ export interface AllocationOverlay {
   focusFacilityId?: string;
 }
 
+/**
+ * What the map colours by: the change since 2020 ('change', the default) or the support ratio, people aged 15-64 per
+ * person aged 65+ ('support'). An allocation drawn on the map takes precedence over both while it is set.
+ */
+export type MapMode = 'change' | 'support';
+export const MAP_MODES: ReadonlyArray<MapMode> = ['change', 'support'];
+export const DEFAULT_MAP_MODE: MapMode = 'change';
+
+export function isMapMode(m: unknown): m is MapMode {
+  return MAP_MODES.includes(m as MapMode);
+}
+
 export interface AppState {
   /** Selected year, 2020..2100 in steps of 5. */
   year: number;
@@ -52,6 +65,8 @@ export interface AppState {
   selectedArea?: string;
   /** A reallocation drawn on the map, or none. Cleared by a scenario change; not by a year change. */
   allocation?: AllocationOverlay;
+  /** What the map colours by. Kept while an allocation is drawn (the allocation's colours win), and used again after it. */
+  mapMode: MapMode;
 }
 
 /**
@@ -99,7 +114,7 @@ export function isValidYear(y: unknown): y is number {
   return typeof y === 'number' && Number.isInteger(y) && y >= YEAR_MIN && y <= YEAR_MAX && (y - YEAR_MIN) % YEAR_STEP === 0;
 }
 
-const KEYS: ReadonlyArray<keyof AppState> = ['year', 'scenario', 'series', 'selectedPref', 'selectedArea', 'allocation'];
+const KEYS: ReadonlyArray<keyof AppState> = ['year', 'scenario', 'series', 'selectedPref', 'selectedArea', 'allocation', 'mapMode'];
 
 function changed(a: AppState, b: AppState): boolean {
   return KEYS.some((k) => !Object.is(a[k], b[k]));
@@ -155,6 +170,7 @@ export interface AppStoreData {
 
 export interface AppStoreInitial {
   year?: number;
+  mapMode?: MapMode;
   scenario?: Partial<Scenario>;
   selectedPref?: string;
   selectedArea?: string;
@@ -223,11 +239,16 @@ export function createAppStore(runner: Runner, data: AppStoreData, initial: AppS
   if (isScenarioError(scenario0)) throw new RangeError(`createAppStore: ${scenario0.error}`);
   const year0 = initial.year ?? DEFAULT_YEAR;
   if (!isValidYear(year0)) throw new RangeError(`createAppStore: invalid year ${String(year0)}`);
+  const mapMode0 = initial.mapMode ?? DEFAULT_MAP_MODE;
+  if (!isMapMode(mapMode0)) throw new RangeError(`createAppStore: invalid mapMode ${String(mapMode0)}`);
 
   const derive: Derive = (next, prev, patch) => {
     const out: Partial<AppState> = {};
     if ('year' in patch && !isValidYear(next.year)) {
       return reject(`year must be ${YEAR_MIN}..${YEAR_MAX} in steps of ${YEAR_STEP}, got ${String(next.year)}`);
+    }
+    if ('mapMode' in patch && !isMapMode(next.mapMode)) {
+      return reject(`mapMode must be one of ${MAP_MODES.join('|')}, got ${String(next.mapMode).slice(0, 24)}`);
     }
     if (next.scenario !== prev.scenario) {
       const s = sanitizeScenario(next.scenario);
@@ -261,7 +282,7 @@ export function createAppStore(runner: Runner, data: AppStoreData, initial: AppS
     return out;
   };
 
-  const store = createStore({ year: year0, scenario: scenario0, series: runner.run(scenario0) }, { derive });
+  const store = createStore({ year: year0, scenario: scenario0, series: runner.run(scenario0), mapMode: mapMode0 }, { derive });
   if (initial.selectedArea !== undefined || initial.selectedPref !== undefined) {
     store.set({ selectedPref: initial.selectedPref, selectedArea: initial.selectedArea });
   }
