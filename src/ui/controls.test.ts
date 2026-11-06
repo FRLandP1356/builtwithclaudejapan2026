@@ -640,6 +640,12 @@ describe('guidance marks under the controls', () => {
       expect(spans.length, sel).toBeGreaterThan(2);
       expect(spans.map((s) => s.textContent).join(''), sel).toBe(p.textContent);
     }
+    // a title breaks before its bracket, not inside "ほかの前提は初期値"
+    expect([...el.querySelectorAll('#ctl-infra-marks .bar-marks-title .keep')].map((s) => s.textContent)).toEqual([
+      '仮定どおりに計算した、',
+      '2100年の日本全体',
+      '（ほかの前提は初期値）',
+    ]);
     expect([...el.querySelectorAll('#ctl-cwr-marks .bar-marks-fact .keep')].map((s) => s.textContent)).toEqual([
       'この範囲の右端',
       '（×1.4）でも、',
