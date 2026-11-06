@@ -245,7 +245,7 @@
     {
       "id": "q3",
       "question": "和歌山県の人口を10%増やすと、ほかの地域はどうなりますか？",
-      "answer": "年を指定されなかったので、2050年（社人研の公式推計がある最後の年）で計算しました。和歌山県の人口を10%増やし、同じ人数を全国から人口比で引いています。\n\n- 和歌山県は、公式推計では631,642人です。10%増やすと694,806人になります（63,164人増）。\n- 県内の市町村もほぼ同じ割合で増えます。和歌山市は280,227人から308,250人、岩出市は45,397人から49,937人、田辺市は42,311人から46,542人になります。\n- 引かれる側の地域は、全国の人口に比例して少しずつ減ります。1地域あたりの減り方はごくわずかです。今回の結果には、減る地域ごとの人数は出ていません。\n\n施設の人口の目安との比べ方では、目安をまたぐ施設は13種類ありました。\n\n- 必須の施設では、一般病院が目安に届く地域が2つ増えます（日高川町、湯浅町）。\n- 必須でない施設でも、学習塾や遊戯場で同じ2町が目安に届きます。フィットネスクラブと有料老人ホームでは田辺市が目安に届きます。\n- 引かれる側では、伊丹市がスターバックスコーヒーなど3種類で目安を下回ります。清瀬市と大牟田市は興行場・興行団で、神戸市兵庫区は地域医療支援病院で、目安を下回ります。\n\nこの目安は、国土交通省の統計（2009年から2012年）にもとづくものです。将来の決定を示すものではありません。\n\n2075年や2100年など、別の年で見ることもできます。その場合は、このアプリの試算になります。",
+      "answer": "2050年の公式推計をもとに、和歌山県の人口を10%増やして計算しました。年の指定がなかったので2050年にしています。\n\n- 和歌山県は631,642人から694,806人に増えます（63,164人増）。\n- 同じ63,164人を、ほかの全国の地域から人口に比例して引いています。全国の合計は変わりません。\n- 減る地域は1,854です。減る割合の中央値は約0.06%で、ごくわずかです。\n- 減る人数が多いのは人口の大きい地域です。世田谷区は599人減、大田区は467人減、練馬区は458人減です。\n- 県内では和歌山市が280,227人から308,250人に増えます。岩出市と田辺市も増えます。\n\n施設の人口の目安との比べ方（国土交通省の統計、2009〜2012年にもとづく目安で、将来の決定ではありません）では、次のように変わります。\n\n- 必須の施設では、一般病院で日高川町と湯浅町の2町が目安以上に加わります。\n- 必須ではない施設では、目安を下回る地域が出ます。例は伊丹市のスターバックスコーヒーや外車ディーラーなどです。清瀬市と大牟田市は、興行場・興行団の目安を下回ります。\n\n人口を引く元を特定の県に限る計算もできます。",
       "trace": [
         {
           "tool": "find_area",
@@ -364,6 +364,104 @@
                 "after": 16057
               }
             ],
+            "largestDecreases": [
+              {
+                "code": "13112",
+                "name": "世田谷区",
+                "prefName": "東京都",
+                "before": 987143,
+                "after": 986544,
+                "delta": -599,
+                "changePercent": -0.06
+              },
+              {
+                "code": "13111",
+                "name": "大田区",
+                "prefName": "東京都",
+                "before": 768128,
+                "after": 767661,
+                "delta": -467,
+                "changePercent": -0.06
+              },
+              {
+                "code": "13120",
+                "name": "練馬区",
+                "prefName": "東京都",
+                "before": 755007,
+                "after": 754549,
+                "delta": -458,
+                "changePercent": -0.06
+              },
+              {
+                "code": "13121",
+                "name": "足立区",
+                "prefName": "東京都",
+                "before": 711214,
+                "after": 710782,
+                "delta": -432,
+                "changePercent": -0.06
+              },
+              {
+                "code": "13123",
+                "name": "江戸川区",
+                "prefName": "東京都",
+                "before": 678999,
+                "after": 678587,
+                "delta": -412,
+                "changePercent": -0.06
+              },
+              {
+                "code": "12204",
+                "name": "船橋市",
+                "prefName": "千葉県",
+                "before": 651601,
+                "after": 651206,
+                "delta": -395,
+                "changePercent": -0.06
+              },
+              {
+                "code": "13115",
+                "name": "杉並区",
+                "prefName": "東京都",
+                "before": 618599,
+                "after": 618224,
+                "delta": -375,
+                "changePercent": -0.06
+              },
+              {
+                "code": "13119",
+                "name": "板橋区",
+                "prefName": "東京都",
+                "before": 605109,
+                "after": 604742,
+                "delta": -367,
+                "changePercent": -0.06
+              },
+              {
+                "code": "11203",
+                "name": "川口市",
+                "prefName": "埼玉県",
+                "before": 599664,
+                "after": 599300,
+                "delta": -364,
+                "changePercent": -0.06
+              },
+              {
+                "code": "13108",
+                "name": "江東区",
+                "prefName": "東京都",
+                "before": 592666,
+                "after": 592306,
+                "delta": -360,
+                "changePercent": -0.06
+              }
+            ],
+            "decreaseSummary": {
+              "areaCount": 1854,
+              "totalRemoved": 63164,
+              "medianChangePercent": -0.06,
+              "note": "ほかの全国のすべての地域が、人口に比例して同じ割合でわずかに減るため、この一覧は人口の多い地域の順です。"
+            },
             "flippedFacilityCount": 13,
             "essentialFlippedCount": 1,
             "omittedFlipCount": 2,
@@ -525,8 +623,8 @@
         }
       ],
       "status": "verified",
-      "generatedAt": "2026-11-06T00:41:37.728Z",
-      "note": "Made by the real model (claude-sonnet-5-5) through the deployed Worker with scripts/ai_live_check.ts; every number was found in the tool results. Read and approved by the owner on 2026-11-06 09:47 JST. Known: it cannot list which areas shrink (a limit of the allocation tool)."
+      "generatedAt": "2026-11-06T04:24:14.432Z",
+      "note": "Made by the real model (claude-sonnet-5-5) through the deployed Worker with scripts/ai_live_check.ts; every number was found in the tool results. Read and approved by the owner on 2026-11-06 15:11 JST."
     },
     {
       "id": "q4",
