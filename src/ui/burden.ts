@@ -8,18 +8,23 @@
 import { bandIndexFor, ownPerCapita, reiwaLabel, type Finance, type FinanceBand } from '../data/finance';
 import type { AreaKind } from '../engine/types';
 import { formatCount, formatPop } from './format';
+import { phrases } from './phrases';
 
 /** 1,733 (thousand yen per resident; the unit is written by the sentence around it). */
 export const formatThousandYen = (v: number): string => formatCount(v);
 
+/** The title in phrases that stay whole on a line (「1人あたり」 is never split). */
+export const TITLE_PARTS: readonly string[] = ['いま、', 'この規模の市町村は、', '1人あたり', 'これだけ使っています'];
+
 export const BURDEN_TEXT = {
-  title: 'いま、この規模の市町村は、1人あたりこれだけ使っています',
+  title: TITLE_PARTS.join(''),
   stripTitle: '人口の規模別、1人あたりの歳出の中央値（千円）',
   stripName: '人口の規模別、1人あたりの歳出の中央値（千円）。この町の規模に印が付いています',
   here: 'この町の規模',
   tableSummary: '数字を表で見る',
   tableCaption: '人口の規模別、1人あたりの歳出（千円）',
-  tableHeads: ['人口の規模', '団体数', '中央値（千円）', '真ん中の半数（千円）'],
+  tableUnit: '数字は、1人あたりの歳出（千円）です。',
+  tableHeads: ['人口の規模', '団体数', '中央値', '真ん中の半数'],
   publishedTitle: '公表されている区分別の値（令和5年度）',
   publishedCaption: '団体区分別、1人あたりの歳出（千円、令和5年度）',
   publishedHeads: ['団体区分', '1人あたりの歳出（千円）'],
@@ -34,14 +39,27 @@ export function leadText(f: Finance): string {
   return `${reiwaLabel(f.fiscalYear)}の決算（実績）です。市町村が1年に使ったお金（歳出総額）を、住民基本台帳の人口で割っています。`;
 }
 
-/** The source and processing statement, with the formula, the statistics and the number of municipalities. */
-export function sourceText(f: Finance): string {
-  return (
-    `出典：総務省「${reiwaLabel(f.fiscalYear)} 市町村別決算状況調」を加工して作成。` +
-    '歳出総額 ÷ 住民基本台帳人口（令和7年1月1日）を市町村ごとに計算し、人口の規模ごとに中央値と、小さい方から25%・75%の値を求めました。' +
-    `${formatCount(f.national.n)}団体（特別区を含み、政令指定都市の区は数えていません）。`
-  );
+/** The source and processing statement, with the formula, the statistics and the number of municipalities, in phrases. */
+export function sourceParts(f: Finance): string[] {
+  return [
+    '出典：',
+    `総務省「${reiwaLabel(f.fiscalYear)} 市町村別決算状況調」を`,
+    '加工して作成。',
+    '歳出総額 ÷ 住民基本台帳人口',
+    '（令和7年1月1日）を',
+    '市町村ごとに計算し、',
+    '人口の規模ごとに',
+    '中央値と、',
+    '小さい方から25%・75%の値を',
+    '求めました。',
+    `${formatCount(f.national.n)}団体`,
+    '（特別区を含み、',
+    '政令指定都市の区は',
+    '数えていません）。',
+  ];
 }
+
+export const sourceText = (f: Finance): string => sourceParts(f).join('');
 
 /** The national total spent divided by the national residents, for the note under the table. */
 export function nationalText(f: Finance): string {
@@ -72,15 +90,21 @@ export interface OwnFigure {
   value?: number;
   reason?: NoFigureReason;
   text: string;
+  /** The text in phrases that stay whole on a line (「1人あたり」 is never split from its number). */
+  parts: string[];
 }
 
 /** The town's own 令和6年度 figure, or the sentence saying why it has none. Wards of designated cities and the 浜通り area have no settlement of their own. */
 export function ownFigure(f: Finance, code: string, kind: AreaKind): OwnFigure {
   const value = ownPerCapita(f, code);
-  if (value !== undefined) return { value, text: `この町の${reiwaLabel(f.fiscalYear)}：1人あたり約${formatThousandYen(value)}千円` };
-  if (kind === 'ward') return { reason: 'ward', text: 'この区は政令指定都市の一部で、区ごとの決算はありません。' };
-  if (kind === 'hamadori') return { reason: 'hamadori', text: 'この地域は複数の市町村をまとめたもので、地域としての決算はありません。' };
-  return { reason: 'missing', text: `この町の${reiwaLabel(f.fiscalYear)}の値は、このデータにありません。` };
+  if (value !== undefined) {
+    const parts = [`この町の${reiwaLabel(f.fiscalYear)}：`, `1人あたり約${formatThousandYen(value)}千円`];
+    return { value, text: parts.join(''), parts };
+  }
+  const none = (reason: NoFigureReason, text: string): OwnFigure => ({ reason, text, parts: phrases(text) });
+  if (kind === 'ward') return none('ward', 'この区は政令指定都市の一部で、区ごとの決算はありません。');
+  if (kind === 'hamadori') return none('hamadori', 'この地域は複数の市町村をまとめたもので、地域としての決算はありません。');
+  return none('missing', `この町の${reiwaLabel(f.fiscalYear)}の値は、このデータにありません。`);
 }
 
 /**

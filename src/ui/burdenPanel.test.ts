@@ -41,6 +41,33 @@ describe('the block before any update', () => {
     expect(text(q('details.burden-table > summary'))).toBe('数字を表で見る');
   });
 
+  test('the title and the source note are laid out in phrases, so 「1人あたり」 and the quoted survey name are never split', () => {
+    const { all } = mount();
+    expect(all('h3.panel-section-title .keep').map((e) => e.textContent)).toEqual(['いま、', 'この規模の市町村は、', '1人あたり', 'これだけ使っています']);
+    expect(all('.burden-source .keep').map((e) => e.textContent)).toEqual([
+      '出典：',
+      '総務省「令和6年度 市町村別決算状況調」を',
+      '加工して作成。',
+      '歳出総額 ÷ 住民基本台帳人口',
+      '（令和7年1月1日）を',
+      '市町村ごとに計算し、',
+      '人口の規模ごとに',
+      '中央値と、',
+      '小さい方から25%・75%の値を',
+      '求めました。',
+      '1,741団体',
+      '（特別区を含み、',
+      '政令指定都市の区は',
+      '数えていません）。',
+    ]);
+  });
+
+  test('the own figure keeps 「1人あたり」 and its number on one line (phrases)', () => {
+    const { all } = mount();
+    view.update({ code: '13402', kind: 'town', year: 2100, population: 121 });
+    expect(all('.burden-own .keep').map((e) => e.textContent)).toEqual(['この町の令和6年度：', '1人あたり約5,747千円']);
+  });
+
   test('the title never carries the 試算 mark: the money is an actual', () => {
     const { q } = mount();
     view.update(tanabe(2100, 11_880));
@@ -54,6 +81,7 @@ describe('a town in the selected year', () => {
     const { q, all } = mount();
     view.update(tanabe(2100, 11_880));
     expect(text(q('.burden-own'))).toBe('この町の令和6年度：1人あたり約680千円');
+    expect(q('.burden-own').classList.contains('is-none')).toBe(false);
     expect(text(q('.burden-year'))).toBe('規模は、2100年の人口 1.2万人で選んでいます。 試算');
     expect(text(q('.burden-year .badge-estimate'))).toBe('試算');
     expect(text(q('.burden-band'))).toBe('いま、人口が1〜3万人の市町村（447団体）：中央値 約724千円、真ん中の半数が561〜883千円。');
@@ -134,7 +162,8 @@ describe('a town in the selected year', () => {
       ['10〜20万人', '145', '473', '428〜556'],
       ['20万人以上', '132', '477', '428〜530'],
     ]);
-    expect(all('.burden-band-table thead th').map(text)).toEqual(['人口の規模', '団体数', '中央値（千円）', '真ん中の半数（千円）']);
+    expect(text(host.querySelector('.burden-table-unit'))).toBe('数字は、1人あたりの歳出（千円）です。');
+    expect(all('.burden-band-table thead th').map(text)).toEqual(['人口の規模', '団体数', '中央値', '真ん中の半数']);
   });
 
   test('the published values are apart, labelled 令和5年度 and 団体区分, not population bands', () => {
@@ -161,6 +190,7 @@ describe('a place without a settlement of its own', () => {
     const { q, all } = mount();
     view.update({ code: '01101', kind: 'ward', year: 2100, population: 150_000 });
     expect(text(q('.burden-own'))).toBe('この区は政令指定都市の一部で、区ごとの決算はありません。');
+    expect(q('.burden-own').classList.contains('is-none')).toBe(true); // a sentence, not the large figure line
     expect(text(q('.burden-band'))).toContain('人口が10〜20万人の市町村（145団体）');
     expect(all('.burden-bar.is-current')).toHaveLength(1);
   });

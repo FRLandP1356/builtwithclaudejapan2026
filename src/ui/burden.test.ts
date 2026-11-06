@@ -50,7 +50,7 @@ describe('bandPopulation and bandFor: the band is chosen by the population the p
 
 describe('ownFigure', () => {
   test('a town with an entry: 「この町の令和6年度：1人あたり約680千円」', () => {
-    expect(ownFigure(finance, '30206', 'city')).toEqual({ value: 680, text: 'この町の令和6年度：1人あたり約680千円' });
+    expect(ownFigure(finance, '30206', 'city')).toEqual({ value: 680, text: 'この町の令和6年度：1人あたり約680千円', parts: ['この町の令和6年度：', '1人あたり約680千円'] });
     expect(ownFigure(finance, '13402', 'town').text).toBe('この町の令和6年度：1人あたり約5,747千円');
   });
 
@@ -63,6 +63,7 @@ describe('ownFigure', () => {
     expect(o.value).toBeUndefined();
     expect(o.reason).toBe('ward');
     expect(o.text).toBe('この区は政令指定都市の一部で、区ごとの決算はありません。');
+    expect(o.parts.join('')).toBe(o.text);
   });
 
   test('the 浜通り area has none and says why', () => {

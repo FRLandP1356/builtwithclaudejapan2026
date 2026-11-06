@@ -337,6 +337,10 @@
   line-height: var(--lh-tight);
   text-wrap: balance;
 }
+.burden-own.is-none {
+  font-family: var(--font-body);
+  font-size: var(--fs-16);
+}
 .burden-band {
   margin: var(--sp-2) 0 0;
 }
@@ -408,12 +412,14 @@
 .burden-table tr.is-current td {
   font-weight: 600;
 }
-.burden-table .burden-here {
-  display: inline;
-  margin-left: var(--sp-2);
+.burden-table-unit {
+  margin-top: var(--sp-1);
 }
-.burden-table .burden-here[hidden] {
-  display: none;
+/* Four columns have to fit the panel at 390px without sliding sideways: tighter cell padding, and the town's mark on a line of its own. */
+.burden-band-table th,
+.burden-band-table td {
+  padding-left: var(--sp-2);
+  padding-right: var(--sp-2);
 }
 .burden-table th[scope='row'] {
   font-weight: 400;

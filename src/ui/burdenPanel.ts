@@ -18,7 +18,8 @@ import {
   leadText,
   nationalText,
   ownFigure,
-  sourceText,
+  sourceParts,
+  TITLE_PARTS,
   yearParts,
 } from './burden';
 import { formatCount } from './format';
@@ -60,7 +61,8 @@ function hereMark(): HTMLSpanElement {
 }
 
 export function mountBurdenPanel(host: HTMLElement, finance: Finance): BurdenView {
-  const title = el('h3', 'panel-section-title', BURDEN_TEXT.title);
+  const title = el('h3', 'panel-section-title');
+  title.replaceChildren(...phraseNodes(TITLE_PARTS));
   const lead = el('p', 'note burden-lead');
   lead.replaceChildren(...phraseNodes(leadText(finance)));
 
@@ -93,11 +95,12 @@ export function mountBurdenPanel(host: HTMLElement, finance: Finance): BurdenVie
   const limits = el('p', 'note burden-limits');
   limits.replaceChildren(...phraseNodes(BURDEN_TEXT.limits));
   const source = el('p', 'note burden-source');
-  source.replaceChildren(...phraseNodes(sourceText(finance)));
+  source.replaceChildren(...phraseNodes(sourceParts(finance)));
 
   // The numbers in a table, and the published table of another year and another classification.
   const details = el('details', 'chart-table burden-table');
   details.append(el('summary', undefined, BURDEN_TEXT.tableSummary));
+  const tableUnit = el('p', 'note burden-table-unit', BURDEN_TEXT.tableUnit);
   const bandWrap = el('div', 'table-wrap');
   const bandTable = el('table', 'data-table burden-band-table');
   bandTable.append(el('caption', 'sr-only', BURDEN_TEXT.tableCaption));
@@ -146,7 +149,7 @@ export function mountBurdenPanel(host: HTMLElement, finance: Finance): BurdenVie
   pubWrap.append(pubTable);
   const pubNote = el('p', 'note burden-published-note');
   pubNote.replaceChildren(...phraseNodes(BURDEN_TEXT.publishedNote));
-  details.append(bandWrap, national, pubTitle, pubWrap, pubNote);
+  details.append(tableUnit, bandWrap, national, pubTitle, pubWrap, pubNote);
 
   host.append(title, lead, own, year, band, figure, limits, source, details);
 
@@ -175,7 +178,10 @@ export function mountBurdenPanel(host: HTMLElement, finance: Finance): BurdenVie
       if (key === shown) return;
       shown = key;
 
-      own.textContent = ownFigure(finance, input.code, input.kind).text;
+      const figure = ownFigure(finance, input.code, input.kind);
+      own.replaceChildren(...phraseNodes(figure.parts));
+      // A sentence saying there is no figure is not a figure: plain text, not the large serif line.
+      own.classList.toggle('is-none', figure.value === undefined);
 
       const index = bandFor(finance, input.population);
       year.hidden = band.hidden = index === undefined;
