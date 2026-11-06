@@ -21,7 +21,7 @@ src/engine（コーホート要因法） ──▶ Map<地域コード, Series>
   ▼                                      ▼
 src/ui/state.ts の store ──▶ src/map（地図）と src/ui のパネル（町の詳細・前提・割り振り・AI）
                                          ▲
-src/ai/tools.ts（8つの道具。同じ engine を呼ぶ）◀── src/ai/client.ts ──▶ worker/（messages だけを受け取る）──▶ Anthropic API
+src/ai/tools.ts（9つの道具。同じ engine を呼ぶ）◀── src/ai/client.ts ──▶ worker/（messages だけを受け取る）──▶ Anthropic API
 ```
 
 ## 公開されているもの
