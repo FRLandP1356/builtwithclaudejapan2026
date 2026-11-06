@@ -825,9 +825,17 @@
   color: var(--paper);
 }
 
-/* Panel column */
+/* Panel column: the four panels are separate cards with a gap between them (theme.css .panel). */
 .panel-column {
   min-width: 0;
+  display: grid;
+  gap: var(--sp-6);
+  align-content: start;
+}
+@media (max-width: 1023.98px) {
+  .panel {
+    --panel-inset: var(--sp-3);
+  }
 }
 /* Where a jump from the menu lands: under the phone's sticky strip (3 + 44 + 8px) and a breath; on a desktop at the top. */
 .panel {
@@ -885,10 +893,6 @@
     padding-top: var(--sp-3);
     border-top: 1px solid var(--line);
     margin-top: var(--sp-2);
-  }
-  .panel-column .panel:first-child {
-    padding-top: var(--sp-3);
-    border-top: 0;
   }
 }
 

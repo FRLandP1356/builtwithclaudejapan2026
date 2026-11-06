@@ -229,7 +229,9 @@
   display: none;
 }
 .facility-group-title {
-  margin: var(--sp-4) 0 var(--sp-1);
+  margin: var(--sp-4) 0 var(--sp-2);
+  padding-bottom: var(--sp-1);
+  border-bottom: 1px solid var(--line-2);
   font-family: var(--font-body);
   font-size: var(--fs-15);
   font-weight: 600;

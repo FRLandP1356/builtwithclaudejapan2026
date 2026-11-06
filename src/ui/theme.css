@@ -9,6 +9,7 @@
   --paper: #f6f5f0;
   --paper-2: #edebe4;
   --paper-3: #e3e0d7;
+  --card: #ffffff; /* the panels' cards: a hair lighter than the paper, edged with --line-2 */
   --band: #f6f1ea; /* the faint warm field behind the title, the question and the menu */
   --ink: #1b2430;
   --ink-2: #4a5563;
@@ -228,18 +229,36 @@ a {
   gap: var(--sp-2);
 }
 
-/* Panels: a rule and a mincho heading, no card chrome. */
+/* Panels: four separate cards. Each has a solid indigo title band, then a body inset from the card's edge; inside the
+   body every section starts with a tinted strip with an indigo bar on its left (h3.panel-section-title) and a sub-group
+   with a ruled title (h4). They used to be separated by a hairline and whitespace only: the owner could not tell where
+   one panel or section ended and the next began (2026-11-06). */
 .panel {
-  padding: var(--sp-5) 0;
-  border-top: 1px solid var(--line);
+  --panel-inset: var(--sp-4);
+  padding: 0 0 var(--panel-inset);
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
 }
-.panel-title {
+.panel > * {
+  margin-inline: var(--panel-inset);
+}
+.panel > .panel-title {
+  margin: 0;
+  padding: var(--sp-3) var(--panel-inset);
+  background: var(--accent);
+  color: var(--accent-ink);
   font-size: var(--fs-20);
-  margin-bottom: var(--sp-2);
+  border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+}
+.panel > .panel-title + * {
+  margin-top: var(--sp-4);
 }
 .panel-title .badge-estimate {
   vertical-align: 0.2em;
   margin-left: var(--sp-2);
+  color: var(--accent-ink);
+  border-color: var(--accent-ink);
 }
 .panel-lead {
   color: var(--ink-2);
@@ -254,11 +273,17 @@ a {
   margin-top: var(--sp-5);
 }
 .panel-section-title {
+  margin: var(--sp-6) 0 var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--accent-soft);
+  border-left: 4px solid var(--accent);
   font-family: var(--font-body);
-  font-size: var(--fs-15);
-  font-weight: 600;
-  color: var(--ink-2);
-  margin-bottom: var(--sp-2);
+  font-size: var(--fs-16);
+  font-weight: 700;
+  color: var(--ink);
+}
+.panel-section > .panel-section-title:first-child {
+  margin-top: 0;
 }
 
 /* Key numbers: label above, mincho number, unit small. */
