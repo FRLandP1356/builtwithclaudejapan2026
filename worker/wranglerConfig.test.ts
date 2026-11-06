@@ -1,44 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { Env } from './index';
 import wranglerText from './wrangler.jsonc?raw';
+import { stripJsonComments } from '../test/helpers/jsonc';
 
 // The deploy configuration is code too: a renamed binding would deploy fine and then answer 503 on every call, a
 // changed limit or period would quietly change the burst cap, and a DAILY_* var would silently override the code
 // defaults. The tests in this file read the committed worker/wrangler.jsonc and pin those things.
-
-/** Removes // and /* *\/ comments that are not inside a string ("http://localhost:5173" contains //). */
-function stripJsonComments(text: string): string {
-  let out = '';
-  let inString = false;
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i]!;
-    const next = text[i + 1];
-    if (inString) {
-      out += char;
-      if (char === '\\') {
-        out += next ?? '';
-        i += 1;
-      } else if (char === '"') {
-        inString = false;
-      }
-      continue;
-    }
-    if (char === '"') {
-      inString = true;
-      out += char;
-    } else if (char === '/' && next === '/') {
-      while (i < text.length && text[i] !== '\n') i += 1;
-      out += '\n';
-    } else if (char === '/' && next === '*') {
-      i += 2;
-      while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) i += 1;
-      i += 1;
-    } else {
-      out += char;
-    }
-  }
-  return out;
-}
 
 interface WranglerConfig {
   name?: string;
@@ -51,6 +18,10 @@ interface WranglerConfig {
   kv_namespaces?: Array<{ binding?: string; id?: string }>;
   ratelimits?: Array<{ name?: string; namespace_id?: string; simple?: { limit?: number; period?: number } }>;
   limits?: { cpu_ms?: number; subrequests?: number };
+  workers_dev?: boolean;
+  preview_urls?: boolean;
+  routes?: unknown;
+  route?: unknown;
   vars?: Record<string, unknown>;
 }
 
@@ -89,6 +60,13 @@ describe('worker/wrangler.jsonc', () => {
     expect(config.kv_namespaces).toHaveLength(1);
     expect(config.kv_namespaces![0]!.binding).toBe(KV_BINDING);
     expect(KV_BINDING).toBe('RATE_KV');
+  });
+
+  it('has no public address: workers.dev and preview URLs are off and no route is set (the page reaches it through the service binding)', () => {
+    expect(config.workers_dev).toBe(false);
+    expect(config.preview_urls).toBe(false);
+    expect(config.routes).toBeUndefined();
+    expect(config.route).toBeUndefined();
   });
 
   it('sets no daily-limit var and no secret as a var: the code defaults (60 and 400) apply, secrets stay in `wrangler secret`', () => {

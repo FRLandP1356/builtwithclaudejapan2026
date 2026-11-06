@@ -3,6 +3,12 @@
   "name": "town-2100-api",
   "main": "index.ts",
   "compatibility_date": "2026-11-01",
+  // No public address. The Worker is reached only through the service binding CHAT_API of the page's own /api/chat
+  // (functions/api/chat.ts, configured in the root wrangler.jsonc), so the account's workers.dev name is not in the
+  // page, the repository or any link. Pinned by worker/wranglerConfig.test.ts. Preview URLs are switched off for the
+  // same reason (they are workers.dev addresses too).
+  "workers_dev": false,
+  "preview_urls": false,
   // Workers Logs, for the Worker's own console lines only. The Worker writes only constant strings (pinned by the
   // "console output" tests in worker/index.test.ts; the list is in worker/README.md, section "ログ"): no argument, so
   // no API key, client address, upstream body or error text. Cloudflare may attach its own metadata to a recorded
