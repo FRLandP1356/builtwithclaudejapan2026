@@ -7,8 +7,12 @@
 // Each row opens a disclosure 「ここを残すには」 (boardKeep.ts): what the town would need to reach the guide and what falls
 // below elsewhere when those people come from every other town. One is open at a time; a new place closes them all.
 //
+// After the rows, for a prefecture or a town, the section 「ここにある有名なもの」 (landmarks.ts) lists the famous places
+// and things that are there, with their sources: context, listed as facts, tied to no row and no guide.
+//
 // Built once; a new selection or a new scenario rebuilds the strip and the list, a new year only moves the mark on the
 // strip. `mountBoardPanel` returns its teardown.
+import { indexLandmarks, landmarksOf } from '../data/landmarks';
 import {
   alreadyBelowAreas,
   alreadyBelowText,
@@ -36,7 +40,8 @@ import {
 import { createBoardKeep, type BoardKeep, type BoardKeepContext } from './boardKeep';
 import { deriveTotals } from './derive';
 import { formatCount } from './format';
-import type { Level } from './nav';
+import { createLandmarkSection, rowLandmarksText } from './landmarks';
+import { pickArea, type Level } from './nav';
 import { phraseNodes } from './phrases';
 import { badgeFor } from './sources';
 import type { AppState, PanelContext } from './state';
@@ -174,6 +179,13 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
   const areaByCode = new Map(data.areas.map((a) => [a.code, a] as const));
   const names = { area: (c: string) => areaByCode.get(c)?.name, prefOfArea: (c: string) => areaByCode.get(c)?.prefName };
   const essential = essentialFacilities(data.facilities);
+  // The landmarks file is optional: without it the index is empty and the section stays hidden.
+  const landmarkIndex = indexLandmarks(data.landmarks ?? []);
+  const landmarks = createLandmarkSection({
+    index: landmarkIndex,
+    areaName: (code) => areaByCode.get(code)?.name,
+    select: (l) => store.set(pickArea({ code: l.areaCode, prefCode: l.prefCode })),
+  });
 
   const root = h('div', 'board');
   const heading = h('h3', 'board-heading');
@@ -195,7 +207,7 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
   const essentialNote = h('p', 'note board-essential-note', BOARD_ESSENTIAL_NOTE);
   const guide = h('p', 'note board-note');
   guide.replaceChildren(...phraseNodes(BOARD_GUIDE_NOTE));
-  root.append(heading, strip.root, list, none, more, others, already, essentialNote, guide);
+  root.append(heading, strip.root, list, none, more, others, landmarks.root, already, essentialNote, guide);
   el.append(root);
 
   let scope: TownScope | undefined;
@@ -208,6 +220,7 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
     closeOthers(except) {
       for (const k of keeps) if (k !== except && k.details.open) k.details.open = false;
     },
+    landmarkLine: (code) => rowLandmarksText(landmarksOf(landmarkIndex, 'area', code)),
   };
   const makeKeep = (row: BoardRow): BoardKeep => {
     const k = createBoardKeep(row, keepCtx);
@@ -264,6 +277,7 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
       essentialNote.hidden = false;
     }
     paintStrip(strip, bars, sc.level, s.year);
+    landmarks.render(sc.level, sc.key);
   }
 
   render(store.get());

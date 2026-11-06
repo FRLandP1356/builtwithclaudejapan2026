@@ -301,6 +301,13 @@
 .board-essential-note {
   margin-top: var(--sp-1);
 }
+/* After the section 「ここにある有名なもの」 (landmarks.css) the card's own notes start under a rule, so they read as the
+   card's and not as the list's. */
+.landmarks:not([hidden]) + .board-already {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line-2);
+}
 .board .keep {
   display: inline-block;
   max-width: 100%;

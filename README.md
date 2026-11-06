@@ -190,7 +190,7 @@ AI の中継（Worker）：作りと設定は [worker/README.md](worker/README.m
 | `src/ai` | AI の道具、答えの数字の検査、Worker へのやり取り、保存済みの答え |
 | `worker` | Claude の API を中継する Cloudflare Worker |
 | `pipeline` | 国立社会保障・人口問題研究所・国土数値情報・施設の表から `public/data` を作る Python |
-| `public/data` | 作った地域データ、境界、施設の目安 |
+| `public/data` | 作った地域データ、境界、施設の目安、各都道府県の有名なものの例（`landmarks.json`。名前・場所・種類・1文の事実・出典。そこにあるものを並べるだけで、今後の見込みは書かない。無くてもアプリは動く） |
 | `test` | テストで使う補助とデータ |
 | `docs` | 出典、設計、開発の記録 |
 

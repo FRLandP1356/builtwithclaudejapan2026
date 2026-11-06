@@ -1,0 +1,82 @@
+/* 「ここにある有名なもの」 inside the 分かれ目 card (landmarks.ts). Tokens only: every colour, size and space comes from
+   theme.css (see DESIGN.md). The list is ruled like the board's rows and the kind is the existing .tag in plain ink,
+   so nothing is coloured by kind. From 600px the town stands in a left column 6.5em wide, as the year does in the rows;
+   on a phone it is a line above the name, so the sentence keeps the width. */
+
+.landmarks {
+  margin-bottom: var(--sp-5); /* the card's own notes under the section stay apart from the section's note */
+}
+.landmark-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line-2);
+}
+.landmark {
+  display: grid;
+  gap: var(--sp-1) var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+@media (min-width: 600px) {
+  .landmark-list.is-pref .landmark {
+    grid-template-columns: 6.5em minmax(0, 1fr);
+    align-items: baseline;
+  }
+}
+.landmark-place {
+  min-width: 0;
+  font-size: var(--fs-14);
+  color: var(--ink-2);
+}
+/* The town's name is a text button in the accent, underlined as the breadcrumbs are; the hit area is padded out
+   without moving the text. */
+.landmark-town {
+  margin: calc(-1 * var(--sp-1)) calc(-1 * var(--sp-2));
+  padding: var(--sp-1) var(--sp-2);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--fs-14);
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
+.landmark-town:hover {
+  background: var(--paper-2);
+}
+.landmark-body {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.landmark-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-2);
+}
+.landmark-name {
+  min-width: 0;
+  font-size: var(--fs-15);
+  font-weight: 600;
+  overflow-wrap: anywhere; /* a long name wraps; it never widens the card */
+}
+.landmark-kind {
+  flex: none;
+}
+.landmark-summary {
+  font-size: var(--fs-15);
+  color: var(--ink);
+  word-break: auto-phrase;
+}
+.landmark-source {
+  overflow-wrap: anywhere; /* a long source label may break anywhere: no horizontal scroll */
+}
+.landmarks-note {
+  margin-top: var(--sp-3);
+}

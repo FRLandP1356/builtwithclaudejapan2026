@@ -70,6 +70,11 @@ export interface BoardKeepContext {
   areaName(code: string): string | undefined;
   /** Close every other open disclosure of the board. */
   closeOthers(except: BoardKeep): void;
+  /**
+   * The one line 「この町にある有名なもの：…」 for the row's town (landmarks.ts), or undefined when it has none. Listed after
+   * the body as a fact about the town; it is not tied to the row's facility.
+   */
+  landmarkLine?(code: string): string | undefined;
 }
 
 export interface BoardKeep {
@@ -107,7 +112,7 @@ interface Body {
   message: HTMLElement;
 }
 
-function buildBody(row: BoardRow): Body {
+function buildBody(row: BoardRow, landmarkLine: string | undefined): Body {
   const root = h('div', 'board-keep-body');
   const lead = h('p', 'board-keep-lead');
   const figure = h('div', 'board-balance');
@@ -141,6 +146,11 @@ function buildBody(row: BoardRow): Body {
   const limits = h('p', 'note board-keep-limits');
   limits.replaceChildren(...phraseNodes(KEEP_LIMITS));
   root.append(lead, figure, effect, topLead, top, choice, actions, message, limits);
+  if (landmarkLine !== undefined) {
+    const landmarks = h('p', 'note board-keep-landmarks');
+    landmarks.replaceChildren(...phraseNodes(landmarkLine));
+    root.append(landmarks);
+  }
   return { root, lead, figure, sides, effect, topLead, top, choice, actions, button, status, message };
 }
 
@@ -213,7 +223,7 @@ export function createBoardKeep(row: BoardRow, ctx: BoardKeepContext): BoardKeep
 
   function opened(): void {
     if (!body) {
-      body = buildBody(row);
+      body = buildBody(row, ctx.landmarkLine?.(row.leadCode));
       body.button.addEventListener('click', () => {
         if (!current || !facility || current.computation.outcome.kind !== 'ok') return;
         // The map shows the what-if for the row's year: the year moves there with the overlay, in one patch.
