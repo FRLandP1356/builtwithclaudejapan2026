@@ -22,7 +22,7 @@ describe('allocatedBasisNote', () => {
 });
 
 describe('SOURCES: the footer attributions', () => {
-  test('the three sources, exactly as attributed (processing stated, page URL, retrieval date from docs/sources.md)', () => {
+  test('the five sources, exactly as attributed (processing stated, page URL, retrieval date from docs/sources.md)', () => {
     expect(SOURCES).toEqual([
       {
         label: '人口',
@@ -43,6 +43,18 @@ describe('SOURCES: the footer attributions', () => {
         url: 'https://www.mlit.go.jp/common/001042019.pdf',
         retrieved: '2026年11月5日',
       },
+      {
+        label: '市町村の歳出',
+        text: '総務省「令和6年度 市町村別決算状況調」（都市別・町村別の概況）を加工して作成（歳出総額を住民基本台帳人口（令和7年1月1日）で割り、人口の規模ごとに中央値と四分位を計算。令和6年度の決算の実績で、国が作成した数字ではありません）',
+        url: 'https://www.soumu.go.jp/iken/zaisei/r06_shichouson.html',
+        retrieved: '2026年11月6日',
+      },
+      {
+        label: '歳出の公表値',
+        text: '総務省「令和7年版 地方財政白書」第39表（令和5年度）を加工して作成（団体区分別の1人あたりの歳出の4つの値を転記）',
+        url: 'https://www.soumu.go.jp/menu_seisaku/hakusyo/chihou/r07data/2025data/r07czb01-10.html',
+        retrieved: '2026年11月6日',
+      },
     ]);
   });
 
@@ -53,6 +65,10 @@ describe('SOURCES: the footer attributions', () => {
       expect(s.url).toMatch(/^https:\/\/[a-z.]+\/\S+$/);
     }
     expect(SOURCES[2].text).toContain('（2009〜2012年の統計）');
+    // the spending sources name their fiscal year and say the figure is an actual of a past year (not a forecast)
+    expect(SOURCES[3].text).toContain('令和6年度');
+    expect(SOURCES[3].text).toContain('実績');
+    expect(SOURCES[4].text).toContain('令和5年度');
     // docs/sources.md ("画面と README の出典の書き方"): the IPSS line says the institute does not vouch for this app
     expect(SOURCES[0].text.endsWith('。社人研がこのアプリの内容を保証するものではありません')).toBe(true);
   });

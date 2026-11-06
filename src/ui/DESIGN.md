@@ -69,7 +69,7 @@
 
 ## パネルが足した部品の族（各パネルの css。値は全部トークン）
 
-### 町の詳細（`townPanel.css`、`townPanel.ts`・`pyramid.ts`・`seriesChart.ts`・`facilityPanel.ts`）
+### 町の詳細（`townPanel.css`、`townPanel.ts`・`pyramid.ts`・`seriesChart.ts`・`facilityPanel.ts`・`burdenPanel.ts`）
 
 | 族 | 主な class | 役割 |
 |---|---|---|
@@ -83,6 +83,7 @@
 | 表の折りたたみ | `.chart-table`（`details`）、推移の表の下に `.note.chart-table-note` | 図の数字を表でも読めるように。注記は「公式推計の列は社人研の発表値。このアプリは公表された仮定から公式の方法で計算し直しているので、2050 年までの地図や町の数字は発表値と、町では数人、都道府県では数十人ほど違うことがある」（全 1,884 地域・2025〜2050 年の全期間で確かめた：町は最大 8.1 人（2040 年、横浜市緑区）、県は最大 47 人（2050 年、北海道）、全国は最大 17 人。`townPanel.test.ts` が毎年検査する）（`seriesChart.ts` の `TABLE_NOTE`。数字は変えない） |
 | 施設 | `.facility-summary`（明朝 20px）`.facility-notices` `.facility-group-title` `.facility-table`（`tbody th` は通常の太さ）`.facility-name` `.facility-guide` `.facility-note` `.facility-others`（`details`） | 施設の状態。印は `.tag` の 3 種 |
 | 目安に届くには | `.facility-keep-row`（表の行。`data-keep-for`＝施設の id、下回らない間は `hidden`）`.facility-keep-cell`（`colspan=2`）`.facility-keep`（`details`。`summary` は他の折りたたみと同じ印、14px、44px）`.facility-keep-body` `.facility-keep-year`（`.note`。「2100年の人口で計算」に印 `.badge-estimate` か `.badge-official`、割り振りのパネルの `.alloc-year` と同じ形）`.facility-keep-needs`（`dl`。`.facility-keep-need` の `dt`「50%の目安（1,500人）まで」と `dd`「あと約360人」、目安が 1 つの施設は「目安（500人）まで」の 1 行だけ）`.facility-keep-what`（上に罫）`.facility-keep-premise` `.facility-keep-effect` `.facility-keep-top-lead` `.facility-keep-top` `.facility-keep-actions`（`.actions`。`.btn` の「地図に反映する」と `.facility-keep-status`＝`role=status`）`.facility-keep-error` `.facility-keep-limits`。施設の行（`tr[data-facility-id]`）は下回る間 `.has-keep`（下の罫を外し、2 行が 1 件に見える） | 下回る施設の下に出す折りたたみ。三大都市圏の町には出さない（表は参考として出しているだけ）。同時に開くのは 1 つ（開くと他は閉じ、町を替えても閉じる）。本体は最初に開く時に作り、あとは文字だけ書き換える（年を動かしてもボタンのフォーカスが残る）。計算は開いている間だけ。2050 年より後は「試算」の印を年の行に付ける。文言の正本は `src/ui/keepGuide.ts`（計算も：`keepNeeds`＝あと何人、`computeKeep`＝50% の目安に届く人数を `allocate` で他の町から人口に比例して移した時に、他の町がいくつ目安を下回るか、いちばん多い施設 3 つ）。ボタンは `keepOverlay()` で作った重ねを `store.set({ allocation })` に置くだけ（割り振りのパネルの状態は読まない。AI のパネルの「この割り振りを地図に反映する」と同じ作り）。置くとその施設に焦点が付く |
+| 規模別の歳出（実績） | `.town-burden`（町だけ。施設の節のすぐ後で、パネルの最後）`.burden-lead` `.burden-own`（町自身の値。明朝 20px。値が無い時の文は `.is-none`＝本文の書体と大きさ）`.burden-year`（`.note`。「規模は、2100年の人口 1.2万人で選んでいます。」のあとに全角の空白と、`.badge-estimate` か `.badge-official`＝人口の印。金額には付けない）`.burden-band`（選んだ年の規模の区分の 1 文：中央値と真ん中の半数）`.burden-figure`（`figure`）`.burden-strip-title` `.burden-bars`（`ul`、`aria-label`）`.burden-bar`（`li`。3 列の grid：区分名 7.5em、棒、値 3.25em。この町の区分は `.is-current` と `aria-current`）`.burden-label` `.burden-here`（「この町の規模」。色だけに頼らず文字で印を付ける。12px、`--accent`、印の無い行は `hidden`）`.burden-track`（`aria-hidden`）`.burden-fill`（幅は行の `--burden-w`。印の無い棒は `--series-reference`、この町の棒は `--accent`）`.burden-value` `.burden-limits` `.burden-source`（どちらも `.note`）`.burden-table`（`details.chart-table`。中は `.burden-table-unit`、`.burden-band-table`、`.burden-national`、`h4.facility-group-title`＝公表値の見出し、`.burden-published-table`、`.burden-published-note`。表の行の印は `tr.is-current`） | 令和6年度の決算の実績（歳出総額 ÷ 住民基本台帳人口）を、選んだ年の人口と同じ規模の、いまの市町村と並べる。将来の予測でも、因果でもない。見出しの文は 1 人あたりを切らないよう文節に分ける（`TITLE_PARTS`）。出典・計算・団体数の文は `sourceParts`。文言の正本は `src/ui/burden.ts`（`BURDEN_TEXT`、`ownFigure`、`bandParts`、`yearParts`）、データは `public/data/finance.json`（`pipeline/build_finance.py` が作る。型と検査は `src/data/finance.ts`）。規模の区分は `src/data/finance.ts` の `bandIndexFor`（下の端を含み上の端を含まない。4,999人は最初、5,000人は 2 番目）で選ぶ。選ぶ人口は画面に出す人口と同じ数（整数に丸める）。政令指定都市の区と浜通り地域には自分の決算が無いので、「この区は政令指定都市の一部で、区ごとの決算はありません。」「この地域は複数の市町村をまとめたもので、地域としての決算はありません。」と言い、区分の比較は出す。見出しに「試算」の印は付けない（金額は実績）。表の折りたたみは DOM の状態で、年や町を替えても開閉は変わらない。表は 4 列が 390px に収まるよう、セルの左右の余白を 8px にし、「この町の規模」は行の中で改行する。「公表されている区分別の値（令和5年度）」は、年度も分け方（人口の規模でなく団体区分）も違う表として、折りたたみの中だけに出す。限りは 3 つ（同じ時点の比較で予測ではない、災害復旧や大きな事業の年は値が跳ねる、町村や特別区は都道府県が担う事務が市と違う）を欠かさず書く。「集約」「削減」「節約」「残す」「維持」などの言葉は使わない。AI の道具には繋いでいない（`burden.ts` の先頭に、`get_burden` を足す場所のコメントがある） |
 | 文の折り返し | `.keep` | 数字と単位を途中で折らない |
 
 ### 前提を変える・人口の割り振り（`controlsPanel.css`、`controls.ts`・`allocationPanel.ts`）
@@ -134,6 +135,7 @@
 - 施設の名前は 1 つだけ：`public/data/facilities.json` の `name` を、施設の `id` で引いて出す（町の詳細の表・割り振りの表・ボタンの読み上げ・ツールチップと地図の読み上げ・割り振りの `flips`）。UI のコードに施設の名前を直接書かない（`facilityNames.test.ts` が検査する）。README や docs の言い換え（「飲食料品店」「診療所」など）は画面の名前ではない。
 - 「残せない」でなく「人口の目安を下回る」。残す・残さないを勧める言葉は書かない。
 - 「この目安に届くには」の文言：人数は「もし移ったら」の仮の数で、実際の人の動きの予測ではない。人口の目安は 2009〜2012 年の統計で、人口が増えれば施設ができるという因果を示さない（`KEEP_LIMITS`、1 文）。結果は事実だけ（「ほかの19町が、いずれかの施設の人口の目安を下回ります」）で、残す・残さないも、人を動かすべきかどうかも書かない。動かす人数が他の地域の人口を超える（`allocate` が RangeError）時は「人数が大きすぎて、この計算はできません。」だけを出す。
+- 「いま、この規模の市町村は、1人あたりこれだけ使っています」の文言：金額は令和6年度の決算の実績で、2050年より後を選んでも「試算」は人口（規模を選ぶ数）にだけ付ける。「この町は費用がかかりすぎる」「集約すれば減る」「残すべき」のような価値の判断・因果・勧めは書かない。町自身の値が無い場所（政令指定都市の区、浜通り地域）は、無い理由を 1 文で言う。
 - 丸数字・矢印記号・英語の大文字ラベルは使わない。
 
 ## チャート（推移・ピラミッド）
