@@ -1,6 +1,6 @@
 # 構成
 
-ブラウザの中で動く静的なページ（Vite、TypeScript、D3）と、AI の質問だけが使う小さな中継（Cloudflare Worker）でできている。人口の計算はすべてブラウザの中の計算エンジンが行い、AI もその同じエンジンを道具として呼ぶ。この版では中継を公開していないので、AI の質問は動かない（README の「限界と未完了」）。
+ブラウザの中で動く静的なページ（Vite、TypeScript、D3）と、AI の質問だけが使う小さな中継（Cloudflare Worker）でできている。人口の計算はすべてブラウザの中の計算エンジンが行い、AI もその同じエンジンを道具として呼ぶ。画面と中継は 2026-11-06 に公開した（下の「公開されているもの」）。AI の質問は公開ページで動く（確かめたことと、確かめていないことは README の「限界と未完了」）。
 
 ## データの流れ
 
@@ -23,6 +23,17 @@ src/ui/state.ts の store ──▶ src/map（地図）と src/ui のパネル�
                                          ▲
 src/ai/tools.ts（8つの道具。同じ engine を呼ぶ）◀── src/ai/client.ts ──▶ worker/（messages だけを受け取る）──▶ Anthropic API
 ```
+
+## 公開されているもの
+
+| 部品 | 内容 |
+|---|---|
+| 画面 | Cloudflare Pages のプロジェクト `japan2100`（https://japan2100.pages.dev）。`npm run build` で作った `dist/` を、直接アップロードで置いてある。ビルドのときに `VITE_CHAT_ENDPOINT` で中継の URL を埋め込む（`docs/ai-endpoint.md`）。`public/_headers` で、検索エンジンに載せない設定（`X-Robots-Tag: noindex, nofollow`）と、`nosniff`・`Referrer-Policy` を付けている |
+| 中継 | Cloudflare Worker `town-2100-api`（https://town-2100-api.your-account.workers.dev ）。呼び出してよい出どころは、`ALLOWED_ORIGINS` で公開ページだけ |
+| 中継の設定 | KV `RATE_KV`（名前空間 `town-2100-rate`）、Rate Limiting `IP_LIMITER`（60 秒に 20 回）、秘密 `ANTHROPIC_API_KEY`・`IP_HASH_SECRET`、変数 `ALLOWED_ORIGINS`。値は `worker/wrangler.jsonc`（秘密は含まない）。1日の上限の標準は、1人60回、全体400回 |
+| Anthropic 側 | この中継専用のワークスペース。月の利用上限 100 ドル、25 ドルでのメール通知、毎分の上限。API キーは Worker の秘密にだけ置き、期限は 2026-12-06 |
+| 保存済みの答え | `public/data/cached_answers.json`。5件、すべて作者の確認前（`pending`）。ファイルは公開ページが配るが、画面は `pending` を出さない |
+| リポジトリ | GitHub の `main`。提出まで非公開（README の冒頭の「リポジトリ」の行） |
 
 ## モジュール
 
@@ -49,6 +60,7 @@ src/ai/tools.ts（8つの道具。同じ engine を呼ぶ）◀── src/ai/cli
 - **変異テスト**：テストが本当に失敗しうるかを、コードをわざと壊して確かめた（例：割り振りで対象を元から外さない、期間の境目を1つずらす、数字の許容幅を広げる）。壊しても通ってしまうテストは、レビューで差し戻した。
 - **画面と Worker のあいだの契約テスト**：画面が作るすべての要求を、Worker の本物の検査関数 `worker/validate.ts` に通して受理されることを確かめる。Worker が送る道具の定義は画面側の実装と同じファイルから来るので食い違わない。そのうえで、定義にあるすべての道具に実装と画面での呼び名があることをテストで確かめる。
 - **独立の数字**：テストの期待値は、テスト対象とは別の経路で出した数字（Python の試作、基準実装 `test/helpers/referenceProjection.ts`、台帳に残した値。試作と台帳は、このリポジトリには入っていない）に置く。
-- 実機の確認：390px 幅と広い画面（1512px）のブラウザで、横スクロールが出ないことと、数字が画面と計算で一致することを、最後の全体レビューと、修正の波の画面に関わる2つの流れと、最終の統合版（fa21f09）で確かめた（確かめた内容は README の「限界と未完了」）。
+- 実機の確認：公開前は、390px 幅と広い画面（1512px）のブラウザで、横スクロールが出ないことと、数字が画面と計算で一致することを、最後の全体レビューと、修正の波の画面に関わる2つの流れと、最終の統合版（fa21f09）で確かめた（確かめた内容は README の「限界と未完了」）。
+- **公開した中継での確認**：`scripts/ai_live_check.ts` が、公開した Worker に画面と同じ `ask()` で質問を送り、道具の定義・長い会話・キャッシュ・トークン数・`stop_reason` を記録する（[ai-live-check.md](ai-live-check.md)）。偽の応答では確かめられない部分（実際の API が要求を受け付けるか）のためで、`npm test` には入っていない。お金がかかる（2026-11-06 の合計で、見積もり約1.80ドル）。
 
 テストは `npm test`（Vitest）と `npm run test:py`（データ作り）。件数は README にある。
