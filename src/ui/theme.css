@@ -254,11 +254,62 @@ a {
 .panel > .panel-title + * {
   margin-top: var(--sp-4);
 }
-.panel-title .badge-estimate {
+.panel-title .badge-estimate,
+.panel-title .badge-official {
   vertical-align: 0.2em;
   margin-left: var(--sp-2);
   color: var(--accent-ink);
   border-color: var(--accent-ink);
+}
+/* A folded card (the lower layer): only its title band shows; the band is a button that opens and closes it. The
+   content stays in the DOM. The mark is the same bordered chevron the disclosures use (no arrow characters). */
+.panel.is-collapsed > :not(.panel-title) {
+  display: none;
+}
+.panel.is-collapsed {
+  padding-bottom: 0;
+}
+.panel > .panel-title:has(.panel-toggle) {
+  display: flex;
+  align-items: center;
+  padding: 0;
+}
+.panel-toggle {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 50px;
+  margin: 0;
+  padding: 0 var(--panel-inset);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.panel-toggle::before {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: -3px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+.panel-toggle[aria-expanded='true']::before {
+  margin-top: -6px;
+  transform: rotate(45deg);
+}
+.panel-toggle:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: -4px;
+  border-radius: var(--radius);
+}
+.panel > .panel-title:has(.panel-toggle) .badge-estimate {
+  margin-right: var(--panel-inset);
 }
 .panel-lead {
   color: var(--ink-2);

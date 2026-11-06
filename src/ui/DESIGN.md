@@ -43,10 +43,11 @@
 
 ## 配置（slots）
 
-- 390px：1 列。上から 帯（題・説明・問い）→ メニュー（見出し「この地図でできること」の行、4 つの欄の名前の帯。横に動かせ、見出しの行が流れ去ったあとは画面の上に貼り付く）→ 4 つの説明を 1 文にした行 → 場所の行（パンくず・戻る・検索）→ 場所の数字 →（割り振り中は 割り振りの行、それ以外は 地図の色の 2 択）→ 地図 → 凡例 → 年 → `#panel-town` → `#panel-controls` → `#panel-allocation` → `#panel-ai` → 出典。
-- 1024px 以上：帯は窓の端から端まで（`--band` の地。中は `--page` 幅）。上の段に題と説明（1 行）、問い（1 行）、下の段にメニュー（見出しが左、4 つの欄が 4 列。名前の下に 1 行の説明が 2 行まで。カードのどこを押しても移動する）。その下は 2 列（地図 3 : パネル 2）。左の地図の列は `position: sticky` で、帯が流れ去ったあとは地図・凡例・年が 1 画面に収まる。最初の画面（動かさない状態）で帯・地図・凡例・年が収まるよう、地図の高さは `calc(100vh - 485px)` まで（帯 約 190px・場所の行・場所の数字・地図の色の 2 択（または割り振りの行）・凡例・年の分。1280×800 から 1920×1080 まで凡例の下端が窓の下端より 4px 上。845px より低い窓では地図 360px のままで、年まで少し動かす。1024px 幅ではメニューの説明が 3 行になり、940px より低い窓は年まで動かす）。`appCss.test.ts` が検査する。右の列にパネルが縦に並ぶ。
+- 最初の画面に出すのは 4 つだけ（作者の指示 2026-11-06「大切なものから順に、大切なものだけ」）：題と問いの 1 文、地図と年と凡例、分かれ目、下層への入口「くわしく見る」。町を選んだ時の基本の数字 4 行（`#panel-facts`）は分かれ目の上。町の詳細・前提を変える・人口の割り振り・AIに質問・出典は下層で、最初は閉じている（`.panel.is-collapsed`：中身は DOM に残し、見出しの帯だけ出す）。
+- 390px：1 列。上から 帯（題・問い）→ 場所の行（パンくず・戻る・検索）→ 場所の数字 →（割り振り中は 割り振りの行、それ以外は 地図の色の 2 択）→ 地図 → 凡例 → 年 → `#panel-facts`（町の数字。町の時だけ）→ `#panel-board`（分かれ目）→ `nav.app-more`（くわしく見る）→ `#panel-town` → `#panel-controls` → `#panel-allocation` → `#panel-ai` → `#panel-sources`（出典）。
+- 1024px 以上：帯は窓の端から端まで（`--band` の地。中は `--page` 幅）。題の行と問いの行（約 95px）。その下は 2 列（地図 3 : パネル 2）。左の地図の列は `position: sticky` で、帯が流れ去ったあとは地図・凡例・年が 1 画面に収まる。最初の画面（動かさない状態）で帯・地図・凡例・年が収まるよう、地図の高さは `calc(100vh - 395px)` まで（帯 約 95px・場所の行・場所の数字・地図の色の 2 択（または割り振りの行）・凡例・年の分。以前の 485px は帯のメニュー 90px を含んでいた）。`appCss.test.ts` が検査する。右の列に、町の数字・分かれ目・くわしく見る・閉じたカード 4 枚が縦に並び、出典のカードは 2 列の下。
 - パネルは `(el: HTMLElement, ctx: PanelContext)` で `el`（既にある `<section class="panel" id="panel-…">`）の中身を置き換え、片付けの関数を返す。`el` 自体の class と id は変えない。見出しは `h2.panel-title` を 1 つ残す（試算の印は `h2` の中に足す）。
-- 取り付けは `src/ui/app.ts` の `mountPanels(ctx, slots)`（「Panel registry」の印の付いた 4 行。返った片付けの関数は `destroy()` が呼ぶ）。
+- 取り付けは `src/ui/app.ts` の `mountPanels(ctx, slots)`（「Panel registry」の印の付いた 5 行。返った片付けの関数は `destroy()` が呼ぶ）。
 - 横スクロールを出さない。横長の表は `.table-wrap` に入れる。
 
 ## 共通の部品（`theme.css`）
@@ -74,6 +75,21 @@
 | 画面の外に出す文字（読み上げ用） | `.sr-only` |
 
 ## パネルが足した部品の族（各パネルの css。値は全部トークン）
+
+### 分かれ目（`boardPanel.css`、`boardPanel.ts`。文言と計算は `board.ts`、年のまたぎは `src/engine/crossings.ts`）
+
+右の列の先頭のカード（`#panel-board`、見出し「分かれ目」）。選んでいる場所（日本全体・県・町）について、いつ・どこで・何が人口の目安を下回るかを、短く見せる。動詞はいつも「人口の目安を下回る」で、「残せない」「閉鎖」「撤退」「廃止」は書かない（説明の 1 文 `BOARD_GUIDE_NOTE` が、目安は国土交通省の統計で、下回っても施設がなくなると決まるわけではないと言う）。年表と行には、名前のある有名なもの（神社仏閣・施設の固有名）を出さない。それらは、行の一覧のあとの節「ここにある有名なもの」に、その場所にあるものとして並べるだけで（下の表の最後の行）、行や目安と結びつけない（作者の決定 2026-11-06「まず統計で言える範囲で作る。名前のあるものは『その町にあるもの』として並べるだけ」）。
+
+| 族 | 主な class | 役割 |
+|---|---|---|
+| 見出しの文 | `.board-heading`（`h3`、明朝 18px） | 「日本全体で、人口の目安を下回っていく順番」「和歌山県で、…」「田辺市で、人口の目安を下回る施設と、その年」（`boardHeading`） |
+| 年表の帯 | `.board-years`（`figure`）`.board-years-lead`（`figcaption`、`.note`）`.board-bars`（`ol`、16 列の grid、`aria-hidden`：数字は下の 1 文と表が言う）`.board-bar`（`li`。`data-year`、高さは `--board-h`＝最大に対する %。2050 年より後は `.is-estimate`）`.board-bar-value`（棒の上の数字。最大の棒と、表示中の年の棒だけ）`.board-bar-fill`（2050 年までは `--ink-2` の塗り、`.is-estimate` は `--accent-soft` の面に `--accent` の破線の縁＝年のトラックと同じ「試算」の作法）`.board-bar-year`（基線の罫と 2030・2050・2070・2100 の目盛）`.board-years-summary`（「いちばん多いのは2045年（6町）。」）`.board-table`（`details.chart-table`「棒の数字を表で見る」。全 16 年の数と単位、試算の行は `.is-estimate`） | 5 年ごとに、新しく目安を下回る町の数（県・日本：主な 8 施設のいずれか、町は 1 回だけ数える）か、施設の数（町）。表示中の年の棒は `aria-current="true"`：塗りが `--ink`、基線に 3px の印、数字を出す。年を動かしても帯は作り直さず印だけ動く |
+| 行 | `.board-list`（`ol`、上に `--line-2` の罫。空なら消える）`.board-row`（`li`。`data-year`・`data-facility`・`data-area`＝行の町）`.board-row-head`（2 列の grid：年 6.5em と中身）`.board-row-year`（明朝 18px。2050 年より後は `.badge-estimate`）`.board-row-facility`（太字 15px）`.board-row-towns`（14px `--ink-2`。「美浜町 ほか1町」、日本全体では「売木村（長野県） ほか2町」） | 県・日本：主な 8 施設の、いちばん早い順に `BOARD_ROWS`＝6 行（`groupCrossings`：年 → 主な施設 → 施設の順。行の町は目安をまたぐ前にいちばん人口が多かった町）。残りは `.board-more`（`details`「続きを見る（残り56件）」）。町：主な 8 施設の行を先に、残りは `.board-others`（`details`「その他の施設（18）」）。無ければ `.board-none` の 1 文 |
+| 注記 | `.board-already`（「2020年の時点で、すでに目安を下回る：11種類」／「…主な8施設のいずれかの目安を下回る：12町」）`.board-essential-note`（県・日本だけ）`.board-note`（`BOARD_GUIDE_NOTE`、文節ごとの `.keep`） | 2020 年に既に下回っているものは、またぎの行に入れず別に数える |
+| ここを残すには（`boardKeep.ts`） | `.board-keep`（各行の `details`。`summary` は「ここを残すには」、読み上げ用に「（美浜町・銀行（中央銀行を除く））」）`.board-keep-body`（開いた時に 1 回だけ作り、その時に計算する）`.board-keep-lead`（「美浜町が、2025年に銀行（中央銀行を除く）の人口の目安（6,500人）に届くには」。2050 年より後は `.badge-estimate`）`.board-balance`（左右 2 列、上下に罫）`.board-balance-side.is-keep`（右寄せ）`.is-cost` `.board-balance-title`（「ここを残すには」「代わりに」）`.board-balance-amount`（明朝 26px「+約93人」「−約93人」。同じ数）`.board-balance-bar.is-gain`（`--growth` の青、列いっぱい）`.is-loss`（`--decline` の赤錆、列いっぱい。2 本は同じ長さ＝全国の人口は変わらない）`.board-balance-who`（「美浜町に、ほかの町から移ってくる人」「ほかの町から、人口に比例して減る人」）`.board-keep-effect`（`keepEffectLine`：「このとき、ほかの19町が、いずれかの施設の人口の目安を下回ります。」）`.board-keep-top-lead` `.board-keep-top`（`keepTopText`、上位 3 施設）`.board-keep-choice`（明朝 16px「どこかを残すと、別のどこかが目安を下回ります。選ぶのはあなたです。」）`.board-keep-actions`（`.btn` の「地図に反映する」と `.board-keep-status`＝`role=status`）`.board-keep-message`（`.notice`。人数が大きすぎる時 `KEEP_TOO_LARGE`、下回っていない時 `BOARD_KEEP_NOT_BELOW`）`.board-keep-limits`（`KEEP_LIMITS`） | 行の町・施設・年で `computeKeep`（町の詳細の「この目安に届くには」と同じ計算）。開くのは同時に 1 つ（開くと他は閉じる。場所や前提が変わると行ごと作り直すので全部閉じる）。ボタンは `keepOverlay()` の重ねと、その行の年を 1 つの patch で `store.set({ year, allocation })`（地図はその年の割り振り後になり、「この割り振りは◯年の計算です」は出ない）。押した後、スマホで地図が画面の外なら地図の先頭へ動かす。何を残すべきかは言わない |
+| ここにある有名なもの（`landmarks.css`、`landmarks.ts`。データは `public/data/landmarks.json`＝220 件・47 都道府県すべてに 3 件以上、形の検査と索引は `src/data/landmarks.ts`） | `.landmarks`（`div.panel-section`。行の一覧とその折りたたみ（`.board-others`）のあと、`.board-already` のまえ。県か町で項目がある時だけ出し、日本全体と項目の無い町では `hidden`＝「ありません」とは書かない。下に `--sp-5` の余白で、カード自身の注記と離す）`.landmarks-title`（`h3.panel-section-title`「この県にある有名なものの例」「この町にある有名なものの例」）`.landmark-list`（`ul`。上に `--line-2` の罫。県は `.is-pref`、町は `.is-area`）`.landmark`（`li`。`data-id`・`data-area`。下に `--line` の罫。600px 以上の県の一覧は 2 列の grid：場所 6.5em と中身＝行の「年 6.5em と中身」と同じ骨格。それ未満と町の一覧は 1 列で、場所は名前の上の 1 行）`.landmark-place`（県だけ）`.landmark-town`（`button`。町名＋読み上げ用の「を選ぶ」。藍の下線の文字ボタン＝パンくずと同じ語彙。押すと `store.set(pickArea(...))` でその町を選ぶ）`.landmark-body` `.landmark-head`（名前と種類。折り返す flex）`.landmark-name`（太字 15px。長い名前は `overflow-wrap: anywhere` で折り返す）`.landmark-kind`（`.tag`。種類は文字だけで、色で分けない）`.landmark-summary`（15px。データの `summary` をそのまま `textContent` で）`.landmark-source`（`.note`「出典：」＋ `sourceLabel`。`source` が https の時だけ `a[target=_blank][rel="noopener noreferrer"]`、それ以外は文字）`.landmarks-note`（`.note`「完全な一覧ではありません。人口の目安を下回るかどうかとは関係なく、そこにあるものを示しています。」）。行の `.board-keep-body` の最後に `.note.board-keep-landmarks`（「この町にある有名なもの：熊野本宮大社、滝尻王子」。4 件以上は 3 件＋「ほか N件」。項目の無い町では出さない） | 選んだ県か町にある有名なものを、名前・場所・種類・1 文の事実・出典つきで並べる。並べるだけで、「残せない」「撤退する」「廃止になる」などの断定も、人口や年と結びつけた見込みも書かない（根拠のデータが無い）。名前と 1 文はデータのまま（書き換えない）。並びはファイルの順。ファイルが無い・読めない時は節ごと出ず、アプリはそのまま動く（`loadAll` が `console.warn` を 1 回出す） |
+
+計算は `boardCrossings`（`deriveTotals` の年ごとの合計を `scopeCrossings` に渡す）。県・日本は主な 8 施設だけで計算し、町は 48 種類すべて。場所か前提（`series`）が変わった時だけ作り直す。
 
 ### 町の詳細（`townPanel.css`、`townPanel.ts`・`pyramid.ts`・`seriesChart.ts`・`facilityPanel.ts`・`burdenPanel.ts`）
 
@@ -114,15 +130,19 @@
 | 使った道具 | `.ai-trace`（`details`）`.ai-trace-list` `.ai-trace-item` `.ai-trace-name` `.ai-trace-label` `.ai-trace-input` `.ai-trace-result`（`details`）`.ai-json`（`pre`、paper-2 の面）`.ai-copy-status` | 入力と結果をそのまま見せる |
 | 地図・前提・割り振りへの橋 | `.ai-links`（「◯◯を地図で開く」）`.ai-scenarios` `.ai-scenario` `.ai-scenario-msg`（`data-role=apply-scenario`）`.ai-allocations`（`data-role=apply-allocation`、「この割り振りを地図に反映する」） | 道具の入力から計算し直して store に置く。モデルの文章は何も使わない |
 
-## 帯とメニュー（`app.css`、`app.ts` の `headerHtml`・`navHtml`、文言は `sources.ts` の `NAV_*`）
+## 帯・下層への入口・閉じたカード（`app.css`・`theme.css`、`app.ts` の `headerHtml`・`moreHtml`・`panelHtml`、文言は `sources.ts` の `NAV_*`）
 
 | 要素 | class | 役割 |
 |---|---|---|
-| 帯 | `.app-head`（`--band` の地。中は `.app-head-inner`、`--page` 幅）`.app-title` `.app-lead` `.app-problem` | 題・説明・問い |
-| メニュー | `.app-nav`（`nav`、`aria-labelledby`。390px は `position: sticky`、`top` は見出しの行の高さの負の値で、見出しの行だけが流れ去る。1024px 以上は static）`.app-nav-inner` `.app-nav-title`（`h2`「この地図でできること」）`.app-nav-list`（`ul`。390px は横に動く帯、1024px 以上は 4 列）`.app-nav-card`（`li`）`.app-nav-item`（`a`、`href="#panel-…"`、`data-panel`、`aria-describedby`）`.app-nav-name`（紺の 1px の枠の名前。塗らない。hover と焦点で `--accent-soft`）`.app-nav-desc`（1 行の説明。390px は読み上げ用に隠す（clip。`display:none` にしない）。1024px 以上は名前の下に 13px） | 押すと `scrollIntoView`（動きを減らす設定なら即時）でその欄へ（住所の # は変えない）、欄の `h2.panel-title` に `tabindex=-1` を付けて焦点を移す。1024px 以上はカード全体がリンク（`::after` が覆う）、焦点の枠もカード全体 |
-| 4 つの説明の 1 文 | `.app-nav-summary`（`aria-hidden`。390px だけ） | 帯の下の 2 行まで。説明は項目の `aria-describedby` で読み上げられるので、ここは目のためだけ |
+| 帯 | `.app-head`（`--band` の地。中は `.app-head-inner`、`--page` 幅）`.app-title` `.app-problem` | 題と問いだけ。説明の 1 行（`APP_LEAD`）は出典のカードの先頭 `.app-foot-lead` に移した（2026-11-06） |
+| 下層への入口 | `.app-more`（`nav`、`aria-labelledby`。右の列の、分かれ目の次）`.app-more-title`（`h2`「くわしく見る」、ゴシック 15px）`.app-more-list`（`ul`、折り返す）`.app-more-card`（`li`）`.app-more-item`（`a`、`href="#panel-…"`、`data-panel`、`aria-describedby`。紺の 1px の枠の名前、40px。塗らない。hover と焦点で `--accent-soft`）`.app-more-desc`（`.sr-only`。1 行の説明は読み上げ用だけで、画面には名前だけ） | 町の詳細・前提を変える・人口の割り振り・AIに質問・出典の 5 つ。押すとそのカードを開き（`is-collapsed` を外し `aria-expanded=true`）、`scrollIntoView`（動きを減らす設定なら即時）でその欄へ（住所の # は変えない）、見出しの帯のボタン `.panel-toggle` に焦点を移す。貼り付く帯も横に動く帯も無い |
+| 閉じたカード | `.panel.is-collapsed`（`theme.css`：`> :not(.panel-title)` を `display:none`、下の余白 0。中身は DOM に残る）`.panel-toggle`（`h2.panel-title` の中の `button`、`aria-expanded`。帯いっぱい・50px・帯の文字色、左に枠線で描く印（開くと向きが変わる）。焦点の枠は帯の中に `--accent-ink` で描く）。試算の印は帯の中でボタンの右 | 町の詳細・前提を変える・人口の割り振り・AIに質問（右の列）と出典（`footer.app-foot.panel#panel-sources`、2 列の下）。最初は全部閉じている。見出しを押すと開き、もう一度押すと閉じる。分かれ目と町の数字のカードにはボタンが無く、常に開いている |
 
-読み込み中と読み込み失敗の画面にも、帯とメニューは出す（データが届くとき、帯が動かない）。説明は欄の内側が言っていること（人口の割り振りなら「全国の人口は変えずに」）と合わせ、何を残すかの助言や「残せない」の断定は書かない（`sources.test.ts` が語を検査する）。
+読み込み中と読み込み失敗の画面にも帯は出す（データが届くとき、帯が動かない）。説明は欄の内側が言っていること（人口の割り振りなら「全国の人口は変えずに」）と合わせ、何を残すかの助言や「残せない」の断定は書かない（`sources.test.ts` が語を検査する）。
+
+### 町の数字（`placeFacts.css`、`placeFacts.ts`）
+
+`#panel-facts`（`section.panel.place-facts`。町を選んでいる時だけ出し、県と日本では `hidden`）。見出しの帯は町の名前 `.place-facts-name` と年の印（`.badge-estimate` か `.badge-official`）。中は `dl.place-facts-list` の 4 行 `.place-fact`（`dt` が「2050年の人口」「2020年比」「65歳以上の割合」「高齢者1人を支える現役世代」、`dd` が明朝 22px の数字）。数字は町の詳細の最初の 4 枚のタイルと同じ関数（`deriveTotals`・`ageShares`・`deriveSupport`）と同じ書き方で、`placeFacts.test.ts` が 3 町 × 3 年でタイルと照合する。
 
 ## 地図（`app.css`、`src/map/`）
 

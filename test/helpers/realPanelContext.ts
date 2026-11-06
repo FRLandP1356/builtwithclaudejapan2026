@@ -9,18 +9,28 @@ import { createAppStore, type AppStoreInitial, type PanelContext } from '../../s
 import { loadAllAreas } from './loadAreas';
 import { loadFacilities } from './loadFacilities';
 import { loadFinance } from './loadFinance';
+import { loadLandmarks } from './loadLandmarks';
 import { repoPath } from './paths';
 
 let cached: AppData | undefined;
 
-/** The real data, read once per test file. */
+/** The real data, read once per test file (the landmarks included, as the loader would have them). */
 export function realAppData(): AppData {
   if (cached) return cached;
   const areas = loadAllAreas();
   const prefNames = new Map<string, string>();
   for (const a of areas) if (!prefNames.has(a.prefCode)) prefNames.set(a.prefCode, a.prefName);
   const groups = JSON.parse(readFileSync(repoPath('public/data/groups.json'), 'utf8')) as Groups;
-  cached = { areas, groups, facilities: loadFacilities(), finance: loadFinance(), japanTopo: { type: 'Topology', objects: {}, arcs: [] } as unknown as Topology, prefNames };
+  const codes = new Set(areas.map((a) => a.code));
+  cached = {
+    areas,
+    groups,
+    facilities: loadFacilities(),
+    finance: loadFinance(),
+    japanTopo: { type: 'Topology', objects: {}, arcs: [] } as unknown as Topology,
+    prefNames,
+    landmarks: loadLandmarks((c) => codes.has(c)),
+  };
   return cached;
 }
 

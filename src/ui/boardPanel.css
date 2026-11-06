@@ -1,0 +1,314 @@
+/* 「分かれ目」 panel (boardPanel.ts). Tokens only: every colour, size and space comes from theme.css (see DESIGN.md).
+   The strip of bars is a sequence of years, so it is an ordered list; a bar up to 2050 is solid ink, a bar after 2050
+   is the estimate's dashed outline on the pale indigo field, the same vocabulary as the year track and the 試算 mark. */
+
+.board-heading {
+  margin: 0 0 var(--sp-3);
+  font-family: var(--font-display);
+  font-size: var(--fs-18);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  text-wrap: balance;
+}
+
+/* The strip: 16 bars (2025 .. 2100) over one baseline; the value sits over the tallest bar and the year's bar. */
+.board-years {
+  margin: 0;
+}
+.board-years-lead {
+  margin: 0;
+}
+.board-bars {
+  display: grid;
+  grid-template-columns: repeat(16, minmax(0, 1fr));
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.board-bar {
+  display: grid;
+  grid-template-rows: 16px 56px 20px;
+  min-width: 0;
+}
+.board-bar-value {
+  font-size: var(--fs-12);
+  line-height: 16px;
+  text-align: center;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.board-bar-fill {
+  display: block;
+  align-self: end;
+  height: var(--board-h, 0%);
+  margin: 0 2px;
+  background: var(--ink-2);
+  border-radius: 2px 2px 0 0;
+}
+.board-bar.is-estimate .board-bar-fill {
+  background: var(--accent-soft);
+  border: 1px dashed var(--accent);
+  border-bottom: 0;
+}
+.board-bar-year {
+  border-top: 1px solid var(--line-2);
+  padding-top: 3px;
+  font-size: var(--fs-12);
+  line-height: 16px;
+  text-align: center;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* The year on screen: a thicker mark on the baseline under its bar, and the bar in full ink. */
+.board-bar[aria-current='true'] .board-bar-year {
+  border-top: 3px solid var(--ink);
+  padding-top: 1px;
+}
+.board-bar[aria-current='true'] .board-bar-fill {
+  background: var(--ink);
+}
+.board-bar[aria-current='true'].is-estimate .board-bar-fill {
+  background: var(--accent-soft);
+  border-color: var(--ink);
+}
+.board-bar[aria-current='true'] .board-bar-value {
+  color: var(--ink);
+  font-weight: 600;
+}
+.board-years-summary {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-14);
+  color: var(--ink-2);
+}
+.board-years-table tr.is-estimate th,
+.board-years-table tr.is-estimate td {
+  color: var(--ink-2);
+}
+
+/* The list: one entry per year and facility; the year in mincho on the left, the facility and the town on the right. */
+.board-list {
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line-2);
+}
+.board-list:empty {
+  display: none; /* a town with no essential crossing says so in a sentence; no empty rule above it */
+}
+.board-row {
+  border-bottom: 1px solid var(--line);
+}
+.board-row-head {
+  display: grid;
+  grid-template-columns: 6.5em minmax(0, 1fr);
+  gap: var(--sp-1) var(--sp-3);
+  align-items: baseline;
+  padding: var(--sp-2) 0;
+}
+.board-row-year {
+  font-family: var(--font-display);
+  font-size: var(--fs-18);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  white-space: nowrap;
+}
+.board-row-year .badge-estimate {
+  vertical-align: 0.15em;
+}
+.board-row-what {
+  min-width: 0;
+}
+.board-row-facility {
+  display: block;
+  font-size: var(--fs-15);
+  font-weight: 600;
+}
+.board-row-towns {
+  display: block;
+  font-size: var(--fs-14);
+  color: var(--ink-2);
+}
+.board-none {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-15);
+  color: var(--ink-2);
+}
+
+/* 「ここを残すには」: the disclosure under a row (boardKeep.ts). The two sides of the figure are the same width, each with
+   a bar the full width of its side, so the pair reads as a balance: the people who come in on the left (blue, as the
+   map's growth), the people who leave everywhere else on the right (rust, as the map's decline). */
+.board-keep > summary {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  margin-top: calc(-1 * var(--sp-1));
+  color: var(--accent);
+  font-size: var(--fs-14);
+  cursor: pointer;
+  list-style: none;
+}
+.board-keep > summary::-webkit-details-marker {
+  display: none;
+}
+.board-keep > summary::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: var(--sp-2);
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+.board-keep[open] > summary::before {
+  transform: rotate(45deg);
+}
+.board-keep-body {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-1) 0 var(--sp-3);
+}
+.board-keep-body [hidden] {
+  display: none;
+}
+.board-keep-body p {
+  margin: 0;
+}
+.board-keep-body .keep {
+  word-break: auto-phrase;
+}
+.board-keep-lead {
+  font-size: var(--fs-15);
+  color: var(--ink);
+}
+.board-balance {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4);
+  padding: var(--sp-3) 0 var(--sp-2);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.board-balance-side {
+  display: grid;
+  grid-template-rows: auto auto 10px auto;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.board-balance-side.is-keep {
+  text-align: right;
+}
+.board-balance-title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-14);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.board-balance-amount {
+  font-family: var(--font-display);
+  font-size: var(--fs-26);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.board-balance-bar {
+  display: block;
+  width: 100%;
+  height: 10px;
+  border-radius: 2px;
+}
+.board-balance-bar.is-gain {
+  background: var(--growth);
+}
+.board-balance-bar.is-loss {
+  background: var(--decline);
+}
+.board-balance-who {
+  font-size: var(--fs-13);
+  color: var(--ink-2);
+}
+.board-keep-effect {
+  font-size: var(--fs-15);
+}
+.board-keep-top {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.board-keep-top-item {
+  padding: 2px 0;
+}
+.board-keep-choice {
+  font-family: var(--font-display);
+  font-size: var(--fs-16);
+  font-weight: 600;
+}
+.board-keep-actions {
+  align-items: center;
+}
+.board-keep-status {
+  flex: 1 1 12em;
+}
+
+/* The folded parts (the rest of the list, the other facilities): the same disclosure mark as the other panels. */
+.board-more,
+.board-others {
+  margin-top: var(--sp-2);
+}
+.board-more > summary,
+.board-others > summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--touch);
+  color: var(--accent);
+  font-size: var(--fs-15);
+  cursor: pointer;
+  list-style: none;
+}
+.board-more > summary::-webkit-details-marker,
+.board-others > summary::-webkit-details-marker {
+  display: none;
+}
+.board-more > summary::before,
+.board-others > summary::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: var(--sp-2);
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+.board-more[open] > summary::before,
+.board-others[open] > summary::before {
+  transform: rotate(45deg);
+}
+.board-more > .board-list,
+.board-others > .board-list {
+  margin-top: 0;
+}
+
+.board-already,
+.board-essential-note,
+.board-note {
+  margin-top: var(--sp-3);
+}
+.board-essential-note {
+  margin-top: var(--sp-1);
+}
+/* After the section 「ここにある有名なもの」 (landmarks.css) the card's own notes start under a rule, so they read as the
+   card's and not as the list's. */
+.landmarks:not([hidden]) + .board-already {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line-2);
+}
+.board .keep {
+  display: inline-block;
+  max-width: 100%;
+}

@@ -1,12 +1,17 @@
-import { describe, expect, test, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { loadSampleAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
 import { loadFinance } from '../../test/helpers/loadFinance';
-import { DataLoadError, dataUrl, loadAll, loadPrefGeo, PREF_CODES } from './loader';
+import { repoPath } from '../../test/helpers/paths';
+import type { Landmark } from './landmarks';
+import { DataLoadError, dataUrl, LANDMARKS_PATH, loadAll, loadPrefGeo, PREF_CODES } from './loader';
 
 const sample = loadSampleAreas();
 const facilities = loadFacilities();
 const finance = loadFinance();
+/** The real landmarks file as served: the loader keeps the items of the sample's six towns. */
+const landmarksRaw = JSON.parse(readFileSync(repoPath('public/data/landmarks.json'), 'utf8')) as { items: Landmark[] };
 const topo = { type: 'Topology', objects: { prefectures: { type: 'GeometryCollection', geometries: [] } }, arcs: [] };
 const prefTopo = { type: 'Topology', objects: { areas: { type: 'GeometryCollection', geometries: [] } }, arcs: [] };
 
@@ -34,6 +39,7 @@ function makeFetch(overrides: Record<string, unknown> = {}) {
     }
     if (url.endsWith('data/facilities.json')) return new Response(JSON.stringify(facilities), { status: 200 });
     if (url.endsWith('data/finance.json')) return new Response(JSON.stringify(finance), { status: 200 });
+    if (url.endsWith(LANDMARKS_PATH)) return new Response(JSON.stringify(landmarksRaw), { status: 200 });
     if (url.endsWith('data/geo/japan.topo.json')) return new Response(JSON.stringify(topo), { status: 200 });
     if (/data\/geo\/pref\/\d\d\.topo\.json$/.test(url)) return new Response(JSON.stringify(prefTopo), { status: 200 });
     return new Response('not found', { status: 404 });
@@ -59,6 +65,7 @@ describe('loadAll', () => {
     expect(calls).toContain('/data/groups.json');
     expect(calls).toContain('/data/facilities.json');
     expect(calls).toContain('/data/finance.json');
+    expect(calls).toContain('/data/landmarks.json');
     expect(calls).toContain('/data/geo/japan.topo.json');
     expect(data.areas.length).toBe(sample.length);
     expect(data.facilities.length).toBe(facilities.length);
@@ -96,6 +103,52 @@ describe('loadAll', () => {
   test('a missing finance.json fails the load like any other data file', async () => {
     const { fetchStub } = makeFetch({ '/data/finance.json': 404 });
     await expect(loadAll({ fetch: fetchStub as unknown as typeof fetch, base: '/' })).rejects.toMatchObject({ reason: 'http', status: 404, url: '/data/finance.json' });
+  });
+
+  describe('landmarks.json is the one optional file', () => {
+    afterEach(() => vi.restoreAllMocks());
+    const load = (overrides: Record<string, unknown> = {}) => loadAll({ fetch: makeFetch(overrides).fetchStub as unknown as typeof fetch, base: '/' });
+
+    test('when it loads, data.landmarks holds the items of the known towns, in the file order', async () => {
+      const data = await load();
+      const codes = new Set(sample.map((a) => a.code));
+      expect(data.landmarks).toEqual(landmarksRaw.items.filter((l) => codes.has(l.areaCode)));
+      for (const l of data.landmarks!) expect(codes.has(l.areaCode), l.id).toBe(true);
+    });
+
+    test('a 404 leaves it out: the load succeeds, data has no landmarks, one warning names the file', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const data = await load({ '/data/landmarks.json': 404 });
+      expect(data.areas.length).toBe(sample.length);
+      expect('landmarks' in data).toBe(false);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toContain('data/landmarks.json');
+    });
+
+    test('a network error on it does not fail the load', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const data = await load({ '/data/landmarks.json': new TypeError('Failed to fetch') });
+      expect(data.landmarks).toBeUndefined();
+      expect(data.finance).toEqual(finance);
+    });
+
+    test('a file that is not in shape is left out with a warning (another version, a bare string, items that are not a list)', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      for (const body of [{ version: 2, items: [] }, 'text', { version: 1, items: {} }]) {
+        const data = await load({ '/data/landmarks.json': body });
+        expect(data.landmarks, JSON.stringify(body)).toBeUndefined();
+      }
+      expect(warn).toHaveBeenCalledTimes(3);
+    });
+
+    test('an item of an unknown town is dropped without a warning', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const known = landmarksRaw.items.find((l) => sample.some((a) => a.code === l.areaCode));
+      const stranger = { ...landmarksRaw.items[0], id: 'stranger', prefCode: '99', areaCode: '99999' };
+      const data = await load({ '/data/landmarks.json': { version: 1, items: [stranger, ...(known ? [known] : [])] } });
+      expect(data.landmarks).toEqual(known ? [known] : []);
+      expect(warn).not.toHaveBeenCalled();
+    });
   });
 
   test('a network error is wrapped the same way', async () => {
