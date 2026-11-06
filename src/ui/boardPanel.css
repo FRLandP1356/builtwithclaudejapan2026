@@ -136,6 +136,124 @@
   color: var(--ink-2);
 }
 
+/* 「ここを残すには」: the disclosure under a row (boardKeep.ts). The two sides of the figure are the same width, each with
+   a bar the full width of its side, so the pair reads as a balance: the people who come in on the left (blue, as the
+   map's growth), the people who leave everywhere else on the right (rust, as the map's decline). */
+.board-keep > summary {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  margin-top: calc(-1 * var(--sp-1));
+  color: var(--accent);
+  font-size: var(--fs-14);
+  cursor: pointer;
+  list-style: none;
+}
+.board-keep > summary::-webkit-details-marker {
+  display: none;
+}
+.board-keep > summary::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: var(--sp-2);
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+.board-keep[open] > summary::before {
+  transform: rotate(45deg);
+}
+.board-keep-body {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-1) 0 var(--sp-3);
+}
+.board-keep-body [hidden] {
+  display: none;
+}
+.board-keep-body p {
+  margin: 0;
+}
+.board-keep-body .keep {
+  word-break: auto-phrase;
+}
+.board-keep-lead {
+  font-size: var(--fs-15);
+  color: var(--ink);
+}
+.board-balance {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4);
+  padding: var(--sp-3) 0 var(--sp-2);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.board-balance-side {
+  display: grid;
+  grid-template-rows: auto auto 10px auto;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.board-balance-side.is-keep {
+  text-align: right;
+}
+.board-balance-title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-14);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.board-balance-amount {
+  font-family: var(--font-display);
+  font-size: var(--fs-26);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.board-balance-bar {
+  display: block;
+  width: 100%;
+  height: 10px;
+  border-radius: 2px;
+}
+.board-balance-bar.is-gain {
+  background: var(--growth);
+}
+.board-balance-bar.is-loss {
+  background: var(--decline);
+}
+.board-balance-who {
+  font-size: var(--fs-13);
+  color: var(--ink-2);
+}
+.board-keep-effect {
+  font-size: var(--fs-15);
+}
+.board-keep-top {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.board-keep-top-item {
+  padding: 2px 0;
+}
+.board-keep-choice {
+  font-family: var(--font-display);
+  font-size: var(--fs-16);
+  font-weight: 600;
+}
+.board-keep-actions {
+  align-items: center;
+}
+.board-keep-status {
+  flex: 1 1 12em;
+}
+
 /* The folded parts (the rest of the list, the other facilities): the same disclosure mark as the other panels. */
 .board-more,
 .board-others {

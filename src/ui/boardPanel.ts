@@ -4,6 +4,9 @@
 // town) and what is already below in 2020. The wording and the numbers come from board.ts and src/engine/crossings.ts;
 // this file is the DOM.
 //
+// Each row opens a disclosure 「ここを残すには」 (boardKeep.ts): what the town would need to reach the guide and what falls
+// below elsewhere when those people come from every other town. One is open at a time; a new place closes them all.
+//
 // Built once; a new selection or a new scenario rebuilds the strip and the list, a new year only moves the mark on the
 // strip. `mountBoardPanel` returns its teardown.
 import {
@@ -30,6 +33,7 @@ import {
   type BoardBars,
   type BoardRow,
 } from './board';
+import { createBoardKeep, type BoardKeep, type BoardKeepContext } from './boardKeep';
 import { deriveTotals } from './derive';
 import { formatCount } from './format';
 import type { Level } from './nav';
@@ -139,8 +143,8 @@ function markYear(strip: Strip, year: number): void {
 // The list
 // ---------------------------------------------------------------------------------------------------------------
 
-/** One line of the list: the year (with the 試算 mark after 2050), the facility and, for a scope, the town. */
-export function buildRow(row: BoardRow): HTMLLIElement {
+/** One line of the list: the year (with the 試算 mark after 2050), the facility and, for a scope, the town; then the disclosure. */
+export function buildRow(row: BoardRow, keep?: (row: BoardRow) => BoardKeep): HTMLLIElement {
   const li = h('li', 'board-row');
   li.dataset.year = String(row.year);
   li.dataset.facility = row.facilityId;
@@ -154,6 +158,7 @@ export function buildRow(row: BoardRow): HTMLLIElement {
   if (row.townsText) what.append(h('span', 'board-row-towns', row.townsText));
   head.append(yearEl, what);
   li.append(head);
+  if (keep) li.append(keep(row).details);
   return li;
 }
 
@@ -194,9 +199,24 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
   el.append(root);
 
   let scope: TownScope | undefined;
+  let keeps: BoardKeep[] = [];
+  const keepCtx: BoardKeepContext = {
+    data,
+    facilities: data.facilities,
+    store,
+    areaName: (code) => areaByCode.get(code)?.name,
+    closeOthers(except) {
+      for (const k of keeps) if (k !== except && k.details.open) k.details.open = false;
+    },
+  };
+  const makeKeep = (row: BoardRow): BoardKeep => {
+    const k = createBoardKeep(row, keepCtx);
+    keeps.push(k);
+    return k;
+  };
 
   function fillList(target: HTMLOListElement, rows: BoardRow[]): void {
-    target.replaceChildren(...rows.map(buildRow));
+    target.replaceChildren(...rows.map((r) => buildRow(r, makeKeep)));
   }
 
   function render(s: AppState): void {
@@ -204,6 +224,9 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
     const sc = scope;
     const totals = deriveTotals(s.series, data.groups);
     heading.textContent = boardHeading(sc.level, sc.name);
+    // The rows are rebuilt: every disclosure goes with them (a new place or new assumptions start with all closed).
+    for (const k of keeps) k.destroy();
+    keeps = [];
     let bars: BoardBars;
     if (sc.level === 'area') {
       // A town: every facility, the essential ones first and the rest behind 「その他の施設」.
@@ -253,6 +276,8 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
   const teardown = () => {
     if (mounted.get(el) === teardown) mounted.delete(el);
     unsubscribe();
+    for (const k of keeps) k.destroy();
+    keeps = [];
     root.remove();
   };
   mounted.set(el, teardown);
