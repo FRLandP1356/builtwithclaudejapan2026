@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The disclosure 「この目安に届くには」 under each facility that is below the guide: where it shows, what it says, how it
 // behaves when opened (one at a time), when the year or the town changes, and what its button does to the map.
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { facilityById } from '../../test/helpers/loadFacilities';
 import { realAppData } from '../../test/helpers/realPanelContext';
 import { createRunner } from '../data/runner';
@@ -140,6 +140,14 @@ describe('where the disclosure shows', () => {
     expect(section.querySelectorAll('.facility-keep-body')).toHaveLength(0);
     expect(section.textContent).not.toContain(KEEP_LIMITS);
     expect(section.textContent).not.toContain(KEEP_BUTTON);
+  });
+
+  test('the disclosure takes the full width of the table: one cell over both columns', () => {
+    const { keepRow } = setup({ selectedArea: '30206', year: 2100 });
+    const cells = keepRow('pet_supplies').querySelectorAll('td');
+    expect(cells).toHaveLength(1);
+    expect(cells[0].colSpan).toBe(2);
+    expect(cells[0].classList.contains('facility-keep-cell')).toBe(true);
   });
 
   test('the summary says 「この目安に届くには」 and names the facility for a screen reader only', () => {
@@ -351,6 +359,43 @@ describe('the button 「地図に反映する」', () => {
     const d = await open('pet_supplies');
     d.querySelector<HTMLButtonElement>('button.facility-keep-reflect')!.click();
     expect(d.querySelector('.facility-keep-status')!.textContent).toBe(KEEP_FAILED);
+  });
+
+  describe('on a phone the map is above the panels', () => {
+    function fakeMap(top: number) {
+      const map = document.createElement('div');
+      map.className = 'map-column';
+      const scrollIntoView = vi.fn();
+      map.scrollIntoView = scrollIntoView;
+      map.getBoundingClientRect = () => ({ top }) as DOMRect;
+      document.body.append(map);
+      return scrollIntoView;
+    }
+
+    test('after the map took the what-if, a map that is scrolled out of view is brought back, to its top', async () => {
+      const scroll = fakeMap(-120);
+      const { open } = setup({ selectedArea: '30206', year: 2100 });
+      const d = await open('pet_supplies');
+      d.querySelector<HTMLButtonElement>('button.facility-keep-reflect')!.click();
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(scroll).toHaveBeenCalledWith({ block: 'start' });
+    });
+
+    test('a map already in view does not move', async () => {
+      const scroll = fakeMap(0);
+      const { open } = setup({ selectedArea: '30206', year: 2100 });
+      const d = await open('pet_supplies');
+      d.querySelector<HTMLButtonElement>('button.facility-keep-reflect')!.click();
+      expect(scroll).not.toHaveBeenCalled();
+    });
+
+    test('when the map did not take it, nothing scrolls', async () => {
+      const scroll = fakeMap(-120);
+      const { open } = setup({ selectedArea: '30206', year: 2100 }, (s) => ({ ...s, get: () => s.get(), subscribe: (fn) => s.subscribe(fn), set: () => false }));
+      const d = await open('pet_supplies');
+      d.querySelector<HTMLButtonElement>('button.facility-keep-reflect')!.click();
+      expect(scroll).not.toHaveBeenCalled();
+    });
   });
 
   test('a new calculation (another year) clears the old status', async () => {

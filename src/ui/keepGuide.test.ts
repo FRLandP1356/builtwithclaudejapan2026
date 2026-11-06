@@ -135,12 +135,16 @@ describe('keepEffects: the other areas that fall below', () => {
     expect(e.top.map((x) => x.facilityId)).toEqual(['f1', 'f2', 'f3']);
   });
 
-  test('a facility the list does not know comes last and is named by its id', () => {
-    const e = keepEffects([flip('zz', ['A']), flip('f2', ['B'])], facilities, 'T');
-    expect(e.top).toEqual([
-      { facilityId: 'f2', name: '二', count: 1 },
-      { facilityId: 'zz', name: 'zz', count: 1 },
-    ]);
+  test('a facility the list does not know comes last and is named by its id, whichever way round the flips come', () => {
+    const known = [flip('f2', ['B']), flip('f1', ['C'])];
+    const unknown = flip('zz', ['A']);
+    for (const flips of [[unknown, ...known], [known[0], unknown, known[1]], [...known, unknown]]) {
+      expect(keepEffects(flips, facilities, 'T').top).toEqual([
+        { facilityId: 'f1', name: '一', count: 1 },
+        { facilityId: 'f2', name: '二', count: 1 },
+        { facilityId: 'zz', name: 'zz', count: 1 },
+      ]);
+    }
   });
 });
 
