@@ -1,8 +1,10 @@
 // Loads the static data files Vite serves from public/ (areas, groups, facilities, boundaries, spending). The landmarks
-// file is the one optional file: when it is missing or unreadable the app starts without it (a console.warn says so).
+// file and the claims file are the optional ones: when one is missing or unreadable the app starts without it (a
+// console.warn says so).
 // All URLs are relative to import.meta.env.BASE_URL so the app works at any mount path.
 import type { Topology } from 'topojson-specification';
 import type { Area, Facility, Groups } from '../engine/types';
+import { parseClaims, type Claim } from './claims';
 import { parseFinance, type Finance } from './finance';
 import { parseLandmarks, type Landmark } from './landmarks';
 
@@ -22,6 +24,12 @@ export interface AppData {
    * or not in shape: the panels that list them show nothing, everything else runs as before.
    */
   landmarks?: Landmark[];
+  /**
+   * What published documents say about population decline, word for word, by prefecture (claims.json), kept to the
+   * prefectures in `areas`. Undefined when the file is absent or not in shape: the section that lists them shows nothing,
+   * everything else runs as before.
+   */
+  claims?: Claim[];
 }
 
 /** The 47 prefecture codes, "01".."47". */
@@ -98,10 +106,11 @@ function resolveFetch(opts: LoadOptions): typeof fetch {
 }
 
 export const LANDMARKS_PATH = 'data/landmarks.json';
+export const CLAIMS_PATH = 'data/claims.json';
 
 /**
  * Load everything the app needs to start: 47 area files, groups, facilities, spending per resident and the national
- * boundaries, in parallel. The landmarks file is fetched with them but never fails the load.
+ * boundaries, in parallel. The landmarks file and the claims file are fetched with them but never fail the load.
  */
 export async function loadAll(opts: LoadOptions = {}): Promise<AppData> {
   const f = resolveFetch(opts);
@@ -113,12 +122,17 @@ export async function loadAll(opts: LoadOptions = {}): Promise<AppData> {
     console.warn(`${LANDMARKS_PATH} could not be loaded; the list of famous places is left out`, e);
     return undefined;
   });
-  const [groups, facilities, financeRaw, japanTopo, landmarksRaw, ...areaLists] = await Promise.all([
+  const claimsFile = fetchJson<unknown>(url(CLAIMS_PATH), f, timeoutMs).catch((e: unknown) => {
+    console.warn(`${CLAIMS_PATH} could not be loaded; the quotations from published documents are left out`, e);
+    return undefined;
+  });
+  const [groups, facilities, financeRaw, japanTopo, landmarksRaw, claimsRaw, ...areaLists] = await Promise.all([
     fetchJson<Groups>(url('data/groups.json'), f, timeoutMs),
     fetchJson<Facility[]>(url('data/facilities.json'), f, timeoutMs),
     fetchJson<unknown>(url('data/finance.json'), f, timeoutMs),
     fetchJson<Topology>(url('data/geo/japan.topo.json'), f, timeoutMs),
     landmarksFile,
+    claimsFile,
     ...areaFiles,
   ]);
 
@@ -147,6 +161,13 @@ export async function loadAll(opts: LoadOptions = {}): Promise<AppData> {
       data.landmarks = parseLandmarks(landmarksRaw, (c) => codes.has(c));
     } catch (e) {
       console.warn(`${LANDMARKS_PATH} is not in shape; the list of famous places is left out`, e);
+    }
+  }
+  if (claimsRaw !== undefined) {
+    try {
+      data.claims = parseClaims(claimsRaw, (p) => prefNames.has(p));
+    } catch (e) {
+      console.warn(`${CLAIMS_PATH} is not in shape; the quotations from published documents are left out`, e);
     }
   }
   return data;

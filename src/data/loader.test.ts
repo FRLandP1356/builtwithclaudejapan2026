@@ -4,14 +4,17 @@ import { loadSampleAreas } from '../../test/helpers/loadAreas';
 import { loadFacilities } from '../../test/helpers/loadFacilities';
 import { loadFinance } from '../../test/helpers/loadFinance';
 import { repoPath } from '../../test/helpers/paths';
+import type { Claim } from './claims';
 import type { Landmark } from './landmarks';
-import { DataLoadError, dataUrl, LANDMARKS_PATH, loadAll, loadPrefGeo, PREF_CODES } from './loader';
+import { CLAIMS_PATH, DataLoadError, dataUrl, LANDMARKS_PATH, loadAll, loadPrefGeo, PREF_CODES } from './loader';
 
 const sample = loadSampleAreas();
 const facilities = loadFacilities();
 const finance = loadFinance();
 /** The real landmarks file as served: the loader keeps the items of the sample's six towns. */
 const landmarksRaw = JSON.parse(readFileSync(repoPath('public/data/landmarks.json'), 'utf8')) as { items: Landmark[] };
+/** The real claims file as served: the loader keeps the items whose prefectures are all in the sample. */
+const claimsRaw = JSON.parse(readFileSync(repoPath('public/data/claims.json'), 'utf8')) as { items: Claim[] };
 const topo = { type: 'Topology', objects: { prefectures: { type: 'GeometryCollection', geometries: [] } }, arcs: [] };
 const prefTopo = { type: 'Topology', objects: { areas: { type: 'GeometryCollection', geometries: [] } }, arcs: [] };
 
@@ -40,6 +43,7 @@ function makeFetch(overrides: Record<string, unknown> = {}) {
     if (url.endsWith('data/facilities.json')) return new Response(JSON.stringify(facilities), { status: 200 });
     if (url.endsWith('data/finance.json')) return new Response(JSON.stringify(finance), { status: 200 });
     if (url.endsWith(LANDMARKS_PATH)) return new Response(JSON.stringify(landmarksRaw), { status: 200 });
+    if (url.endsWith(CLAIMS_PATH)) return new Response(JSON.stringify(claimsRaw), { status: 200 });
     if (url.endsWith('data/geo/japan.topo.json')) return new Response(JSON.stringify(topo), { status: 200 });
     if (/data\/geo\/pref\/\d\d\.topo\.json$/.test(url)) return new Response(JSON.stringify(prefTopo), { status: 200 });
     return new Response('not found', { status: 404 });
@@ -66,6 +70,7 @@ describe('loadAll', () => {
     expect(calls).toContain('/data/facilities.json');
     expect(calls).toContain('/data/finance.json');
     expect(calls).toContain('/data/landmarks.json');
+    expect(calls).toContain('/data/claims.json');
     expect(calls).toContain('/data/geo/japan.topo.json');
     expect(data.areas.length).toBe(sample.length);
     expect(data.facilities.length).toBe(facilities.length);
@@ -147,6 +152,53 @@ describe('loadAll', () => {
       const stranger = { ...landmarksRaw.items[0], id: 'stranger', prefCode: '99', areaCode: '99999' };
       const data = await load({ '/data/landmarks.json': { version: 1, items: [stranger, ...(known ? [known] : [])] } });
       expect(data.landmarks).toEqual(known ? [known] : []);
+      expect(warn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('claims.json is the other optional file', () => {
+    afterEach(() => vi.restoreAllMocks());
+    const load = (overrides: Record<string, unknown> = {}) => loadAll({ fetch: makeFetch(overrides).fetchStub as unknown as typeof fetch, base: '/' });
+    const prefs = new Set(sample.map((a) => a.prefCode));
+    const item = (over: Partial<Claim> = {}): Claim => ({ ...claimsRaw.items[0], id: 'synthetic', prefCodes: [sample[0].prefCode], ...over });
+
+    test('when it loads, data.claims holds the items whose prefectures are all known, in the file order', async () => {
+      const data = await load();
+      const want = claimsRaw.items.filter((c) => c.prefCodes.every((p) => prefs.has(p)));
+      expect(data.claims).toEqual(want);
+      for (const c of data.claims!) for (const p of c.prefCodes) expect(prefs.has(p), c.id).toBe(true);
+    });
+
+    test('a 404 leaves it out: the load succeeds, data has no claims, one warning names the file', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const data = await load({ '/data/claims.json': 404 });
+      expect(data.areas.length).toBe(sample.length);
+      expect('claims' in data).toBe(false);
+      expect(data.landmarks).toBeDefined(); // the other optional file is not touched
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toContain('data/claims.json');
+    });
+
+    test('a network error on it does not fail the load', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const data = await load({ '/data/claims.json': new TypeError('Failed to fetch') });
+      expect(data.claims).toBeUndefined();
+      expect(data.finance).toEqual(finance);
+    });
+
+    test('a file that is not in shape is left out with a warning (another version, a bare string, items that are not a list)', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      for (const body of [{ version: 2, items: [] }, 'text', { version: 1, items: {} }]) {
+        const data = await load({ '/data/claims.json': body });
+        expect(data.claims, JSON.stringify(body)).toBeUndefined();
+      }
+      expect(warn).toHaveBeenCalledTimes(3);
+    });
+
+    test('an item of an unknown prefecture is dropped without a warning; an item in shape is kept', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const data = await load({ '/data/claims.json': { version: 1, items: [item({ id: 'stranger', prefCodes: ['99'] }), item({ id: 'known' })] } });
+      expect(data.claims!.map((c) => c.id)).toEqual(['known']);
       expect(warn).not.toHaveBeenCalled();
     });
   });

@@ -1,0 +1,546 @@
+{
+  "version": 1,
+  "note": "公表資料の原文の引用。その資料が人口減少との関係を述べている文だけを集めた。このアプリの予想ではない。完全な一覧ではない。",
+  "items": [
+    {
+      "id": "jrs-all-common",
+      "subject": "JR四国（四国全域の線区）",
+      "kind": "鉄道",
+      "prefCodes": [
+        "36",
+        "37",
+        "38",
+        "39"
+      ],
+      "quote": "四国全域で沿線人口の減少が加速度的に進んでおり、特に通学定期利用層は今後急速に減少が進む見込み",
+      "paraphrase": "JR四国の総括的検証報告書は、全線区の共通課題の一つとして、四国全域で沿線人口の減少が加速度的に進んでおり、特に通学定期の利用層は今後急速に減少が進む見込みだと述べている。",
+      "stance": "possibility",
+      "source": "https://www.jr-shikoku.co.jp/04_company/jigyou/soukatsu_kensyou_zenryou.pdf",
+      "sourceLabel": "四国旅客鉄道株式会社「5カ年推進計画2021～2025 総括的検証報告書」",
+      "date": "2026-03",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "jrs-all-1000",
+      "subject": "JR四国（平均通過人員が1,000人/日未満の線区）",
+      "kind": "鉄道",
+      "prefCodes": [
+        "36",
+        "37",
+        "38",
+        "39"
+      ],
+      "quote": "四国全域で加速化する人口減少を見据えると、ご利用が減少し大量輸送機関としての鉄道特性の発揮がより困難になっている線区",
+      "paraphrase": "JR四国は、四国全域で人口減少が加速化することを見据えると、ご利用が減少し大量輸送機関としての鉄道特性の発揮がより困難になっている線区（特に平均通過人員が1,000人/日未満）については、沿線自治体等関係者との議論・検討を進めていく必要があると述べている。",
+      "stance": "possibility",
+      "source": "https://www.jr-shikoku.co.jp/04_company/jigyou/soukatsu_kensyou_zenryou.pdf",
+      "sourceLabel": "四国旅客鉄道株式会社「5カ年推進計画2021～2025 総括的検証報告書」",
+      "date": "2026-03",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "jrs-all-plan2026",
+      "subject": "JR四国",
+      "kind": "鉄道",
+      "prefCodes": [
+        "36",
+        "37",
+        "38",
+        "39"
+      ],
+      "quote": "ＪＲ四国は、人口減少や他交通手段の発達に伴い、厳しい経営環境に置かれている",
+      "paraphrase": "JR四国は、「5カ年推進計画 2026～2030」の策定の経緯の中で、人口減少や他交通手段の発達に伴い、厳しい経営環境に置かれていると述べている。",
+      "stance": "possibility",
+      "source": "https://www.jr-shikoku.co.jp/04_company/jigyou/suishin2026-2030.pdf",
+      "sourceLabel": "四国旅客鉄道株式会社「5カ年推進計画 2026～2030」",
+      "date": "2026-08",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "jrs-yosan-takamatsu-matsuyama",
+      "subject": "JR四国 予讃線（高松～松山）",
+      "kind": "鉄道",
+      "prefCodes": [
+        "37",
+        "38"
+      ],
+      "quote": "沿線人口は減少が進んでおり、将来的な輸送需要への影響が懸念される",
+      "paraphrase": "JR四国の総括検証は、予讃線（高松～松山）について、沿線人口は減少が進んでおり、将来的な輸送需要への影響が懸念されると述べている。",
+      "stance": "possibility",
+      "source": "https://www.jr-shikoku.co.jp/04_company/jigyou/soukatsu_kensyou_zenryou.pdf",
+      "sourceLabel": "四国旅客鉄道株式会社「5カ年推進計画2021～2025 総括的検証報告書」（各線区の個別課題）",
+      "date": "2026-03",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "jrs-yosan-matsuyama-uwajima",
+      "subject": "JR四国 予讃線（松山～宇和島）",
+      "kind": "鉄道",
+      "prefCodes": [
+        "38"
+      ],
+      "quote": "定期外利用は大きく減少しており、沿線人口の減少も含め、さらなる輸送需要の減退が懸念される",
+      "paraphrase": "JR四国の総括検証は、予讃線（松山～宇和島）について、定期外利用は大きく減少しており、沿線人口の減少も含め、さらなる輸送需要の減退が懸念されると述べている。",
+      "stance": "possibility",
+      "source": "https://www.jr-shikoku.co.jp/04_company/jigyou/soukatsu_kensyou_zenryou.pdf",
+      "sourceLabel": "四国旅客鉄道株式会社「5カ年推進計画2021～2025 総括的検証報告書」（各線区の個別課題）",
+      "date": "2026-03",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "jrs-kotoku",
+      "subject": "JR四国 高徳線（高松～徳島）",
+      "kind": "鉄道",
+      "prefCodes": [
+        "36",
+        "37"
+      ],
+      "quote": "沿線人口は減少が進んでおり、利用者満足度の低さも含め、輸送需要の減退が懸念される",
+      "paraphrase": "JR四国の総括検証は、高徳線（高松～徳島）について、沿線人口は減少が進んでおり、利用者満足度の低さも含め、輸送需要の減退が懸念されると述べている。",
+      "stance": "possibility",
+      "source": "https://www.jr-shikoku.co.jp/04_company/jigyou/soukatsu_kensyou_zenryou.pdf",
+      "sourceLabel": "四国旅客鉄道株式会社「5カ年推進計画2021～2025 総括的検証報告書」（各線区の個別課題）",
+      "date": "2026-03",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "jrs-dosan-tadotsu-kochi",
+      "subject": "JR四国 土讃線（多度津～高知）",
+      "kind": "鉄道",
+      "prefCodes": [
+        "36",
+        "37",
+        "39"
+      ],
+      "quote": "人口密集が低い区間での利用は限られており、沿線人口の減少も進んでいることから、将来的な輸送需要の減退が懸念される",
+      "paraphrase": "JR四国の総括検証は、土讃線（多度津～高知）について、人口密集が低い区間での利用は限られており、沿線人口の減少も進んでいることから、将来的な輸送需要の減退が懸念されると述べている。",
+      "stance": "possibility",
+      "source": "https://www.jr-shikoku.co.jp/04_company/jigyou/soukatsu_kensyou_zenryou.pdf",
+      "sourceLabel": "四国旅客鉄道株式会社「5カ年推進計画2021～2025 総括的検証報告書」（各線区の個別課題）",
+      "date": "2026-03",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "jrs-dosan-kochi-kubokawa",
+      "subject": "JR四国 土讃線（高知～窪川）",
+      "kind": "鉄道",
+      "prefCodes": [
+        "39"
+      ],
+      "quote": "定期外利用は大きく減少しており、沿線人口の減少も進んでいるため、さらなる輸送需要の減退が懸念される",
+      "paraphrase": "JR四国の総括検証は、土讃線（高知～窪川）について、定期外利用は大きく減少しており、沿線人口の減少も進んでいるため、さらなる輸送需要の減退が懸念されると述べている。",
+      "stance": "possibility",
+      "source": "https://www.jr-shikoku.co.jp/04_company/jigyou/soukatsu_kensyou_zenryou.pdf",
+      "sourceLabel": "四国旅客鉄道株式会社「5カ年推進計画2021～2025 総括的検証報告書」（各線区の個別課題）",
+      "date": "2026-03",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "jrs-tokushima-line",
+      "subject": "JR四国 徳島線（佐古～佃）",
+      "kind": "鉄道",
+      "prefCodes": [
+        "36"
+      ],
+      "quote": "定期・定期外とも大幅に減少しており、沿線人口の減少や利用者満足度の低さも含め、さらなる輸送需要の減退が懸念される",
+      "paraphrase": "JR四国の総括検証は、徳島線（佐古～佃）について、定期・定期外とも大幅に減少しており、沿線人口の減少や利用者満足度の低さも含め、さらなる輸送需要の減退が懸念されると述べている。",
+      "stance": "possibility",
+      "source": "https://www.jr-shikoku.co.jp/04_company/jigyou/soukatsu_kensyou_zenryou.pdf",
+      "sourceLabel": "四国旅客鉄道株式会社「5カ年推進計画2021～2025 総括的検証報告書」（各線区の個別課題）",
+      "date": "2026-03",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "shk-matsuyama-airport",
+      "subject": "松山空港",
+      "kind": "空港",
+      "prefCodes": [
+        "38"
+      ],
+      "quote": "日本全体として人口減少や少子高齢化が進み、航空需要の構造も変化しつつある",
+      "paraphrase": "愛媛県の松山空港将来構想は、日本全体として人口減少や少子高齢化が進み、航空需要の構造も変化しつつあると述べている。",
+      "stance": "possibility",
+      "source": "https://www.pref.ehime.jp/uploaded/attachment/142498.pdf",
+      "sourceLabel": "愛媛県 松山空港将来構想検討会「松山空港将来構想」",
+      "date": "2025-03",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "shk-honshi-toll",
+      "subject": "本州四国連絡道路（瀬戸大橋・しまなみ海道・大鳴門橋などの本四道路）",
+      "kind": "橋",
+      "prefCodes": [
+        "28",
+        "33",
+        "34",
+        "36",
+        "37",
+        "38"
+      ],
+      "quote": "人口減少等の要因から料金収入は減少する計画",
+      "paraphrase": "本州四国連絡高速道路株式会社（JB本四高速）は、国の審議会へのヒアリング資料で、本四道路の料金改定後の振り返りの中で、人口減少等の要因から料金収入は減少する計画だと説明している（同じ文は、実際の料金収入は平成26年度から令和元年度まで、コロナ禍を除いて計画より大きく上振れしたとも記している）。",
+      "stance": "possibility",
+      "source": "https://www.mlit.go.jp/policy/shingikai/content/001705757.pdf",
+      "sourceLabel": "本州四国連絡高速道路株式会社「社会資本整備審議会道路分科会 第59回国土幹線道路部会 ヒアリング資料」",
+      "date": "2023-10-24",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "shk-honshi-maintenance",
+      "subject": "本州四国連絡高速道路（本四高速道路の橋の保全）",
+      "kind": "橋",
+      "prefCodes": [
+        "28",
+        "33",
+        "34",
+        "36",
+        "37",
+        "38"
+      ],
+      "quote": "少子高齢化などの社会環境の変化に対応するため、グループ一体となって保全業務の効率化・省力化・省人化に取り組み",
+      "paraphrase": "JB本四高速グループは、グループビジョン2035の中で、少子高齢化などの社会環境の変化に対応するため、グループ一体となって保全業務の効率化・省力化・省人化に取り組み、ライフサイクルコストの最小化を目指すとしている。",
+      "stance": "fact",
+      "source": "https://www.jb-honshi.co.jp/corp_index/company/plan/pdf/plan_b.pdf",
+      "sourceLabel": "JB本四高速グループ「グループビジョン2035 / 中期経営計画2025-2027」",
+      "date": "2025-04",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "shk-kotoden",
+      "subject": "ことでん（高松琴平電気鉄道）",
+      "kind": "鉄道",
+      "prefCodes": [
+        "37"
+      ],
+      "quote": "人口減少・少子高齢化の進展に加え、新型コロナウイルス感染症の影響により、公共交通利用者が減少する中で幹線交通の維持が課題となっており",
+      "paraphrase": "香川県の「ことでん維持・活性化計画」は、人口減少・少子高齢化の進展に加え、新型コロナウイルス感染症の影響により公共交通利用者が減少する中で、幹線交通の維持が課題となっていると述べている。",
+      "stance": "possibility",
+      "source": "https://www.pref.kagawa.lg.jp/documents/13423/1-10.pdf",
+      "sourceLabel": "香川県「ことでん維持・活性化計画」（社会資本総合整備計画。計画期間は令和6～10年度）",
+      "date": "2026-09-29",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "shk-asa-dmv",
+      "subject": "阿佐海岸鉄道（阿佐東線・DMV）",
+      "kind": "鉄道",
+      "prefCodes": [
+        "36",
+        "39"
+      ],
+      "quote": "少子高齢化などの人口減少により、今後、利用者は減少と予想",
+      "paraphrase": "徳島県の阿佐東線DMV導入協議会の資料は、既存の利用者について、少子高齢化などの人口減少により、今後、利用者は減少と予想している。",
+      "stance": "possibility",
+      "source": "https://www.pref.tokushima.lg.jp/file/attachment/572811.pdf",
+      "sourceLabel": "第6回阿佐東線DMV導入協議会 資料3",
+      "date": "2020-08-19",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "shk-regional-rail",
+      "subject": "四国の地域鉄道（いよてつ・とさでん・ことでん）",
+      "kind": "鉄道",
+      "prefCodes": [
+        "37",
+        "38",
+        "39"
+      ],
+      "quote": "人口減少をはじめ、地域鉄道を取り巻く環境が大きく変化していく見込みである",
+      "paraphrase": "国土交通省四国運輸局の調査報告書は、四国の地域鉄道について、人口減少をはじめ、地域鉄道を取り巻く環境が大きく変化していく見込みであると述べている。",
+      "stance": "possibility",
+      "source": "https://wwwtb.mlit.go.jp/shikoku/content/000332116.pdf",
+      "sourceLabel": "国土交通省四国運輸局「四国運輸局管内における地域鉄道に関する調査報告書」",
+      "date": "2024-03",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "shk-sea-routes",
+      "subject": "四国の旅客航路・離島航路",
+      "kind": "フェリー",
+      "prefCodes": [
+        "36",
+        "37",
+        "38",
+        "39"
+      ],
+      "quote": "島民の人口減少等により航路の維持が厳しくなっている",
+      "paraphrase": "国土交通省四国運輸局の調査報告書は、四国運輸局管内には旅客航路や離島航路が多数存在しているが、島民の人口減少等により航路の維持が厳しくなっていると述べている。",
+      "stance": "fact",
+      "source": "https://wwwtb.mlit.go.jp/shikoku/content/000301634.pdf",
+      "sourceLabel": "国土交通省四国運輸局「海上交通のサービス内容の現状と活性化方策に関する調査 報告書」",
+      "date": "2022-03",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "shk-okinoshima-visitors",
+      "subject": "沖の島・鵜来島（高知県宿毛市の離島）",
+      "kind": "観光",
+      "prefCodes": [
+        "39"
+      ],
+      "quote": "島民の人口減少に伴い、交流人口全体としては年々減少傾向にあります",
+      "paraphrase": "高知県の離島振興計画は、沖の島・鵜来島について、島民の人口減少に伴い、交流人口全体としては年々減少傾向にあると述べている。",
+      "stance": "fact",
+      "source": "https://www.mlit.go.jp/kokudoseisaku/chirit/content/001619209.pdf",
+      "sourceLabel": "高知県「高知県離島振興計画（令和5年度～令和14年度）」",
+      "date": "2023-05",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "shk-okinoshima-bearers",
+      "subject": "沖の島・鵜来島（高知県宿毛市の離島）",
+      "kind": "その他",
+      "prefCodes": [
+        "39"
+      ],
+      "quote": "過疎化と高齢化がさらに進行し、人口減少に伴う地域の担い手不足が課題となっています",
+      "paraphrase": "高知県の離島振興計画は、沖の島・鵜来島について、過疎化と高齢化がさらに進行し、人口減少に伴う地域の担い手不足が課題となっていると述べている。",
+      "stance": "fact",
+      "source": "https://www.mlit.go.jp/kokudoseisaku/chirit/content/001619209.pdf",
+      "sourceLabel": "高知県「高知県離島振興計画（令和5年度～令和14年度）」",
+      "date": "2023-05",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "shk-matsuyama-transit",
+      "subject": "松山市の地域公共交通（郊外部・中山間地域・島しょ部の路線）",
+      "kind": "バス",
+      "prefCodes": [
+        "38"
+      ],
+      "quote": "郊外部や中山間地域、島しょ部を中心に、路線の維持や担い手の確保が難しくなってきています",
+      "paraphrase": "松山市の地域公共交通計画（案）の概要版は、人口減少と少子高齢化の進行などにより地域公共交通を取り巻く環境が大きく変化し、特に郊外部や中山間地域、島しょ部を中心に、路線の維持や担い手の確保が難しくなってきていると述べている。",
+      "stance": "fact",
+      "source": "https://www.city.matsuyama.ehime.jp/shisei/machizukuri/compact_network/5kyougikai.files/gaiyou1.pdf",
+      "sourceLabel": "松山市「松山市地域公共交通計画（案）概要版」（協議会資料。案の段階）",
+      "date": "2026",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "shk-tokushima-port",
+      "subject": "徳島小松島港",
+      "kind": "港",
+      "prefCodes": [
+        "36"
+      ],
+      "quote": "人口減少・高齢化の進行と港湾における労働力不足",
+      "paraphrase": "徳島県の徳島小松島港長期構想検討委員会の資料は、物流・産業振興の課題・論点の一つとして、人口減少・高齢化の進行と港湾における労働力不足を挙げている。",
+      "stance": "possibility",
+      "source": "https://www.pref.tokushima.lg.jp/file/attachment/1071435.pdf",
+      "sourceLabel": "徳島県「徳島小松島港長期構想検討委員会（第1回委員会・幹事会）資料」",
+      "date": "2026-07-08",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "shr-tajima-shrines",
+      "subject": "但馬地域（兵庫県北部）の神社",
+      "kind": "神社",
+      "prefCodes": [
+        "28"
+      ],
+      "quote": "過疎地域で神職の人手不足が深刻化している。面積で兵庫県の４分の１を占める但馬地域には神社が７３８社あるが、宮司は２９人しかおらず",
+      "paraphrase": "神戸新聞は、過疎地域で神職の人手不足が深刻化しているとして、兵庫県の但馬地域には神社が738社あるが宮司は29人しかいないと報じている。",
+      "stance": "fact",
+      "source": "https://www.kobe-np.co.jp/news/sougou/202205/0015299611.shtml",
+      "sourceLabel": "神戸新聞NEXT「神職の人手不足が深刻 過疎地の神社、宮司１人で８０社担当も」",
+      "date": "2022-05-14",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "shr-miyajima",
+      "subject": "宮島（広島県廿日市市。厳島神社のある島）",
+      "kind": "観光",
+      "prefCodes": [
+        "34"
+      ],
+      "quote": "宮島地域では、急激な高齢化と人口減少が進行しています。それは平安時代から受け継がれてきた文化や民俗に根ざした伝統の消失という問題を引き起こしました。",
+      "paraphrase": "廿日市市の宮島まちづくり基本構想は、宮島地域では急激な高齢化と人口減少が進行しており、それが平安時代から受け継がれてきた文化や民俗に根ざした伝統の消失という問題を引き起こしたと述べている。",
+      "stance": "fact",
+      "source": "https://www.city.hatsukaichi.hiroshima.jp/uploaded/attachment/36877.pdf",
+      "sourceLabel": "廿日市市「宮島まちづくり基本構想」",
+      "date": "2020-03",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "shr-kubokawa-shrines",
+      "subject": "高知県旧窪川町（現四万十町の一部）の神社",
+      "kind": "神社",
+      "prefCodes": [
+        "39"
+      ],
+      "quote": "神社の老朽化・氏子の高齢化・後継者不足による祭祀維持の問題等などを抱えていることを客観的なデータで示した",
+      "paraphrase": "（2019年の資料）科学研究費助成事業の研究成果報告書は、高知県の過疎地域である旧窪川町の神社について、神社の老朽化・氏子の高齢化・後継者不足による祭祀維持の問題等を抱えていることを客観的なデータで示したと報告している。",
+      "stance": "fact",
+      "source": "https://kaken.nii.ac.jp/ja/file/KAKENHI-PROJECT-16K16705/16K16705seika.pdf",
+      "sourceLabel": "科学研究費助成事業 研究成果報告書「過疎地域における神社神道の変容に関する宗教社会学的調査研究」（課題番号16K16705）",
+      "date": "2019-06-26",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "wak-kumano",
+      "subject": "熊野（和歌山県田辺市。世界文化遺産「熊野古道」など）",
+      "kind": "観光",
+      "prefCodes": [
+        "30"
+      ],
+      "quote": "人口減少、後継者不足等によって、1000年以上にわたり地域と旅人らによって守られてきた熊野を次世代に継承していくことが困難になることが危惧される",
+      "paraphrase": "田辺市の2022年度SDGs未来都市の提案は、世界文化遺産「熊野古道」など豊かな自然資源や文化的景観を有する一方で、人口減少、後継者不足等によって、熊野を次世代に継承していくことが困難になることが危惧されると述べている。",
+      "stance": "possibility",
+      "source": "https://www.chisou.go.jp/tiiki/kankyo/teian/2022sdgs_pdf/teian/31_tanabeshi.pdf",
+      "sourceLabel": "和歌山県田辺市「2022年度SDGs未来都市 全体計画提案概要」（内閣府）",
+      "date": "2022",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "wak-pref-transit",
+      "subject": "和歌山県の地域公共交通",
+      "kind": "その他",
+      "prefCodes": [
+        "30"
+      ],
+      "quote": "人口減少や少子高齢化の進展と地域特性を踏まえた公共交通ネットワークの構築",
+      "paraphrase": "和歌山県地域公共交通計画の概要版は、本県の地域公共交通の課題の一つとして、人口減少や少子高齢化の進展と地域特性を踏まえた公共交通ネットワークの構築を挙げている。",
+      "stance": "possibility",
+      "source": "https://www.pref.wakayama.lg.jp/prefg/020500/d00215116_d/fil/keikaku_gaiyou.pdf",
+      "sourceLabel": "和歌山県「和歌山県地域公共交通計画 概要版」",
+      "date": "2024-02",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "wak-koya-shops",
+      "subject": "高野山地域（和歌山県高野町）",
+      "kind": "観光",
+      "prefCodes": [
+        "30"
+      ],
+      "quote": "買い物や日常生活の利便性に比較的恵まれた高野山地域においても、将来的には各種店舗の減少等による利便性の低下につながる恐れがあります",
+      "paraphrase": "（2015年の資料）高野町の人口ビジョンは、集落の人口減少に触れたうえで、買い物や日常生活の利便性に比較的恵まれた高野山地域においても、将来的には各種店舗の減少等による利便性の低下につながる恐れがあると述べている。",
+      "stance": "possibility",
+      "source": "https://www.town.koya.wakayama.jp/img_data/2016/03/jinkou-bijyon.pdf",
+      "sourceLabel": "高野町「高野町人口ビジョン」",
+      "date": "2015-12",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "thm-olc-risk",
+      "subject": "東京ディズニーリゾート（運営：株式会社オリエンタルランド）",
+      "kind": "テーマパーク",
+      "prefCodes": [
+        "12"
+      ],
+      "quote": "日本の少子化に伴う人口減少をはじめとする人口動態の変化や、経済環境の変化により、入園者数及び売上高が減少し、当社グループの業績に影響を及ぼす可能性があります",
+      "paraphrase": "オリエンタルランドは有価証券報告書の戦略リスクとして、テーマパーク事業の来園者は国内ゲストが多くを占めており、日本の少子化に伴う人口減少をはじめとする人口動態の変化や経済環境の変化により、入園者数及び売上高が減少し、当社グループの業績に影響を及ぼす可能性があると記している。",
+      "stance": "possibility",
+      "source": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100YCJX.pdf",
+      "sourceLabel": "株式会社オリエンタルランド 有価証券報告書（第66期）",
+      "date": "2026-06-25",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "thm-olc-youth",
+      "subject": "東京ディズニーリゾート（運営：株式会社オリエンタルランド）",
+      "kind": "テーマパーク",
+      "prefCodes": [
+        "12"
+      ],
+      "quote": "将来的には国内若年層人口の減少、労働人口の減少なども想定されております",
+      "paraphrase": "オリエンタルランドは有価証券報告書の中で、将来的には国内若年層人口の減少、労働人口の減少なども想定されていると記している。",
+      "stance": "possibility",
+      "source": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100YCJX.pdf",
+      "sourceLabel": "株式会社オリエンタルランド 有価証券報告書（第66期）",
+      "date": "2026-06-25",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "thm-fujikyu-risk",
+      "subject": "富士急ハイランドなどを運営する富士急行株式会社のレジャー・サービス事業",
+      "kind": "テーマパーク",
+      "prefCodes": [
+        "19"
+      ],
+      "quote": "日本は少子高齢化を伴う人口減少傾向にあり、これが運輸業、レジャー・サービス業の利用客減少に繋がるおそれがあります",
+      "paraphrase": "富士急行は有価証券報告書の事業等のリスクとして、日本は少子高齢化を伴う人口減少傾向にあり、これが運輸業、レジャー・サービス業の利用客減少に繋がるおそれがあると記している。",
+      "stance": "possibility",
+      "source": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100VYIY.pdf",
+      "sourceLabel": "富士急行株式会社 有価証券報告書（第124期）",
+      "date": "2025-06-17",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "nat-kururi",
+      "subject": "JR久留里線（久留里・上総亀山間）の沿線（千葉県上総地区）",
+      "kind": "鉄道",
+      "prefCodes": [
+        "12"
+      ],
+      "quote": "当該地区では、表１記載の１９９５年（平成７年）以前から人口減少が続いており",
+      "paraphrase": "千葉県のJR久留里線沿線地域交通検討会議の検討結果報告書は、上総地区では1995年（平成7年）以前から人口減少が続いていると記している。",
+      "stance": "fact",
+      "source": "https://www.pref.chiba.lg.jp/koukei/press/2024/documents/kururi.pdf",
+      "sourceLabel": "千葉県「JR久留里線（久留里・上総亀山間）沿線地域交通検討会議 検討結果報告書」",
+      "date": "2024",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "nat-sanrikutetsudo",
+      "subject": "三陸鉄道の沿線（三陸沿岸地域）",
+      "kind": "鉄道",
+      "prefCodes": [
+        "03"
+      ],
+      "quote": "多くの地域と同様に人口減少・少子高齢化が進展している",
+      "paraphrase": "三陸鉄道沿線地域等公共交通計画は、三陸沿岸地域では、多くの地域と同様に人口減少・少子高齢化が進展していると述べている。",
+      "stance": "fact",
+      "source": "https://www.city.miyako.iwate.jp/material/files/group/8/sanntetsukoutuukeikaku2024.pdf",
+      "sourceLabel": "三陸鉄道沿線地域等公共交通計画（久慈市・野田村・普代村・田野畑村・岩泉町・宮古市・山田町・大槌町・釜石市）",
+      "date": "2024",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "nat-tsugaru-tetsudo",
+      "subject": "津軽鉄道（青森県）",
+      "kind": "鉄道",
+      "prefCodes": [
+        "02"
+      ],
+      "quote": "通学定期は、少子化の影響により緩やかな減少が継続しています",
+      "paraphrase": "津軽鉄道株式会社は、青森県地域交通戦略会議の資料で、通学定期は少子化の影響により緩やかな減少が継続していると述べている。",
+      "stance": "fact",
+      "source": "https://www.pref.aomori.lg.jp/soshiki/kotsu/tetsudo/files/05-2shiryou3.pdf",
+      "sourceLabel": "第2回青森県地域交通戦略会議 資料3（津軽鉄道株式会社）",
+      "date": "2026",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "nat-oito-line",
+      "subject": "大糸線（糸魚川・南小谷間）",
+      "kind": "鉄道",
+      "prefCodes": [
+        "15",
+        "20"
+      ],
+      "quote": "人口減少の中で利用者減少は不可避",
+      "paraphrase": "長野県の大糸線沿線地域公共交通検討会議の資料は、第1回会議の主な発言を整理した中に「人口減少の中で利用者減少は不可避」と記している（発言者の表記はこの行には付いていない）。",
+      "stance": "possibility",
+      "source": "https://www.pref.nagano.lg.jp/kotsu/oitosen/documents/02_dai2siryou.pdf",
+      "sourceLabel": "大糸線沿線（糸魚川・南小谷間）地域公共交通検討会議 資料（課題・現状分析）",
+      "date": "2026-06-01",
+      "readOn": "2026-11-07"
+    },
+    {
+      "id": "nat-naru-maejima",
+      "subject": "奈留島～前島航路（長崎県五島市）",
+      "kind": "フェリー",
+      "prefCodes": [
+        "42"
+      ],
+      "quote": "前島の人口減少に伴う航路利用者数の低迷を踏まえ",
+      "paraphrase": "国土交通省四国運輸局の調査報告書の事例紹介は、奈留島～前島航路について、前島の人口減少に伴う航路利用者数の低迷を踏まえて運航形態を検討する必要があったと記している。",
+      "stance": "fact",
+      "source": "https://wwwtb.mlit.go.jp/shikoku/content/000301634.pdf",
+      "sourceLabel": "国土交通省四国運輸局「海上交通のサービス内容の現状と活性化方策に関する調査 報告書」（事例）",
+      "date": "2022-03",
+      "readOn": "2026-11-07"
+    }
+  ]
+}

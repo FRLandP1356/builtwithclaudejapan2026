@@ -7,6 +7,7 @@ import { createRunner } from '../../src/data/runner';
 import type { Groups } from '../../src/engine/types';
 import { createAppStore, type AppStoreInitial, type PanelContext } from '../../src/ui/state';
 import { loadAllAreas } from './loadAreas';
+import { loadClaims } from './loadClaims';
 import { loadFacilities } from './loadFacilities';
 import { loadFinance } from './loadFinance';
 import { loadLandmarks } from './loadLandmarks';
@@ -14,7 +15,7 @@ import { repoPath } from './paths';
 
 let cached: AppData | undefined;
 
-/** The real data, read once per test file (the landmarks included, as the loader would have them). */
+/** The real data, read once per test file (the landmarks and the claims included, as the loader would have them). */
 export function realAppData(): AppData {
   if (cached) return cached;
   const areas = loadAllAreas();
@@ -30,6 +31,7 @@ export function realAppData(): AppData {
     japanTopo: { type: 'Topology', objects: {}, arcs: [] } as unknown as Topology,
     prefNames,
     landmarks: loadLandmarks((c) => codes.has(c)),
+    claims: loadClaims((p) => prefNames.has(p)),
   };
   return cached;
 }

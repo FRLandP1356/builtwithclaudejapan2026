@@ -54,6 +54,7 @@ function makeFetch(control: Control) {
     if (url.endsWith('facilities.json')) return Promise.resolve(json(loadFacilities()));
     if (url.endsWith('finance.json')) return Promise.resolve(json(loadFinance()));
     if (url.endsWith('landmarks.json')) return Promise.resolve(json(JSON.parse(readFileSync(repoPath('public/data/landmarks.json'), 'utf8'))));
+    if (url.endsWith('claims.json')) return Promise.resolve(json(JSON.parse(readFileSync(repoPath('public/data/claims.json'), 'utf8'))));
     if (url.endsWith('japan.topo.json')) return Promise.resolve(json(control.brokenNational ? { objects: {} } : japanTopo));
     return Promise.resolve(json('not found', 404));
   });
