@@ -139,10 +139,13 @@ export function infraBlock(): MarksBlock {
   };
 }
 
-/** The line above the three groups: what the numbers under the controls are, and two fixed points to read them by. */
-export function marksIntro(): string {
-  return (
-    `どのつまみやボタンの下にも、その位置にしたときの${MARKS_YEAR}年の日本全体の人口（このアプリの試算）を載せています。` +
-    `参考：2020年は${formatPop(BAR_MARKS.total2020)}（国勢調査）、2050年は${formatPop(BAR_MARKS.total2050)}（公式推計）です。`
-  );
+/** The summary of the closed disclosure that holds a block under its control (since 2026-11-07). */
+export const MARKS_FOLD_SUMMARY = 'ほかの値だとどうなるか';
+
+/**
+ * The two fixed points to read the result by, under the tiles of 「この前提での2100年」. Until 2026-11-07 a sentence before
+ * it said that every control carries its marks; the marks sit behind a disclosure now whose title says what they are.
+ */
+export function marksReference(): string {
+  return `参考：2020年は${formatPop(BAR_MARKS.total2020)}（国勢調査）、2050年は${formatPop(BAR_MARKS.total2050)}（公式推計）です。`;
 }

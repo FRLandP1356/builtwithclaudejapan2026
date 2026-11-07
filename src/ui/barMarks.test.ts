@@ -12,7 +12,8 @@ import {
   infraBlock,
   INFRA_LABELS,
   type BarMark,
-  marksIntro,
+  MARKS_FOLD_SUMMARY,
+  marksReference,
   MARKS_YEAR,
   migModeBlock,
   migrationBlock,
@@ -219,17 +220,15 @@ describe('the blocks printed under the controls', () => {
     expect(INFRA_LABELS).toEqual({ none: 'なし', weak: '弱い', strong: '強い' });
   });
 
-  test('the intro names the two fixed points and the estimate', () => {
-    expect(marksIntro()).toBe(
-      'どのつまみやボタンの下にも、その位置にしたときの2100年の日本全体の人口（このアプリの試算）を載せています。' +
-        '参考：2020年は1億2,615万人（国勢調査）、2050年は1億469万人（公式推計）です。',
-    );
+  test('the reference line names the two fixed points; the disclosure that holds a block says what it is (2026-11-07: the sentence that every control carries its marks is gone with the marks folded)', () => {
+    expect(marksReference()).toBe('参考：2020年は1億2,615万人（国勢調査）、2050年は1億469万人（公式推計）です。');
+    expect(MARKS_FOLD_SUMMARY).toBe('ほかの値だとどうなるか');
   });
 
   test('no wording says 予測, 残せない or 閉鎖, gives advice, or judges a value; no arrow or circled number', () => {
     const all = [birthBlock(1), migrationBlock(1), migModeBlock(), infraBlock()]
       .flatMap((b) => [b.title, b.fact ?? '', ...b.rows.flatMap((r) => [r.at, r.people])])
-      .concat(marksIntro())
+      .concat(marksReference(), MARKS_FOLD_SUMMARY)
       .join('\n');
     for (const w of ['予測', '残せない', '閉鎖', 'すべき', 'おすすめ', 'お勧め', '良い', '悪い', '十分', '不十分', '→', '▲', '▼']) expect(all).not.toContain(w);
     expect(all).not.toMatch(/[①-⑳]/);

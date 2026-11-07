@@ -6,7 +6,7 @@ import { SCENARIO_LIMITS } from '../data/runner';
 import { deriveTotals, yearIndex } from './derive';
 import type { Listener, Store } from './state';
 import { formatPop } from './format';
-import { BAR_MARKS, birthBlock, INFRA_LABELS, infraBlock, marksIntro, MIG_MODE_LABELS, migModeBlock, migrationBlock } from './barMarks';
+import { BAR_MARKS, birthBlock, INFRA_LABELS, infraBlock, MARKS_FOLD_SUMMARY, marksReference, MIG_MODE_LABELS, migModeBlock, migrationBlock } from './barMarks';
 import {
   checkScenario,
   compareNote,
@@ -182,9 +182,11 @@ describe('mountControls', () => {
     expect(el.querySelector('.panel-empty')).toBeNull();
     expect(q('.panel-title').textContent).toContain('前提を変える');
     expect(q('.panel-title .badge-estimate').textContent).toBe('試算');
+    // two sentences since 2026-11-07: what does not move, what moves here, and that the result is this app's estimate
     expect(q('.panel-lead').textContent).toBe(
-      '2050年までの数字は、国立社会保障・人口問題研究所の公式推計のまま変わりません。ここで変えるのは、2050年より後の計算に使う前提です。',
+      '2050年までの数字は、国立社会保障・人口問題研究所の公式推計のまま変わりません。ここで変えるのは2050年より後の計算に使う前提で、結果はこのアプリの試算です。',
     );
+    expect(q('.panel-lead').textContent!.split('。').filter(Boolean)).toHaveLength(2);
   });
 
   test('shows the three groups in plain Japanese; the infra group is flagged as an assumption', () => {
@@ -505,23 +507,43 @@ describe('guidance marks under the controls', () => {
   }
   const IDS = ['ctl-cwr-marks', 'ctl-migmode-marks', 'ctl-migscale-marks', 'ctl-infra-marks'];
 
-  test('each control carries its block, in the right place, once', () => {
+  /** The closed disclosure 「ほかの値だとどうなるか」 that holds the block `id` (since 2026-11-07 the marks sit behind it). */
+  const foldOf = (el: Element, id: string) => el.querySelector(`#${id}`)!.closest<HTMLDetailsElement>('details.bar-marks-fold')!;
+
+  test('each control carries its block, in the right place, once, behind a closed disclosure', () => {
     const { el, q } = mount();
-    for (const id of IDS) expect(el.querySelectorAll(`#${id}`)).toHaveLength(1);
+    for (const id of IDS) {
+      expect(el.querySelectorAll(`#${id}`)).toHaveLength(1);
+      const fold = foldOf(el, id);
+      expect(fold.open).toBe(false);
+      expect(fold.classList.contains('fold')).toBe(true); // the shared disclosure look (theme.css)
+      const summary = fold.querySelector(':scope > summary')!;
+      expect(summary.textContent).toBe(MARKS_FOLD_SUMMARY);
+      expect(summary.nextElementSibling).toBe(q(`#${id}`));
+    }
     // the birth bar: its marks come right after the slider
-    expect(q('#ctl-cwr').nextElementSibling).toBe(q('#ctl-cwr-marks'));
+    expect(q('#ctl-cwr').nextElementSibling).toBe(foldOf(el, 'ctl-cwr-marks'));
     // migration: the mode block right after the two buttons, the strength block right after the strength bar
-    expect(q('[data-group="migration"] .choice').nextElementSibling).toBe(q('#ctl-migmode-marks'));
-    expect(q('#ctl-migscale').nextElementSibling).toBe(q('#ctl-migscale-marks'));
+    expect(q('[data-group="migration"] .choice').nextElementSibling).toBe(foldOf(el, 'ctl-migmode-marks'));
+    expect(q('#ctl-migscale').nextElementSibling).toBe(foldOf(el, 'ctl-migscale-marks'));
     // infrastructure: under the three buttons, before the existing notice
     const infra = q('[data-group="infra"]');
     const order = [...infra.children];
-    expect(order.indexOf(q('#ctl-infra-marks'))).toBeGreaterThan(order.indexOf(infra.querySelector('.choice')!));
-    expect(q('#ctl-infra-marks').nextElementSibling).toBe(infra.querySelector('.notice'));
-    // the intro sits between the lead and the three groups
-    expect(q('.bar-marks-intro').previousElementSibling).toBe(q('.panel-lead'));
-    expect(q('.bar-marks-intro').nextElementSibling).toBe(q('.controls-groups'));
-    expect(q('.bar-marks-intro').textContent).toBe(marksIntro());
+    expect(order.indexOf(foldOf(el, 'ctl-infra-marks'))).toBeGreaterThan(order.indexOf(infra.querySelector('.choice')!));
+    expect(foldOf(el, 'ctl-infra-marks').nextElementSibling).toBe(infra.querySelector('.notice'));
+  });
+
+  test('the result of the assumptions stands under the lead and above the three groups, with the two fixed points under its tiles (2026-11-07)', () => {
+    const { el, q } = mount();
+    const effect = q('.controls-effect');
+    expect(effect.previousElementSibling).toBe(q('.panel-lead'));
+    expect(effect.nextElementSibling).toBe(q('.controls-groups'));
+    expect(effect.querySelector('.panel-section-title')!.textContent).toBe('この前提での2100年 試算');
+    expect(effect.querySelector('#ctl-tiles')!.nextElementSibling).toBe(q('.controls-reference'));
+    expect(q('.controls-reference').textContent).toBe(marksReference());
+    expect(el.querySelectorAll('.controls-reference')).toHaveLength(1);
+    // the tiles are the same tiles, now above the controls
+    expect([...el.querySelectorAll('#ctl-tiles .kpi .kpi-label')].map((k) => k.textContent)).toEqual(['2100年の日本全体の人口']);
   });
 
   test('the words on the page (real data): estimate badge, positions, totals and the derived sentences', () => {
@@ -551,9 +573,7 @@ describe('guidance marks under the controls', () => {
       rows: [['なし', '約6,328万人'], ['弱い', '約6,320万人'], ['強い', '約6,308万人']],
       fact: undefined,
     });
-    expect(el.querySelector('.bar-marks-intro')!.textContent).toBe(
-      'どのつまみやボタンの下にも、その位置にしたときの2100年の日本全体の人口（このアプリの試算）を載せています。参考：2020年は1億2,615万人（国勢調査）、2050年は1億469万人（公式推計）です。',
-    );
+    expect(el.querySelector('.controls-reference')!.textContent).toBe('参考：2020年は1億2,615万人（国勢調査）、2050年は1億469万人（公式推計）です。');
   });
 
   test('the blocks print what the data module builds (so the data, not copies, drives the page)', () => {
@@ -604,7 +624,7 @@ describe('guidance marks under the controls', () => {
 
   test('the marks describe the control, not its value: they do not change when the controls move', async () => {
     const { el, q, type } = mount();
-    const snapshot = () => IDS.map((id) => el.querySelector(`#${id}`)!.outerHTML).join('\n') + el.querySelector('.bar-marks-intro')!.outerHTML;
+    const snapshot = () => IDS.map((id) => el.querySelector(`#${id}`)!.outerHTML).join('\n') + el.querySelector('.controls-reference')!.outerHTML;
     const before = snapshot();
     await type(q<HTMLInputElement>('#ctl-cwr'), 1.4);
     await type(q<HTMLInputElement>('#ctl-migscale'), 0);
@@ -619,22 +639,24 @@ describe('guidance marks under the controls', () => {
   test('plain text: no new focus stop, no live region, no id used twice', () => {
     const { el } = mount();
     const focusable = 'a[href], button, input, select, textarea, summary, [tabindex], [contenteditable]';
-    for (const sel of ['.bar-marks', '.bar-marks-intro']) {
+    for (const sel of ['.bar-marks', '.controls-reference']) {
       for (const block of el.querySelectorAll(sel)) {
         expect(block.querySelectorAll(focusable), sel).toHaveLength(0);
         expect(block.matches('[role], [aria-live], [tabindex]'), sel).toBe(false);
         expect(block.querySelectorAll('[role], [aria-live], [tabindex]'), sel).toHaveLength(0);
       }
     }
-    // the panel's own stops are unchanged: two sliders, two mode buttons, three presets, the reset button
-    expect(el.querySelectorAll(focusable)).toHaveLength(8);
+    // the panel's stops: two sliders, two mode buttons, three presets, the reset button, and (since 2026-11-07) the
+    // summaries of the four disclosures that hold the marks
+    expect(el.querySelectorAll(focusable)).toHaveLength(12);
+    expect(el.querySelectorAll('details.bar-marks-fold > summary')).toHaveLength(4);
     const ids = [...el.querySelectorAll('[id]')].map((n) => n.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
   test('the sentences wrap between phrases, never inside a number or a bracket (one no-break span per phrase)', () => {
     const { el } = mount();
-    for (const sel of ['.bar-marks-intro', '#ctl-cwr-marks .bar-marks-fact', '#ctl-migscale-marks .bar-marks-fact']) {
+    for (const sel of ['.controls-reference', '#ctl-cwr-marks .bar-marks-fact', '#ctl-migscale-marks .bar-marks-fact']) {
       const p = el.querySelector(sel)!;
       const spans = [...p.querySelectorAll(':scope > .keep')];
       expect(spans.length, sel).toBeGreaterThan(2);
@@ -682,7 +704,8 @@ describe('guidance marks under the controls', () => {
     const { ctx, el } = mount();
     mountControls(el, ctx);
     for (const id of IDS) expect(el.querySelectorAll(`#${id}`)).toHaveLength(1);
-    expect(el.querySelectorAll('.bar-marks-intro')).toHaveLength(1);
+    expect(el.querySelectorAll('.controls-reference')).toHaveLength(1);
+    expect(el.querySelectorAll('.controls-effect')).toHaveLength(1);
   });
 
   test('the words: no 予測, no advice, no judging of a value, no arrow or circled number', () => {

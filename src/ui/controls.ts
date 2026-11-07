@@ -8,7 +8,7 @@
 import './controlsPanel.css';
 import { isScenarioError, sanitizeScenario, SCENARIO_LIMITS, scenarioKey } from '../data/runner';
 import { DEFAULT_SCENARIO, type Scenario } from '../engine/types';
-import { birthBlock, infraBlock, marksIntro, migModeBlock, migrationBlock, type MarksBlock } from './barMarks';
+import { birthBlock, infraBlock, MARKS_FOLD_SUMMARY, marksReference, migModeBlock, migrationBlock, type MarksBlock } from './barMarks';
 import { deriveTotals, yearIndex, type Totals } from './derive';
 import { formatPct, formatPop } from './format';
 import { phraseNodes } from './phrases';
@@ -116,8 +116,14 @@ const EFFECT_YEAR = 2100;
 
 const LIMITS = SCENARIO_LIMITS;
 
+// The lead is two sentences (2026-11-07): what does not move, what moves here, and that the result is this app's
+// estimate. The result stands right under it, above the controls, so it is in sight while a bar moves.
 const TEMPLATE = `
-  <p class="panel-lead">2050年までの数字は、国立社会保障・人口問題研究所の公式推計のまま変わりません。ここで変えるのは、2050年より後の計算に使う前提です。</p>
+  <p class="panel-lead">2050年までの数字は、国立社会保障・人口問題研究所の公式推計のまま変わりません。ここで変えるのは2050年より後の計算に使う前提で、結果はこのアプリの試算です。</p>
+  <div class="panel-section controls-effect">
+    <h3 class="panel-section-title">この前提での${EFFECT_YEAR}年 <span class="badge-estimate">${ESTIMATE_BADGE}</span></h3>
+    <div class="kpi-row" id="ctl-tiles"></div>
+  </div>
   <div class="controls-groups">
     <div class="field" data-group="birth">
       <label class="field-label" for="ctl-cwr"><span>子どもの生まれやすさ</span><span class="field-value" id="ctl-cwr-value"></span></label>
@@ -150,11 +156,7 @@ const TEMPLATE = `
   </div>
   <div class="actions controls-actions"><button type="button" class="btn" id="ctl-reset">初期値に戻す</button></div>
   <p class="note controls-status" id="ctl-status" role="status"></p>
-  <p class="notice" id="ctl-error" role="alert" hidden></p>
-  <div class="panel-section">
-    <h3 class="panel-section-title">この前提での${EFFECT_YEAR}年 <span class="badge-estimate">${ESTIMATE_BADGE}</span></h3>
-    <div class="kpi-row" id="ctl-tiles"></div>
-  </div>`;
+  <p class="notice" id="ctl-error" role="alert" hidden></p>`;
 
 interface Tile {
   label: string;
@@ -204,6 +206,16 @@ function marksElement(b: MarksBlock): HTMLElement {
   return root;
 }
 
+/** A block behind a closed disclosure 「ほかの値だとどうなるか」 (2026-11-07): the block keeps its id, so the control's aria-describedby still reaches it. */
+function marksFold(b: MarksBlock): HTMLDetailsElement {
+  const details = document.createElement('details');
+  details.className = 'fold bar-marks-fold';
+  const summary = document.createElement('summary');
+  summary.textContent = MARKS_FOLD_SUMMARY;
+  details.append(summary, marksElement(b));
+  return details;
+}
+
 /** Write text into a live region only when it differs, so a screen reader is not told the same thing again. */
 function setText(el: HTMLElement, text: string): void {
   if (el.textContent !== text) el.textContent = text;
@@ -238,15 +250,16 @@ export function mountControls(el: HTMLElement, ctx: PanelContext): () => void {
   }
   el.insertAdjacentHTML('beforeend', TEMPLATE); // static text only: nothing from data is interpolated
 
-  // The guidance marks (barMarks.ts): fixed text, one block under each control; they describe the control, not its value.
-  const intro = document.createElement('p');
-  intro.className = 'note bar-marks-intro';
-  intro.append(...phraseNodes(marksIntro()));
-  el.querySelector('.controls-groups')!.before(intro);
-  el.querySelector('#ctl-cwr')!.after(marksElement(birthBlock(DEFAULT_SCENARIO.cwrMult)));
-  el.querySelector('[data-group="migration"] .choice')!.after(marksElement(migModeBlock()));
-  el.querySelector('#ctl-migscale')!.after(marksElement(migrationBlock(DEFAULT_SCENARIO.migScale)));
-  el.querySelector('[data-group="infra"] .notice')!.before(marksElement(infraBlock()));
+  // The two fixed points to read the result by, under its tiles. The guidance marks (barMarks.ts): fixed text, one
+  // block behind a closed disclosure under each control; they describe the control, not its value.
+  const reference = document.createElement('p');
+  reference.className = 'note controls-reference';
+  reference.append(...phraseNodes(marksReference()));
+  el.querySelector('#ctl-tiles')!.after(reference);
+  el.querySelector('#ctl-cwr')!.after(marksFold(birthBlock(DEFAULT_SCENARIO.cwrMult)));
+  el.querySelector('[data-group="migration"] .choice')!.after(marksFold(migModeBlock()));
+  el.querySelector('#ctl-migscale')!.after(marksFold(migrationBlock(DEFAULT_SCENARIO.migScale)));
+  el.querySelector('[data-group="infra"] .notice')!.before(marksFold(infraBlock()));
 
   const q = <T extends Element>(sel: string) => el.querySelector<T>(sel)!;
   const cwr = q<HTMLInputElement>('#ctl-cwr');

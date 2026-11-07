@@ -616,6 +616,35 @@ input[type='range'].range:focus-visible::-moz-range-thumb {
   outline-offset: var(--focus-offset);
 }
 
+/* A disclosure (details.fold): its summary is a 44px row in the accent with the bordered chevron (no arrow characters;
+   the native marker is off in every engine), turning when open. The town panel's sections, the board and the chart
+   tables draw the same mark in their own css; a new disclosure takes this class (2026-11-07). */
+.fold > summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--touch);
+  color: var(--accent);
+  font-size: var(--fs-15);
+  list-style: none;
+  cursor: pointer;
+}
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+.fold > summary::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: var(--sp-2);
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+.fold[open] > summary::before {
+  transform: rotate(45deg);
+}
+
 /* Segmented choice (e.g. hold / fade): buttons, the selected one filled. No overflow clipping: the focus ring
    (2px outline, 2px offset) must stay visible on the first and last button; the corners are rounded per button. */
 .choice {

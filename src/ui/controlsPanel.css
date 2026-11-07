@@ -16,10 +16,20 @@
   gap: var(--sp-1) var(--sp-2);
 }
 
-/* Guidance marks (barMarks.ts): under each bar or button group, "this position gives about this 2100 total".
-   Small-note type, the estimate badge in the title, positions and totals as a two-column list. Plain text, no focus stop. */
-.bar-marks-intro {
+/* The result of the assumptions (2026-11-07: right under the lead, above the controls, so a moving bar shows it): the
+   tiles, then the two fixed points to read them by. */
+.controls-effect {
+  margin-bottom: var(--sp-4);
+}
+.controls-reference {
   margin-top: var(--sp-2);
+}
+
+/* Guidance marks (barMarks.ts): under each bar or button group, "this position gives about this 2100 total", behind a
+   closed disclosure (theme.css .fold) whose row is the note's size. Small-note type, the estimate badge in the title,
+   positions and totals as a two-column list. Plain text inside, no focus stop but the summary. */
+.bar-marks-fold > summary {
+  font-size: var(--fs-14);
 }
 .bar-marks {
   display: grid;
@@ -43,7 +53,7 @@
   margin-top: var(--sp-1);
 }
 /* The mode block sits right above the strength bar's label: leave a gap so the two groups read apart. */
-.bar-marks + .field-label {
+.bar-marks-fold + .field-label {
   margin-top: var(--sp-3);
 }
 
