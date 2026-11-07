@@ -20,7 +20,9 @@ import {
   signedCount,
   summarizeAllocation,
   type AllocationForm,
-  VISIBLE_ROW_CAP,
+  MORE_SUMMARY,
+  TERMS_SUMMARY,
+  VISIBLE_OTHER_CAP,
 } from './allocationPanel';
 
 const FORBIDDEN = ['予測', '残せない', '閉鎖', 'すべき', 'おすすめ', 'お勧め', '→', '▲', '▼'];
@@ -203,23 +205,27 @@ describe('summarizeAllocation', () => {
     expect(row.gained.examples.sort()).toEqual(['中央区（北海道）', '中央区（東京都）', '高野町'].sort());
   });
 
-  test('the visible list is capped at 10 rows and the rest are listed apart', () => {
+  // Since 2026-11-07 the visible list is every essential row and the three other facilities with the most towns
+  // crossing; the rest are listed apart (ten rows in all before).
+  test('the visible list is the essential rows and the three others with the most crossings; the rest are listed apart', () => {
     const facilities = [fac('e1', true), fac('e2', true), ...Array.from({ length: 12 }, (_, i) => fac(`o${i}`, false))];
-    const flips = facilities.map((f) => flip(f.id, ['30344'], []));
+    // o5 has three towns crossing, o2 two, the rest one: the three with the most come first
+    const flips = facilities.map((f) => flip(f.id, f.id === 'o5' ? ['30344', '30201', '30202'] : f.id === 'o2' ? ['30344', '30201'] : ['30344'], []));
     const s = summarizeAllocation(result(flips), data(facilities), 2100);
-    expect(VISIBLE_ROW_CAP).toBe(10);
+    expect(VISIBLE_OTHER_CAP).toBe(3);
     expect(s.rows).toHaveLength(14);
-    expect(s.visible).toHaveLength(10);
-    expect(s.hidden).toHaveLength(4);
+    expect(s.visible).toHaveLength(5);
+    expect(s.hidden).toHaveLength(9);
+    expect(s.visible.map((r) => r.facilityId)).toEqual(['e1', 'e2', 'o5', 'o2', 'o0']);
     expect(s.visible.slice(0, 2).map((r) => r.essential)).toEqual([true, true]);
     expect([...s.visible, ...s.hidden]).toEqual(s.rows);
   });
 
-  test('essential rows are never hidden, even when there are more than the cap', () => {
-    const facilities = [...Array.from({ length: 12 }, (_, i) => fac(`e${i}`, true)), fac('o', false)];
+  test('essential rows are never hidden, however many there are; the fourth other row is', () => {
+    const facilities = [...Array.from({ length: 12 }, (_, i) => fac(`e${i}`, true)), ...Array.from({ length: 4 }, (_, i) => fac(`o${i}`, false))];
     const s = summarizeAllocation(result(facilities.map((f) => flip(f.id, ['30344'], []))), data(facilities), 2100);
-    expect(s.visible).toHaveLength(12);
-    expect(s.hidden.map((r) => r.facilityId)).toEqual(['o']);
+    expect(s.visible).toHaveLength(15);
+    expect(s.hidden.map((r) => r.facilityId)).toEqual(['o3']);
   });
 
   test('nothing crossing is reported as such', () => {
@@ -419,13 +425,34 @@ describe('mountAllocation', () => {
     // a row reads: name, before, after, signed difference
     const grocery = r.find((x) => x.name === '飲食料品小売業')!;
     expect(grocery.cells).toEqual(['1,627', '1,628', '+1']);
-    // visible rows are capped at 10, the rest sit in a collapsed details
+    // visible rows: the essential ones and three others; the rest sit in a closed disclosure (2026-11-07)
     const { summary } = computeAllocation(ctx.data, ctx.store.get().series, 2100, form());
-    expect(r).toHaveLength(Math.min(10, summary.rows.length));
+    const essentialCount = summary.rows.filter((x) => x.essential).length;
+    expect(r).toHaveLength(essentialCount + 3);
+    expect(r).toHaveLength(summary.visible.length);
     const more = q<HTMLDetailsElement>('details.alloc-more');
     expect(more.open).toBe(false);
-    expect(more.querySelectorAll('tbody tr')).toHaveLength(summary.rows.length - 10);
-    expect(more.querySelector('summary')!.textContent).toBe(`その他の施設を、さらに${summary.rows.length - 10}件見る`);
+    expect(more.classList.contains('fold')).toBe(true);
+    expect(more.querySelectorAll('tbody tr')).toHaveLength(summary.hidden.length);
+    expect(summary.hidden.length).toBeGreaterThan(0);
+    expect(more.querySelector('summary')!.textContent).toBe(`ほかの施設を見る（${summary.hidden.length}件）`);
+    expect(more.querySelector('summary')!.textContent).toBe(MORE_SUMMARY(summary.hidden.length));
+  });
+
+  test('the notes under the table are two short lines, the terms behind a closed disclosure 「用語の説明」 (2026-11-07)', () => {
+    const { q } = mount();
+    const notes = q('.alloc-notes');
+    const lines = [...notes.querySelectorAll(':scope > p.note')].map((p) => p.textContent);
+    expect(lines).toEqual(['人口の差は全国で見ると小さいので、人口の目安をまたぐ町の数で示しています。', '実際の人口の動きの見通しではなく、「もし割り振ったら」の計算です。']);
+    for (const line of lines) expect(line!.split('。').filter(Boolean)).toHaveLength(1);
+    const terms = notes.querySelector<HTMLDetailsElement>(':scope > details.alloc-terms')!;
+    expect(terms.open).toBe(false);
+    expect(terms.classList.contains('fold')).toBe(true);
+    expect(terms.querySelector(':scope > summary')!.textContent).toBe(TERMS_SUMMARY);
+    expect([...terms.querySelectorAll('p.note')].map((p) => p.textContent)).toEqual([
+      '「人口の目安」は、国土交通省の統計で、その施設がある確率が50%になる人口の大きさです。町の人口がその大きさより少ないことを「人口の目安を下回る」、割り振りでその大きさ以上になることを「人口の目安を下回らなくなる」と書いています。',
+      '国土交通省の目安は三大都市圏を除く統計ですが、ここでは三大都市圏の町も同じ目安で数えています。',
+    ]);
   });
 
   test('the permanent notes are always there, and no forbidden word is rendered', () => {
@@ -1068,12 +1095,15 @@ describe('地図に反映する (the map overlay)', () => {
     });
 
     test('a facility that moves into the collapsed group keeps focus, with the group opened for it', () => {
+      // Since 2026-11-07 the open table holds the essential rows and three others: in 2100 the cafe is one of the
+      // three (the restaurant, which this test followed before, is in the collapsed group now); in 2090 the cafe sits
+      // in the collapsed group.
       const { el, store } = mount();
-      const before = buttonFor(el, 'restaurant')!;
+      const before = buttonFor(el, 'cafe')!;
       expect(before.closest('details')).toBeNull(); // listed in the open table in 2100
       before.focus();
-      store.set({ year: 2095 }); // in 2095 it sits in the collapsed group
-      const after = buttonFor(el, 'restaurant')!;
+      store.set({ year: 2090 }); // in 2090 it sits in the collapsed group
+      const after = buttonFor(el, 'cafe')!;
       const group = after.closest('details.alloc-more') as HTMLDetailsElement;
       expect(group).not.toBeNull();
       expect(group.open).toBe(true);

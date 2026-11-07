@@ -33,8 +33,14 @@ export const PERCENT_MIN = -30;
 export const PERCENT_MAX = 50;
 export const PERCENT_STEP = 5;
 export const PERCENT_DEFAULT = 10;
-/** Rows of the facility table shown before the rest go into a collapsed list (essential rows are never hidden). */
-export const VISIBLE_ROW_CAP = 10;
+/**
+ * Rows of the facility table shown apart from the essential ones (which are never hidden): the three facilities with
+ * the most towns crossing their guide; the rest go behind a closed disclosure (2026-11-07; ten rows in all before).
+ */
+export const VISIBLE_OTHER_CAP = 3;
+/** The summary of the closed disclosure under the table and of the one under the notes. */
+export const MORE_SUMMARY = (hidden: number) => `ほかの施設を見る（${countFormat.format(hidden)}件）`;
+export const TERMS_SUMMARY = '用語の説明';
 /** Example town names shown per facility for each direction. */
 export const EXAMPLE_COUNT = 3;
 /** Prefecture shown when nothing is selected. */
@@ -133,7 +139,7 @@ export interface AllocationSummary {
   year: number;
   /** Every facility with at least one town crossing, essential facilities first. */
   rows: FlipRow[];
-  /** The first rows (at least all essential rows, at most VISIBLE_ROW_CAP otherwise) and the rest. */
+  /** Every essential row and the first VISIBLE_OTHER_CAP others (the most towns crossing first), and the rest. */
   visible: FlipRow[];
   hidden: FlipRow[];
   nothingFlips: boolean;
@@ -201,7 +207,7 @@ export function summarizeAllocation(
       order.get(a.facilityId)! - order.get(b.facilityId)!,
   );
   const essentialCount = rows.filter((r) => r.essential).length;
-  const cut = Math.max(VISIBLE_ROW_CAP, essentialCount);
+  const cut = essentialCount + VISIBLE_OTHER_CAP;
   return { year, rows, visible: rows.slice(0, cut), hidden: rows.slice(cut), nothingFlips: rows.length === 0 };
 }
 
@@ -274,9 +280,12 @@ const TEMPLATE = `
   </div>
   <div class="alloc-notes">
     <p class="note">人口の差は全国で見ると小さいので、人口の目安をまたぐ町の数で示しています。</p>
-    <p class="note">国土交通省の目安は三大都市圏を除く統計ですが、ここでは三大都市圏の町も同じ目安で数えています。</p>
-    <p class="note">「人口の目安」は、国土交通省の統計で、その施設がある確率が50%になる人口の大きさです。町の人口がその大きさより少ないことを「人口の目安を下回る」、割り振りでその大きさ以上になることを「人口の目安を下回らなくなる」と書いています。</p>
     <p class="note">実際の人口の動きの見通しではなく、「もし割り振ったら」の計算です。</p>
+    <details class="fold alloc-terms">
+      <summary>${TERMS_SUMMARY}</summary>
+      <p class="note">「人口の目安」は、国土交通省の統計で、その施設がある確率が50%になる人口の大きさです。町の人口がその大きさより少ないことを「人口の目安を下回る」、割り振りでその大きさ以上になることを「人口の目安を下回らなくなる」と書いています。</p>
+      <p class="note">国土交通省の目安は三大都市圏を除く統計ですが、ここでは三大都市圏の町も同じ目安で数えています。</p>
+    </details>
   </div>`;
 
 const GROUP_ESSENTIAL = 'くらしの基本の施設';
@@ -371,8 +380,8 @@ function detailElement(summary: AllocationSummary, rowOpts: RowOptions): HTMLEle
     tableElement(summary.visible, true, 'alloc-table-visible', rowOpts),
   );
   if (summary.hidden.length > 0) {
-    const details = h('details', 'alloc-more');
-    details.append(h('summary', undefined, `その他の施設を、さらに${summary.hidden.length}件見る`), tableElement(summary.hidden, false, 'alloc-table-hidden', rowOpts));
+    const details = h('details', 'fold alloc-more');
+    details.append(h('summary', undefined, MORE_SUMMARY(summary.hidden.length)), tableElement(summary.hidden, false, 'alloc-table-hidden', rowOpts));
     section.append(details);
   }
   return section;

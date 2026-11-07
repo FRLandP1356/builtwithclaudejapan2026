@@ -175,21 +175,17 @@
   color: var(--ink);
   text-decoration: none;
 }
+/* The rest of the facility table and the terms under the notes: closed disclosures with the shared look (theme.css .fold). */
 .alloc-more {
   margin-top: var(--sp-3);
-}
-.alloc-more summary {
-  min-height: 40px;
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  color: var(--accent);
-  font-size: var(--fs-15);
 }
 .alloc-notes {
   display: grid;
   gap: var(--sp-1);
   margin-top: var(--sp-4);
+}
+.alloc-terms > .note + .note {
+  margin-top: var(--sp-1);
 }
 
 /* A change that takes towns below a guide reads in the same rust as the map; the sign is always in the text too. */
