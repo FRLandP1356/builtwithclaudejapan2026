@@ -35,13 +35,15 @@
   font-size: var(--fs-28);
   letter-spacing: 0.02em;
 }
-/* The question the app starts from: a row of its own under the title, in the body ink. */
+/* The question the app starts from: a row of its own under the title, in the body ink. On a phone it is 14px with a
+   tighter leading, so its four phrases take three rows at 390px, not four (2026-11-07); from 1024px it is 15px. */
 .app-problem {
   flex: 1 0 100%;
   max-width: 44em;
   margin-top: 0;
   color: var(--ink);
-  font-size: var(--fs-15);
+  font-size: var(--fs-14);
+  line-height: 1.5;
 }
 
 /* The lower layer under the board, headed 「くわしく見る」: the folded cards stacked as light rows (theme.css
@@ -275,6 +277,17 @@
 }
 .map-host[hidden] {
   display: none;
+}
+/* On a phone the map runs from edge to edge of the window (the page's side padding is given back to it; its side edges
+   go), so it is as tall as the window is wide: the map's height follows its width, and the first screen should be
+   mostly map (2026-11-07). */
+@media (max-width: 599.98px) {
+  .map-stage {
+    margin-inline: calc(-1 * var(--sp-4));
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
 }
 /* Skip link at the start of the map: hidden until it has focus, then a bordered button over the map's top left corner
    (no layout shift). */
@@ -788,6 +801,8 @@
   /* One line (about 930px at 15px) so the question costs the band one row of height. */
   .app-problem {
     max-width: none;
+    font-size: var(--fs-15);
+    line-height: var(--lh-body);
   }
   /* 395px: everything of the page but the map at a first, unscrolled view: the band (the title on one row, the
      question on one row: about 95px), place bar, headline, the 50px colour choice or the allocation bar that replaces

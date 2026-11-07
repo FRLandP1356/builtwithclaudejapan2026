@@ -26,7 +26,11 @@ describe('app.css: the rules that behaviour depends on', () => {
   test('the header question has a row of its own under the title, and from 1024px it runs on one line (the band keeps its height)', () => {
     expect(declarations('.app-problem')).toMatch(/flex:\s*1 0 100%/);
     expect(declarations('.app-problem')).toMatch(/max-width:\s*44em/);
-    expect(css).toMatch(/@media \(min-width: 1024px\) \{[^@]*?\.app-problem \{\s*max-width:\s*none;\s*\}/);
+    expect(css).toMatch(/@media \(min-width: 1024px\) \{[^@]*?\.app-problem \{[^}]*max-width:\s*none;[^}]*\}/);
+    // on a phone the question is 14px with a tighter leading (three rows at 390px, 2026-11-07); 15px from 1024px
+    expect(declarations('.app-problem')).toMatch(/font-size:\s*var\(--fs-14\)/);
+    expect(declarations('.app-problem')).toMatch(/line-height:\s*1\.5/);
+    expect(css).toMatch(/@media \(min-width: 1024px\) \{[^@]*?\.app-problem \{[^}]*font-size:\s*var\(--fs-15\);[^}]*\}/);
     expect(css).not.toMatch(/\.app-lead\b/); // the one-line description left the band on 2026-11-06 (it is in the sources card)
   });
 
@@ -60,6 +64,10 @@ describe('app.css: the rules that behaviour depends on', () => {
       expect(declarations(`.map-column:has(.legend[data-mode='${mode}']) .coast`), mode).toMatch(/stroke:\s*var\(--map-line-pale\)/);
     }
     expect(declarations('.legend-bar')).toMatch(/box-shadow:\s*0 0 0 1px var\(--line-2\)/);
+  });
+
+  test('on a phone the map runs edge to edge: the page padding given back, no side edges, no rounded corners', () => {
+    expect(css).toMatch(/@media \(max-width: 599\.98px\) \{\s*\.map-stage \{[^}]*margin-inline:\s*calc\(-1 \* var\(--sp-4\)\);[^}]*border-left:\s*0;[^}]*border-right:\s*0;[^}]*border-radius:\s*0;/);
   });
 
   test('a jump from the row lands a breath under the top of the window, on every width (nothing sticks above it any more)', () => {
