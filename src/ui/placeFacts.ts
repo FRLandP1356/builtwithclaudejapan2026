@@ -12,7 +12,7 @@ import { levelOf } from './nav';
 import { badgeFor } from './sources';
 import type { AppState, PanelContext } from './state';
 import { SUPPORT_LABEL } from './support';
-import { ageShares } from './townPanel';
+import { ageShares, splitUnit } from './townPanel';
 import './placeFacts.css';
 
 export interface PlaceFact {
@@ -72,8 +72,9 @@ export function placeFacts(series: Map<string, Series>, groups: Groups, code: st
 const mounted = new WeakMap<HTMLElement, () => void>();
 
 /**
- * Fill `el` (the #panel-facts section with its h2.panel-title) with the four lines and keep them in step with the
- * store: the section is hidden unless a town is selected. Returns the teardown.
+ * Fill `el` (the #panel-facts section with its h2.panel-title) with the four tiles (two by two: the label over the
+ * number, whose unit is a smaller span, as the town panel's tiles print it; the tile's text is still 「4.2万人」) and
+ * keep them in step with the store: the section is hidden unless a town is selected. Returns the teardown.
  */
 export function mountPlaceFacts(el: HTMLElement, ctx: PanelContext): () => void {
   mounted.get(el)?.();
@@ -92,9 +93,14 @@ export function mountPlaceFacts(el: HTMLElement, ctx: PanelContext): () => void 
     row.className = 'place-fact';
     const dt = document.createElement('dt');
     const dd = document.createElement('dd');
+    const num = document.createElement('span');
+    num.className = 'place-fact-num';
+    const unit = document.createElement('span');
+    unit.className = 'place-fact-unit';
+    dd.append(num, unit);
     row.append(dt, dd);
     list.append(row);
-    return { dt, dd };
+    return { dt, dd, num, unit };
   });
   el.append(list);
 
@@ -111,8 +117,13 @@ export function mountPlaceFacts(el: HTMLElement, ctx: PanelContext): () => void 
     badge.className = f.estimate ? 'badge-estimate' : 'badge-official';
     badge.textContent = f.badge;
     f.facts.forEach((fact, i) => {
-      if (rows[i].dt.textContent !== fact.label) rows[i].dt.textContent = fact.label;
-      if (rows[i].dd.textContent !== fact.value) rows[i].dd.textContent = fact.value;
+      const r = rows[i];
+      if (r.dt.textContent !== fact.label) r.dt.textContent = fact.label;
+      if (r.dd.textContent !== fact.value) {
+        const [value, unit] = splitUnit(fact.value);
+        r.num.textContent = value;
+        r.unit.textContent = unit;
+      }
     });
   }
 

@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 // The four numbers of a town above the board: the same values the town panel's tiles print, from the same functions.
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, test } from 'vitest';
+import { repoPath } from '../../test/helpers/paths';
 import { makeRealContext } from '../../test/helpers/realPanelContext';
 import { mountPlaceFacts, placeFacts, shareText } from './placeFacts';
 import type { AppStoreInitial, PanelContext } from './state';
@@ -112,5 +114,51 @@ describe('mountPlaceFacts (DOM)', () => {
     cleanup.pop()!();
     expect(el.querySelector('.place-facts-list')).toBeNull();
     expect(el.hidden).toBe(true);
+  });
+
+  test('a tile prints the number and its unit in two spans (the unit smaller), and their text is still the whole value', () => {
+    const { el, values } = setup({ selectedArea: '30206', year: 2050 });
+    const tiles = [...el.querySelectorAll('.place-fact')];
+    expect(tiles).toHaveLength(4);
+    const parts = tiles.map((t) => [t.querySelector('.place-fact-num')!.textContent, t.querySelector('.place-fact-unit')!.textContent]);
+    expect(parts[0]).toEqual(['4.2', '万人']);
+    expect(parts[1][1]).toBe('%');
+    expect(parts[2][1]).toBe('%');
+    expect(parts[3]).toEqual(['0.9', '人']);
+    expect(parts.map((p) => p.join(''))).toEqual(values());
+  });
+});
+
+// The card is a grid of two by two tiles since 2026-11-07 (the four rows were taller than the board's heading needed,
+// and a margin of their own had cancelled the card's inset, so the rows touched the card's edges). jsdom does not lay
+// out, so the test reads the stylesheet.
+describe('placeFacts.css: two by two tiles inside the card', () => {
+  const css = readFileSync(repoPath('src/ui/placeFacts.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  /** The declarations of every rule whose selector list contains `selector` (exact, whitespace-normalised), joined. */
+  function declarations(selector: string): string {
+    const want = selector.replace(/\s+/g, ' ');
+    const found: string[] = [];
+    for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selectors = m[1].split(',').map((s) => s.trim().replace(/\s+/g, ' '));
+      if (selectors.includes(want)) found.push(m[2]);
+    }
+    return found.join(';').replace(/\s+/g, ' ');
+  }
+
+  test('the list is a two-column grid and sets no margin of its own, so the card\'s inset keeps it off the edges', () => {
+    const list = declarations('.place-facts-list');
+    expect(list).toMatch(/grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
+    expect(list).not.toMatch(/margin/);
+  });
+
+  test('a tile is the label in the note type over a mincho number, the unit in the body face and smaller', () => {
+    expect(declarations('.place-fact dt')).toMatch(/font-size:\s*var\(--fs-13\)/);
+    const dd = declarations('.place-fact dd');
+    expect(dd).toMatch(/font-family:\s*var\(--font-display\)/);
+    expect(dd).toMatch(/font-size:\s*var\(--fs-26\)/);
+    expect(dd).toMatch(/margin:\s*auto 0 0/); // the number sits at the bottom of the tile: one line of numbers per row
+    const unit = declarations('.place-fact-unit');
+    expect(unit).toMatch(/font-family:\s*var\(--font-body\)/);
+    expect(unit).toMatch(/font-size:\s*var\(--fs-14\)/);
   });
 });

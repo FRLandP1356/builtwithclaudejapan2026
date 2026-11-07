@@ -143,7 +143,7 @@
 
 ### 町の数字（`placeFacts.css`、`placeFacts.ts`）
 
-`#panel-facts`（`section.panel.place-facts`。町を選んでいる時だけ出し、県と日本では `hidden`）。見出しの帯は町の名前 `.place-facts-name` と年の印（`.badge-estimate` か `.badge-official`）。中は `dl.place-facts-list` の 4 行 `.place-fact`（`dt` が「2050年の人口」「2020年比」「65歳以上の割合」「高齢者1人を支える現役世代」、`dd` が明朝 22px の数字）。数字は町の詳細の最初の 4 枚のタイルと同じ関数（`deriveTotals`・`ageShares`・`deriveSupport`）と同じ書き方で、`placeFacts.test.ts` が 3 町 × 3 年でタイルと照合する。
+`#panel-facts`（`section.panel.place-facts`。町を選んでいる時だけ出し、県と日本では `hidden`）。見出しの帯は町の名前 `.place-facts-name` と年の印（`.badge-estimate` か `.badge-official`）。中は `dl.place-facts-list`＝2 列 × 2 行の格子で、4 枚のタイル `.place-fact`（`dt` が「2050年の人口」「2020年比」「65歳以上の割合」「高齢者1人を支える現役世代」＝13px の `--muted`、その下に `dd`＝明朝 26px の数字。単位は `.place-fact-unit`＝ゴシック 14px `--ink-2` で、`dd` の文字は「4.2万人」のまま。見出しが 2 行に折れても数字はタイルの下端にそろう）。一覧は自分の余白を持たず、カードの内側の余白（`.panel > *` の `margin-inline`）で縁から離す（2026-11-07 まで `margin: 0` がこの余白を打ち消し、縦 4 行が縁に付いていた。同日に 2 行 2 列へ）。数字は町の詳細の最初の 4 枚のタイルと同じ関数（`deriveTotals`・`ageShares`・`deriveSupport`）と同じ書き方（単位の分け方も `splitUnit`）で、`placeFacts.test.ts` が 3 町 × 3 年でタイルと照合する。
 
 ## 地図（`app.css`、`src/map/`）
 

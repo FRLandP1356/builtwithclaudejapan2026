@@ -1,34 +1,43 @@
-/* The four numbers of a town above the board (placeFacts.ts): a card whose band is the town's name, then four rows,
-   label on the left, mincho number on the right. Tokens only (theme.css). */
+/* The four numbers of a town above the board (placeFacts.ts): a card whose band is the town's name, then a grid of two
+   by two small tiles, the label in the note type over a mincho number with its unit smaller (the look of the kpi tiles,
+   in a lower card than the four rows it replaced on 2026-11-07). The list carries no margin of its own: the card's
+   inset (theme.css .panel > *) is what keeps it off the card's edges (a margin of its own cancelled the inset and put
+   the rows against the edges). Tokens only (theme.css). */
 
 .place-facts[hidden] {
   display: none;
 }
 .place-facts-list {
   display: grid;
-  margin: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--sp-4);
 }
+/* A tile: the label at the top, the number at the bottom, so the numbers of a row sit on one line even when one label
+   (高齢者1人を支える現役世代) takes two rows in the narrow column. */
 .place-fact {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: var(--sp-3);
+  flex-direction: column;
   padding: var(--sp-2) 0;
-  border-bottom: 1px solid var(--line);
-}
-.place-fact:last-child {
-  border-bottom: 0;
+  border-top: 1px solid var(--line);
 }
 .place-fact dt {
-  font-size: var(--fs-14);
-  color: var(--ink-2);
+  font-size: var(--fs-13);
+  color: var(--muted);
 }
 .place-fact dd {
-  margin: 0;
+  margin: auto 0 0;
+  padding-top: 2px;
   font-family: var(--font-display);
-  font-size: var(--fs-22);
+  font-size: var(--fs-26);
   font-weight: 600;
-  line-height: var(--lh-tight);
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+.place-fact-unit {
+  margin-left: 2px;
+  font-family: var(--font-body);
+  font-size: var(--fs-14);
+  font-weight: 400;
+  color: var(--ink-2);
 }
