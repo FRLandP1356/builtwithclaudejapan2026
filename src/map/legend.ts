@@ -1,8 +1,8 @@
-// Always-visible legend for the map colour. Three modes: the ratio to 2020 (default; eight classes of one indigo, paler
+// Always-visible legend for the map colour. Three modes: the ratio to 2020 (default; nine classes of one indigo, paler
 // = fewer people remain), the support ratio (people aged 15-64 per person aged 65+, six classes, closer to black = fewer)
 // and, while a reallocation is drawn, the change in percent caused by it (the diverging rust / blue scale).
-// The two sequential scales run in opposite directions, so the title that says which way sits right under the map, in
-// the body size (app.css .legend-title).
+// The two sequential scales run in opposite directions, so the title that says which way sits right under the colour
+// choice, in the body ink (app.css .legend-title). The tick labels are one row in every mode.
 import {
   allocationLegendRamp,
   allocationLegendStops,
@@ -29,8 +29,6 @@ export const SUPPORT_TITLE = '色は高齢者1人を支える人数（黒に近�
 interface RenderOptions {
   /** The first and last ticks sit on the bar's ends (aligned inward); off for ticks that all sit between classes. */
   edges: boolean;
-  /** Drop the last label a row (the end label of the ratio legend, 増えた所は一番濃い, is wider than its block). */
-  twoRowEnd: boolean;
   /** What the label reads after the title; by default the tick labels from left to right. */
   spoken?: string[];
 }
@@ -55,11 +53,7 @@ function render(el: HTMLElement, title: string, ramp: Array<{ offset: number; co
     t.className = 'legend-tick';
     t.style.left = `${(s.offset * 100).toFixed(2)}%`;
     if (opts.edges && i === 0) t.dataset.edge = 'start';
-    else if (opts.edges && i === stops.length - 1) {
-      t.dataset.edge = 'end';
-      if (opts.twoRowEnd) t.dataset.row = '2'; // the end label is wider than its block; drop it a row
-    }
-    if (s.row === 2) t.dataset.row = '2'; // a stop may ask for the second row itself (colors.ts legendStops)
+    else if (opts.edges && i === stops.length - 1) t.dataset.edge = 'end';
     t.textContent = s.label;
     ticks.append(t);
   });
@@ -75,9 +69,9 @@ export function mountLegend(el: HTMLElement): Legend {
   function apply(mode: LegendMode): void {
     current = mode;
     el.dataset.mode = mode.kind;
-    if (mode.kind === 'ratio') render(el, RATIO_TITLE, legendRamp(), legendStops(), { edges: true, twoRowEnd: true });
-    else if (mode.kind === 'support') render(el, SUPPORT_TITLE, supportLegendRamp(), supportLegendStops(), { edges: false, twoRowEnd: false, spoken: supportClassNames() });
-    else render(el, ALLOCATION_TITLE, allocationLegendRamp(mode.scale), allocationLegendStops(mode.scale), { edges: true, twoRowEnd: false });
+    if (mode.kind === 'ratio') render(el, RATIO_TITLE, legendRamp(), legendStops(), { edges: true });
+    else if (mode.kind === 'support') render(el, SUPPORT_TITLE, supportLegendRamp(), supportLegendStops(), { edges: false, spoken: supportClassNames() });
+    else render(el, ALLOCATION_TITLE, allocationLegendRamp(mode.scale), allocationLegendStops(mode.scale), { edges: true });
   }
 
   apply(current);

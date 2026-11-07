@@ -214,28 +214,26 @@ describe('allocation scale (change in percent, centred on 0)', () => {
 });
 
 describe('legendStops and legendRamp (population relative to 2020)', () => {
-  test('five labelled ticks, from the fewest remaining to the growth end, in the owner\'s words', () => {
+  test('three labelled ticks on one row (2026-11-07; five on two rows before), from the fewest remaining to the 2020 level and more', () => {
     const stops = legendStops();
-    expect(stops.map((s) => s.label)).toEqual(['16分の1以下', '4分の1', '半分', '同じ', '増えた所は一番濃い']);
-    expect(stops.map((s) => s.ratio)).toEqual([RATIO_MIN, 1 / 4, 1 / 2, NEUTRAL_RATIO, Infinity]);
+    expect(stops.map((s) => s.label)).toEqual(['16分の1以下', '半分', '同じ以上']);
+    expect(stops.map((s) => s.ratio)).toEqual([RATIO_MIN, 1 / 2, Infinity]);
     for (let i = 1; i < stops.length; i++) expect(stops[i].ratio).toBeGreaterThan(stops[i - 1].ratio);
+    expect(stops.some((s) => 'row' in s)).toBe(false); // nothing drops a row any more
   });
 
-  test('the ticks sit on block edges of the nine equal blocks, the two ends on the bar\'s ends', () => {
+  test('the ticks sit on the bar\'s two ends and on the block edge at a half (nine equal blocks)', () => {
     const stops = legendStops();
-    expect(stops.map((s) => s.offset)).toEqual([0, 3 / 9, 5 / 9, 8 / 9, 1]);
+    expect(stops.map((s) => s.offset)).toEqual([0, 5 / 9, 1]);
     for (let i = 1; i < stops.length; i++) expect(stops[i].offset).toBeGreaterThan(stops[i - 1].offset);
+    expect(changeColor(1 / 2)).toBe(CHANGE_COLORS[5]); // 半分 opens the sixth block, whose left edge the tick marks
+    expect(changeColor(NEUTRAL_RATIO)).toBe(CHANGE_COLORS[7]); // 同じ以上: the eighth block and the ninth, up to the right end
   });
 
   test('each tick carries the colour of the class it names (the first is the left-end block)', () => {
     const stops = legendStops();
     expect(stops[0].color).toBe(CHANGE_COLORS[0]);
     for (const s of stops.slice(1)) expect(s.color, s.label).toBe(changeColor(s.ratio));
-  });
-
-  test('two labels ask for the second row: the ones that would touch their neighbours on a 280px bar', () => {
-    const stops = legendStops();
-    expect(stops.filter((s) => s.row === 2).map((s) => s.label)).toEqual(['4分の1', '増えた所は一番濃い']);
   });
 
   test('the bar is one hard-edged block per class: 18 stops, equal widths, palest to darkest', () => {

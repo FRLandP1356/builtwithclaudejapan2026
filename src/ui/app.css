@@ -563,12 +563,13 @@
   border-radius: 2px;
   box-shadow: 0 0 0 1px var(--line-2); /* the palest block is white, almost the paper: the bar keeps its edge */
 }
-/* Tall enough for the labels that drop a row (the 増えた所は一番濃い end label: a 26px tick line, its gap and a 21px text
-   line), so nothing hangs out of the box into the year block below, and the row-2 label sits clear of 「同じ」 above it. */
+/* One row of labels (a 6px tick line, its gap and a 13px text line): the same height in every mode, so switching the
+   colour does not move the year block beside it. */
 .legend-ticks {
   position: relative;
-  height: 52px;
+  height: 28px;
   font-size: var(--fs-13);
+  line-height: 1.5;
   color: var(--ink-2);
 }
 .legend-tick {
@@ -599,9 +600,6 @@
 }
 .legend-tick[data-edge='end']::before {
   margin-right: 0;
-}
-.legend-tick[data-row='2']::before {
-  height: 26px;
 }
 
 /* Legend and year block: stacked on mobile, side by side from 1024px. */

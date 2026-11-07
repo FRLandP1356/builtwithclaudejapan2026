@@ -84,12 +84,13 @@ describe('app.css: the rules that behaviour depends on', () => {
     expect(shown).toMatch(/min-height:\s*var\(--touch\)/);
   });
 
-  test('the legend tick box is tall enough for the end label that drops a row', () => {
+  test('the legend tick box holds one row of labels in every mode (no label drops a row since 2026-11-07)', () => {
     const box = Number(/(?:^|;|\s)height:\s*(\d+)px/.exec(declarations('.legend-ticks'))?.[1]);
-    const line = Number(/height:\s*(\d+)px/.exec(declarations(".legend-tick[data-row='2']::before"))?.[1]);
-    expect(line).toBe(26);
-    expect(box).toBe(52);
-    expect(box).toBeGreaterThanOrEqual(line + 2 + 21); // tick line, its margin and one 21px text line
+    const line = Number(/height:\s*(\d+)px/.exec(declarations('.legend-tick::before'))?.[1]);
+    expect(line).toBe(6);
+    expect(box).toBe(28);
+    expect(box).toBeGreaterThanOrEqual(line + 2 + Math.ceil(13 * 1.5)); // tick line, its margin and one 13px text line
+    expect(css).not.toMatch(/data-row/);
   });
 
   test('the map colour choice really goes away while an allocation is drawn (the hidden rule outranks the row\'s flex display)', () => {

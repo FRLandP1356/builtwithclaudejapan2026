@@ -63,24 +63,20 @@ export interface LegendStop {
   color: string;
   /** Japanese tick label; empty string for an unlabelled tick. */
   label: string;
-  /** 2 drops the label a row (a longer tick line), for labels that would touch their neighbours on one row. */
-  row?: 1 | 2;
 }
 
 /**
- * Ticks for the population legend over nine equal blocks: the first block's label on the left end, the labelled
- * breaks at the borders between blocks, the last block's label on the right end. Only the breaks the owner named are
- * labelled (16分の1以下 / 4分の1 / 半分 / 同じ / 増えた所は一番濃い); the block edges show the other borders. Two labels
- * drop a row so that none touches its neighbour on a legend as narrow as 280px (the desktop column).
+ * Ticks for the population legend over nine equal blocks, on one row: the first block's label on the left end
+ * (16分の1以下), the break at a half between the fifth and the sixth block (半分), and the right end (同じ以上: the
+ * 2020 level and more, the two darkest blocks). Five labels on two rows until 2026-11-07; the owner asked for less to
+ * read. The block edges show the other borders; the meaning (paler = fewer remain) is the title's.
  */
 export function legendStops(): LegendStop[] {
   const n = CHANGE_COLORS.length;
   return [
     { ratio: RATIO_MIN, offset: 0, color: CHANGE_COLORS[0], label: '16分の1以下' },
-    { ratio: 1 / 4, offset: 3 / n, color: CHANGE_COLORS[3], label: '4分の1', row: 2 }, // close to the first label: a row down
     { ratio: 1 / 2, offset: 5 / n, color: CHANGE_COLORS[5], label: '半分' },
-    { ratio: NEUTRAL_RATIO, offset: 8 / n, color: CHANGE_COLORS[7], label: '同じ' },
-    { ratio: Infinity, offset: 1, color: CHANGE_COLORS[n - 1], label: '増えた所は一番濃い', row: 2 }, // wider than its block
+    { ratio: Infinity, offset: 1, color: CHANGE_COLORS[n - 1], label: '同じ以上' },
   ];
 }
 
