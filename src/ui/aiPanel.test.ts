@@ -210,11 +210,25 @@ describe('mount', () => {
     expect(m.samples().map((b) => b.textContent)).toEqual(SAMPLE_QUESTIONS);
   });
 
+  it('the intro and the line about 2050 are one paragraph (2026-11-07; two before), the only paragraph before the sample questions', () => {
+    const m = mount({ endpoint: 'https://worker.example.test/api/chat' });
+    const panel = m.q('.ai-panel');
+    const paragraphs = [...panel.children].filter((c) => c.tagName === 'P');
+    expect(paragraphs).toHaveLength(1);
+    const lead = paragraphs[0];
+    expect(lead.classList.contains('panel-lead')).toBe(true);
+    expect(lead.textContent).toBe(`${PANEL_TEXT.intro} ${PANEL_TEXT.after2050}`);
+    expect(lead.querySelector('.ai-lead-main')!.textContent).toBe(PANEL_TEXT.intro);
+    expect(lead.querySelector('.ai-lead-after')!.textContent).toBe(PANEL_TEXT.after2050);
+    expect(lead.nextElementSibling!.querySelector('.panel-section-title')!.textContent).toBe('質問の例');
+    expect(panel.querySelector(':scope > .note')).toBeNull();
+  });
+
   describe('the intro says the truth first: with no AI address named, nothing would answer', () => {
     const NOT_AVAILABLE_TEXT =
       'このバージョンでは、AIへの質問は使えません（AIの接続先がまだ用意されていません）。地図、数値、前提の調整、人口の割り振りはそのまま使えます。';
     const WORKER = 'https://worker.example.test/api/chat';
-    const lead = (m: Mounted) => m.q('.panel-lead').textContent;
+    const lead = (m: Mounted) => m.q('.ai-lead-main').textContent; // the first part of the one lead paragraph (2026-11-07)
     const PROMISE = ['日本語で質問すると', 'Claudeが', '呼び出して答えます', '照らし合わせ', '見つからない数字は知らせます'];
 
     afterEach(() => {
@@ -332,7 +346,7 @@ describe('mount', () => {
       const b = mount({ endpoint: WORKER }, makeContext(), slot);
       for (const m of [a, b]) {
         expect(m.section.querySelector('h2')!.textContent).toBe('AIに質問');
-        expect(m.q('.note').textContent).toContain('2050年より後の数字は、このアプリの試算です');
+        expect(m.q('.ai-lead-after').textContent).toContain('2050年より後の数字は、このアプリの試算です');
         expect(m.samples().map((button) => button.textContent)).toEqual(SAMPLE_QUESTIONS);
         expect(m.textarea).not.toBeNull();
         expect(m.submit.disabled).toBe(false);

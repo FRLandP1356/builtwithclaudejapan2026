@@ -215,13 +215,14 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
 
   const statusBox = h('div', { class: 'ai-status' }, statusText, cancelBtn);
 
-  const lead = h('p', { class: 'panel-lead' }, endpointNamed ? PANEL_TEXT.intro : PANEL_TEXT.introUnavailable);
+  // One paragraph (2026-11-07; two before): what the panel does (or that it is not available), then the line about 2050.
+  const leadMain = h('span', { class: 'ai-lead-main' }, endpointNamed ? PANEL_TEXT.intro : PANEL_TEXT.introUnavailable);
+  const lead = h('p', { class: 'panel-lead ai-lead' }, leadMain, ' ', h('span', { class: 'ai-lead-after' }, PANEL_TEXT.after2050));
 
   const root = h(
     'div',
     { class: 'ai-panel' },
     lead,
-    h('p', { class: 'note' }, PANEL_TEXT.after2050),
     h('div', { class: 'panel-section' }, h('h3', { class: 'panel-section-title' }, '質問の例'), samplesList),
     h('div', { class: 'panel-section' }, h('h3', { class: 'panel-section-title' }, '自分で質問する'), form),
     statusBox,
@@ -662,7 +663,7 @@ export function mountAIPanel(el: HTMLElement, ctx: PanelContext, options: AIPane
       history = shown.messages;
       // The build named no address, yet the AI just answered (a Worker is routed on this origin): it is there, so the
       // intro stops saying it is not. (When an address was named the intro already is this one.)
-      if (!shown.fromCache && (shown.status === 'ok' || shown.status === 'unverified_numbers')) lead.textContent = PANEL_TEXT.intro;
+      if (!shown.fromCache && (shown.status === 'ok' || shown.status === 'unverified_numbers')) leadMain.textContent = PANEL_TEXT.intro;
       if (from === 'typed' && (shown.status === 'ok' || shown.status === 'unverified_numbers')) {
         textarea.value = '';
         updateCounter();
