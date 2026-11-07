@@ -1198,7 +1198,10 @@ describe('mountTownPanel: the sections fold behind their headings', () => {
     expect(summary).toMatch(/border-left:\s*4px solid var\(--accent\)/);
     expect(summary).toMatch(/min-height:\s*var\(--touch\)/);
     expect(summary).toMatch(/list-style:\s*none/);
-    expect(declarations('.town-fold > summary::before')).toMatch(/border-right:\s*2px solid currentColor/);
+    const chevron = declarations('.town-fold > summary::before');
+    expect(chevron).toMatch(/border-right:\s*2px solid currentColor/);
+    expect(chevron).toMatch(/position:\s*absolute/); // in the row's padding, so a long heading wraps inside the row instead of under a lone chevron
+    expect(summary).toMatch(/position:\s*relative/);
     expect(declarations('.town-fold[open] > summary::before')).toMatch(/rotate\(45deg\)/);
     const h3 = declarations('.town-fold > summary > .panel-section-title');
     expect(h3).toMatch(/margin:\s*0/);

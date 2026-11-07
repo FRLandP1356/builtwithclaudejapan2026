@@ -184,6 +184,9 @@
   gap: var(--sp-1);
   margin-top: var(--sp-4);
 }
+.alloc-terms > summary {
+  font-size: var(--fs-14); /* a disclosure among the notes: the note's row, like the marks' under the assumptions */
+}
 .alloc-terms > .note + .note {
   margin-top: var(--sp-1);
 }

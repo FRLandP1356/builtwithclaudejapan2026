@@ -34,12 +34,13 @@
    section is closed, one line of its gist in the second ink. Open, the gist goes: the section speaks for itself. Closed
    rows stand close together; an open section keeps the band's room below it. */
 .town-fold > summary {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0 var(--sp-3);
   min-height: var(--touch);
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-3) var(--sp-2) calc(var(--sp-3) + 7px + var(--sp-2));
   background: var(--accent-soft);
   border-left: 4px solid var(--accent);
   list-style: none;
@@ -48,18 +49,22 @@
 .town-fold > summary::-webkit-details-marker {
   display: none;
 }
+/* The chevron sits in the row's left padding, on the middle of the heading's first line (16px type, 1.3 leading),
+   not as a flex item: a long heading (いま、この規模の市町村は、1人あたりこれだけ使っています) then wraps inside the row
+   instead of dropping to a second line under a chevron left alone on the first. */
 .town-fold > summary::before {
   content: '';
-  flex: none;
-  align-self: center;
+  position: absolute;
+  left: var(--sp-3);
+  top: calc(var(--sp-2) + 0.65em);
   width: 7px;
   height: 7px;
   border-right: 2px solid currentColor;
   border-bottom: 2px solid currentColor;
-  transform: rotate(-45deg);
+  transform: translateY(-50%) rotate(-45deg);
 }
 .town-fold[open] > summary::before {
-  transform: rotate(45deg);
+  transform: translateY(-50%) rotate(45deg);
 }
 .town-fold > summary > .panel-section-title {
   margin: 0;
