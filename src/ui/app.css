@@ -430,16 +430,47 @@
 .alloc-bar .btn {
   min-height: 40px; /* a quieter row than the 44px default, still a comfortable target */
 }
-/* What the map colours by: the shared segmented choice (theme.css .choice) right above the map. Hidden while an
-   allocation is drawn, because the allocation's colours win then. */
+/* What the map colours by: the first row of the legend block under the map, 「色の見方」 and a light two-way choice
+   (theme.css .choice without its box: plain words, the chosen one in the ink and underlined; each a 44px target).
+   Hidden while an allocation is drawn, because the allocation's colours win then. */
 .map-mode {
-  padding: 0 0 var(--sp-2);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--sp-3);
 }
 .map-mode[hidden] {
   display: none;
 }
+.map-mode-label {
+  font-size: var(--fs-14);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.map-mode .choice {
+  border: 0;
+  border-radius: 0;
+  gap: var(--sp-2);
+}
 .map-mode .choice button {
-  font-size: var(--fs-15);
+  min-height: var(--touch);
+  padding: 0 var(--sp-1);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-14);
+  text-underline-offset: 0.35em;
+  text-decoration-thickness: 2px;
+}
+.map-mode .choice button:hover {
+  background: var(--paper-2);
+}
+.map-mode .choice button[aria-pressed='true'] {
+  background: transparent;
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: underline;
 }
 .inset-bg {
   fill: var(--map-sea);
@@ -508,13 +539,19 @@
   margin-top: var(--sp-3);
 }
 
-/* Legend. The two sequential scales (population: paler = fewer; support ratio: closer to black = fewer) run in opposite
-   directions, so the title that says which way is in the body size and the body ink, right under the map. */
+/* The legend block under the map: the colour choice (above), then the legend. The two sequential scales (population:
+   paler = fewer; support ratio: closer to black = fewer) run in opposite directions, so the title that says which way
+   is in the body ink, right under the choice. */
+.legend-block {
+  display: grid;
+  gap: var(--sp-1);
+  padding: var(--sp-2) 0 0;
+}
 .legend {
-  padding: var(--sp-3) 0 0;
+  padding: 0;
 }
 .legend-title {
-  font-size: var(--fs-16);
+  font-size: var(--fs-15);
   line-height: 1.5;
   color: var(--ink);
   word-break: auto-phrase; /* wraps between phrases in Chromium (どれだけ残るか | 薄いほど), anywhere elsewhere */
@@ -762,29 +799,33 @@
   .map-svg {
     max-height: max(360px, calc(100vh - 395px));
   }
+  /* The legend block (the colour choice, the title on one line, the bar, the ticks) on the left, the year on the
+     right; the legend's side is the wider one so the title 「色は2020年の人口に対して、どれだけ残るか（薄いほど少ない）」 keeps
+     one row from 1280px. The year stacks its numeral over the slider, so the slider keeps its length on the narrower side. */
   .map-foot {
-    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
     gap: var(--sp-5);
     align-items: start;
   }
   .year {
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      'value controls'
-      '. note';
-    align-items: center;
+      'value'
+      'controls'
+      'note';
     margin-top: var(--sp-2);
     padding-top: var(--sp-3);
-  }
-  .year-controls {
-    margin-top: 0;
   }
   .year-note {
     margin-top: 0; /* its own grid row under the tick row; never overlaps the ticks */
   }
-  .legend {
+  .legend-block {
     padding-top: var(--sp-3);
     border-top: 1px solid var(--line);
     margin-top: var(--sp-2);
+  }
+  .legend-title {
+    font-size: var(--fs-14);
   }
 }
 /* Between 1024 and 1280px the legend's title wraps to three lines and the legend is 25px taller: the map gives that up,

@@ -92,9 +92,22 @@ describe('app.css: the rules that behaviour depends on', () => {
     expect(box).toBeGreaterThanOrEqual(line + 2 + 21); // tick line, its margin and one 21px text line
   });
 
-  test('the map colour choice really goes away while an allocation is drawn (the hidden attribute is not overridden)', () => {
+  test('the map colour choice really goes away while an allocation is drawn (the hidden rule outranks the row\'s flex display)', () => {
     expect(declarations('.map-mode[hidden]')).toMatch(/display:\s*none/);
-    expect(declarations('.map-mode')).not.toMatch(/display:/);
+    expect(declarations('.map-mode')).toMatch(/display:\s*flex/); // the row 「色の見方」 + the choice (2026-11-07); [hidden] is more specific
+  });
+
+  test('the colour choice is light (2026-11-07): no box, plain words in the second ink, the chosen one in the ink and underlined, each a 44px target', () => {
+    expect(declarations('.map-mode .choice')).toMatch(/border:\s*0/);
+    const button = declarations('.map-mode .choice button');
+    expect(button).toMatch(/min-height:\s*var\(--touch\)/);
+    expect(button).toMatch(/background:\s*transparent/);
+    expect(button).toMatch(/color:\s*var\(--ink-2\)/);
+    const pressed = declarations(".map-mode .choice button[aria-pressed='true']");
+    expect(pressed).toMatch(/background:\s*transparent/); // not the black fill of the shared choice
+    expect(pressed).toMatch(/color:\s*var\(--ink\)/);
+    expect(pressed).toMatch(/text-decoration:\s*underline/);
+    expect(declarations('.map-mode-label')).toMatch(/color:\s*var\(--ink-2\)/);
   });
 
   test('on a desktop the map leaves room for everything else of the first view, the band and the colour choice included (395px since the menu left the band)', () => {

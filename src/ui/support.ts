@@ -26,8 +26,8 @@ export const SUPPORT_CHART: SeriesChartSpec = {
   tableNote: SUPPORT_TABLE_NOTE,
 };
 
-/** The segmented control above the map: its group label and the two buttons' text. */
-export const MAP_MODE_GROUP = '地図の色';
+/** The two-way choice in the legend row under the map: its label (shown, and the group's name) and the two buttons' text. */
+export const MAP_MODE_GROUP = '色の見方';
 export const MAP_MODE_LABELS: Readonly<Record<MapMode, string>> = {
   change: '人口の変化',
   support: '高齢者1人を支える人数',

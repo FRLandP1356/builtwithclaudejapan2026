@@ -1107,13 +1107,18 @@ describe('the map colour mode: the change since 2020 or the support ratio', () =
   const buttons = (root: HTMLElement) => [...root.querySelectorAll<HTMLButtonElement>('.map-mode .choice button')];
   const pressed = (root: HTMLElement) => buttons(root).map((b) => b.getAttribute('aria-pressed'));
 
-  test('a two-way choice right above the map, the change since 2020 pressed, both plain buttons in the Tab order', async () => {
+  test('a two-way choice labelled 色の見方 in the legend row under the map (since 2026-11-07), the change since 2020 pressed, both plain buttons in the Tab order', async () => {
     const { root, store } = await mount();
     const box = root.querySelector<HTMLElement>('.map-mode')!;
-    expect(box.nextElementSibling).toBe(root.querySelector('.map-stage'));
+    const block = root.querySelector<HTMLElement>('.map-foot > .legend-block')!;
+    expect(box.parentElement).toBe(block);
+    expect(box.nextElementSibling).toBe(root.querySelector('.legend')); // the choice, then the legend it switches
+    expect(root.querySelector('.map-stage')!.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); // under the map
     const group = box.querySelector('.choice')!;
     expect(group.getAttribute('role')).toBe('group');
-    expect(group.getAttribute('aria-label')).toBe('地図の色');
+    const label = root.querySelector(`#${group.getAttribute('aria-labelledby')}`)!;
+    expect(label.textContent).toBe('色の見方');
+    expect(box.contains(label)).toBe(true); // the label is on the screen, in the row
     expect(buttons(root).map((b) => b.textContent)).toEqual(['人口の変化', '高齢者1人を支える人数']);
     expect(pressed(root)).toEqual(['true', 'false']);
     for (const b of buttons(root)) {

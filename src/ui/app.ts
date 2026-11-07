@@ -7,9 +7,10 @@
 // 「くわしく見る」, each a light row (name and a few grey words) until its row is pressed; then it opens as a card.
 // While `store.get().allocation` is set the maps colour by the allocation's change in percent, draw rings on the towns
 // that crossed a focused facility's guide and count markers per prefecture, and the headline says 割り振り後.
-// Otherwise a segmented control above the map chooses what the maps colour by (`store.get().mapMode`): the change since
-// 2020 (default) or the support ratio, people aged 15-64 per person aged 65+; the headline, the tooltips, the areas'
-// labels and the legend follow it. The control is hidden while an allocation is drawn (the allocation wins).
+// Otherwise a two-way choice in the legend row under the map (「色の見方」) chooses what the maps colour by
+// (`store.get().mapMode`): the change since 2020 (default) or the support ratio, people aged 15-64 per person aged
+// 65+; the headline, the tooltips, the areas' labels and the legend follow it. The choice is hidden while an allocation
+// is drawn (the allocation wins).
 import type { Topology } from 'topojson-specification';
 import { loadAll, loadPrefGeo, type AppData, type LoadOptions } from '../data/loader';
 import { createRunner } from '../data/runner';
@@ -265,18 +266,21 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
           <span class="alloc-bar-stale note" hidden></span>
           <button type="button" class="btn btn-quiet alloc-clear">${ALLOC_CLEAR}</button>
         </div>
-        <div class="map-mode">
-          <div class="choice" role="group" aria-label="${MAP_MODE_GROUP}">${MAP_MODES.map(
-            (m) => `<button type="button" data-map-mode="${m}" aria-pressed="false">${MAP_MODE_LABELS[m]}</button>`,
-          ).join('')}</div>
-        </div>
         <div class="map-stage">
           <a class="skip-link" href="#year-range">${SKIP_TO_YEAR}</a>
           <div class="map-host map-host-national"></div>
           <div class="map-overlay" hidden></div>
         </div>
         <div class="map-foot">
-          <div class="legend-slot"></div>
+          <div class="legend-block">
+            <div class="map-mode">
+              <span class="map-mode-label" id="map-mode-label">${MAP_MODE_GROUP}</span>
+              <div class="choice" role="group" aria-labelledby="map-mode-label">${MAP_MODES.map(
+                (m) => `<button type="button" data-map-mode="${m}" aria-pressed="false">${MAP_MODE_LABELS[m]}</button>`,
+              ).join('')}</div>
+            </div>
+            <div class="legend-slot"></div>
+          </div>
           <div class="year-slot"></div>
         </div>
       </section>
