@@ -138,20 +138,21 @@ describe('a prefecture with quotations (高知県)', () => {
 });
 
 describe('the other prefectures that have quotations', () => {
-  test('愛媛県: eleven; the same four-prefecture sentences as 高知県 come first, so the common sentence is in each', () => {
+  test('愛媛県: all of its quotations; the same four-prefecture sentences as 高知県 come first, so the common sentence is in each', () => {
     const { all } = setup({ selectedPref: '38' });
-    expect(all()).toHaveLength(11);
+    expect(all()).toHaveLength(ofPref('38').length);
     expect(all().map((li) => li.dataset.id)).toEqual(ofPref('38').map((c) => c.id));
     expect(all().map((li) => li.dataset.id)).toContain('jrs-all-common');
   });
 
-  test('和歌山県: three, all shown, no fold', () => {
+  test('和歌山県: the first five shown, the rest folded; the card\'s own notes follow this section', () => {
     const { claims, q, shown, folded } = setup({ selectedPref: '30' });
+    const want = ofPref('30');
     expect(claims().hidden).toBe(false);
-    expect(shown().map((li) => li.dataset.id)).toEqual(['wak-kumano', 'wak-pref-transit', 'wak-koya-shops']);
-    expect(folded()).toHaveLength(0);
-    expect(q('.claims-more')!.hidden).toBe(true);
-    expect(q('.claims-more summary')!.textContent).toBe('');
+    expect(shown().map((li) => li.dataset.id)).toEqual(want.slice(0, 5).map((c) => c.id));
+    expect(shown().map((li) => li.dataset.id).slice(0, 3)).toEqual(['wak-kumano', 'wak-pref-transit', 'wak-koya-shops']);
+    expect(folded()).toHaveLength(want.length - 5);
+    expect(q('.claims-more')!.hidden).toBe(false);
     // the card's own notes start under the rule only after the last section shown (CSS): here that is this one
     expect(claims().nextElementSibling).toBe(q('.board-already'));
   });
@@ -174,8 +175,8 @@ describe('hidden, and without a word saying so', () => {
     expect(visibleText(section)).toContain(CLAIMS_NOTE);
   });
 
-  test('a prefecture without a quotation (東京都 and 北海道): the section is hidden and empty, nothing says 「ありません」', () => {
-    for (const p of ['13', '01', '27']) {
+  test('a prefecture without a quotation (東京都, 神奈川県, 沖縄県): the section is hidden and empty, nothing says 「ありません」', () => {
+    for (const p of ['13', '14', '47']) {
       const { claims, all, section } = setup({ selectedPref: p });
       expect(claims().hidden, p).toBe(true);
       expect(all(), p).toEqual([]);
@@ -229,7 +230,7 @@ describe('hidden, and without a word saying so', () => {
     expect(all()).toEqual([]);
     store.set({ selectedPref: '30' });
     expect(claims().hidden).toBe(false);
-    expect(all()).toHaveLength(3);
+    expect(all()).toHaveLength(ofPref('30').length);
     store.set({ selectedArea: '30206' });
     expect(claims().hidden).toBe(true);
     store.set({ selectedPref: undefined });
@@ -255,7 +256,7 @@ describe('the data is shown as written', () => {
 
   test('every quotation of the real file appears word for word, between 「」, in each prefecture it names', () => {
     const prefs = new Set(real.flatMap((c) => c.prefCodes));
-    expect(prefs.size).toBe(15);
+    expect(prefs.size).toBe(22);
     for (const p of [...prefs].sort()) {
       const { all } = setup({ selectedPref: p });
       const want = ofPref(p);
@@ -310,7 +311,8 @@ describe('wording of the card with the section in it', () => {
       for (const w of OWN_WORDS_BANNED) expect(own.textContent, `${w} in the section for ${p}`).not.toContain(w);
       // the whole card, the same way
       const card = section.cloneNode(true) as HTMLElement;
-      for (const el of card.querySelectorAll('.claim-quote, .claim-subject')) el.remove();
+      // the data of the other sections is text written by others too: the claims' quotations and subjects, the places' names and sentences
+      for (const el of card.querySelectorAll('.claim-quote, .claim-subject, .landmark-list')) el.remove();
       for (const w of ['残せない', '閉鎖', '撤退', '廃止', '予測', '私', 'べき', 'おすすめ', '勧め', '→', '①', '②']) {
         expect(card.textContent, `${w} in the card for ${p}`).not.toContain(w);
       }

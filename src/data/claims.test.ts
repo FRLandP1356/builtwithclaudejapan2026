@@ -104,10 +104,10 @@ describe('public/data/claims.json against the real prefectures', () => {
   const items = loadClaims((p) => prefs.has(p));
   const index = indexClaims(items);
 
-  test('34 items, none dropped by the shape check, no id twice', () => {
-    expect(rawClaimsFile().items).toHaveLength(34);
-    expect(items).toHaveLength(34);
-    expect(new Set(items.map((c) => c.id)).size).toBe(34);
+  test('50 items, none dropped by the shape check, no id twice', () => {
+    expect(rawClaimsFile().items).toHaveLength(50);
+    expect(items).toHaveLength(50);
+    expect(new Set(items.map((c) => c.id)).size).toBe(50);
   });
 
   test('every source is an https URL, every quote is at most 80 characters, every stance is one of the two', () => {
@@ -119,11 +119,13 @@ describe('public/data/claims.json against the real prefectures', () => {
     }
   });
 
-  test('the prefectures with claims: 15 of them; the four of 四国 have 11 each, 和歌山県 has 3 and 東京都 and 北海道 have none', () => {
-    expect([...index.byPref.keys()].sort()).toEqual(['02', '03', '12', '15', '19', '20', '28', '30', '33', '34', '36', '37', '38', '39', '42']);
-    for (const p of ['36', '37', '38', '39']) expect(claimsOfPref(index, p), p).toHaveLength(11);
-    expect(claimsOfPref(index, '30').map((c) => c.id)).toEqual(['wak-kumano', 'wak-pref-transit', 'wak-koya-shops']);
-    expect(claimsOfPref(index, '13')).toEqual([]);
-    expect(claimsOfPref(index, '01')).toEqual([]);
+  test('the prefectures with claims: 22 of them; 徳島・香川・高知 have 11 each, 愛媛県 13, 和歌山県 7, and 東京都・神奈川県・沖縄県 have none', () => {
+    expect([...index.byPref.keys()].sort()).toEqual(['01', '02', '03', '05', '06', '12', '15', '19', '20', '24', '27', '28', '30', '32', '33', '34', '35', '36', '37', '38', '39', '42']);
+    for (const p of ['36', '37', '39']) expect(claimsOfPref(index, p), p).toHaveLength(11);
+    expect(claimsOfPref(index, '38')).toHaveLength(13);
+    const wakayama = claimsOfPref(index, '30').map((c) => c.id);
+    expect(wakayama).toHaveLength(7);
+    expect(wakayama.slice(0, 3)).toEqual(['wak-kumano', 'wak-pref-transit', 'wak-koya-shops']);
+    for (const p of ['13', '14', '47']) expect(claimsOfPref(index, p), p).toEqual([]);
   });
 });
