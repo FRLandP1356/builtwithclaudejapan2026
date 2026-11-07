@@ -34,7 +34,7 @@ afterEach(() => {
 });
 
 describe('what the panel shows', () => {
-  test('the country (nothing selected): the heading, 16 bars, the six earliest rows, the rest folded, what is already below', () => {
+  test('the country (nothing selected): the heading, 16 bars, the three earliest rows, the rest folded, what is already below', () => {
     const { q, qa, rows } = setup({ year: 2050 });
     expect(q('.board-heading')!.textContent).toBe('日本全体で、人口の目安を下回っていく順番');
     expect(qa('.board-bars > .board-bar')).toHaveLength(16);
@@ -46,8 +46,8 @@ describe('what the panel shows', () => {
     expect(rows()[0]).toBe('2025年 飲食料品小売業 売木村（長野県） ほか2町');
     const more = q<HTMLDetailsElement>('.board-more')!;
     expect(more.hidden).toBe(false);
-    expect(more.querySelector('summary')!.textContent).toBe('続きを見る（残り122件）');
-    expect(more.querySelectorAll('.board-row')).toHaveLength(122);
+    expect(more.querySelector('summary')!.textContent).toBe('続きを見る（残り125件）'); // 128 rows, 3 shown (6 until 2026-11-07)
+    expect(more.querySelectorAll('.board-row')).toHaveLength(125);
     expect(q('.board-others')!.hasAttribute('hidden')).toBe(true);
     expect(q('.board-already')!.textContent).toBe('2020年の時点で、すでに主な8施設のいずれかの目安を下回る：470町');
     expect(q('.board-note')!.textContent).toBe(BOARD_GUIDE_NOTE);
@@ -83,6 +83,22 @@ describe('what the panel shows', () => {
     // a row's data attributes name the year, the facility and the town, for the disclosure and for tests
     const first = others.querySelector<HTMLElement>('.board-row')!;
     expect(first.dataset).toMatchObject({ year: '2035', facility: 'wedding_hall', area: '30206' });
+  });
+
+  test('rows of one year read as a group: a row whose year is the row\'s above is marked, its year still in the text; the folded list starts afresh', () => {
+    const { q, qa, rows } = setup({ year: 2050 });
+    const shown = qa<HTMLElement>(':scope > .board > .board-list > .board-row');
+    expect(shown.map((li) => li.dataset.year)).toEqual(['2025', '2025', '2025']);
+    expect(shown.map((li) => li.classList.contains('is-same-year'))).toEqual([false, true, true]);
+    expect(rows()).toEqual(['2025年 飲食料品小売業 売木村（長野県） ほか2町', '2025年 郵便局 売木村（長野県） ほか2町', '2025年 銀行（中央銀行を除く） 久万高原町（愛媛県） ほか42町']);
+    const folded = qa<HTMLElement>('.board-more .board-row');
+    expect(folded[0].dataset.year).toBe('2025'); // the same year as the last shown row, but the first of its list
+    expect(folded[0].classList.contains('is-same-year')).toBe(false);
+    const firstNewYear = folded.findIndex((li) => li.dataset.year !== '2025');
+    expect(firstNewYear).toBeGreaterThan(0);
+    expect(folded[firstNewYear].classList.contains('is-same-year')).toBe(false);
+    expect(folded[firstNewYear - 1].classList.contains('is-same-year')).toBe(true);
+    expect(q('.board-more')!.textContent).toContain(`${folded[firstNewYear].dataset.year}年`);
   });
 
   test('a row after 2050 carries the 試算 mark; one up to 2050 does not', () => {

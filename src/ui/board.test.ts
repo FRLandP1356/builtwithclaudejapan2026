@@ -17,6 +17,7 @@ import {
   boardHeading,
   essentialFacilities,
   moreText,
+  repeatedYears,
   scopeGroups,
   scopeRows,
   townRows,
@@ -58,6 +59,14 @@ describe('wording', () => {
     expect(barsSummary({ bars: [bars.bars[1]], max: 6 }, '種類')).toBe('いちばん多いのは2030年（6種類）。');
     expect(barsSummary({ bars: [], max: 0 }, '町')).toBe('どの年にも、新しく下回るものはありません。');
     expect(moreText(12)).toBe('続きを見る（残り12件）');
+  });
+
+  test('three rows show before the fold (2026-11-07), and a row repeats the year of the one before it only inside its list', () => {
+    expect(BOARD_ROWS).toBe(3);
+    const y = (...years: number[]) => years.map((year) => ({ year }));
+    expect(repeatedYears(y(2025, 2025, 2025, 2030, 2030, 2035))).toEqual([false, true, true, false, true, false]);
+    expect(repeatedYears(y(2025))).toEqual([false]);
+    expect(repeatedYears([])).toEqual([]);
   });
 
   test('nothing here says 残せない, 閉鎖, 撤退, 廃止, 予測 or 私, and nothing advises', () => {

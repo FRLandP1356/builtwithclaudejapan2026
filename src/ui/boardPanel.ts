@@ -36,6 +36,7 @@ import {
   boardHeading,
   essentialFacilities,
   moreText,
+  repeatedYears,
   scopeGroups,
   scopeRows,
   townRows,
@@ -154,9 +155,13 @@ function markYear(strip: Strip, year: number): void {
 // The list
 // ---------------------------------------------------------------------------------------------------------------
 
-/** One line of the list: the year (with the 試算 mark after 2050), the facility and, for a scope, the town; then the disclosure. */
-export function buildRow(row: BoardRow, keep?: (row: BoardRow) => BoardKeep): HTMLLIElement {
+/**
+ * One line of the list: the year (with the 試算 mark after 2050), the facility and, for a scope, the town; then the
+ * disclosure. `sameYear` (the row before it in its list has this year) only dims the year: the text stays.
+ */
+export function buildRow(row: BoardRow, keep?: (row: BoardRow) => BoardKeep, sameYear = false): HTMLLIElement {
   const li = h('li', 'board-row');
+  if (sameYear) li.classList.add('is-same-year');
   li.dataset.year = String(row.year);
   li.dataset.facility = row.facilityId;
   li.dataset.area = row.leadCode;
@@ -237,7 +242,8 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
   };
 
   function fillList(target: HTMLOListElement, rows: BoardRow[]): void {
-    target.replaceChildren(...rows.map((r) => buildRow(r, makeKeep)));
+    const repeats = repeatedYears(rows);
+    target.replaceChildren(...rows.map((r, i) => buildRow(r, makeKeep, repeats[i])));
   }
 
   function render(s: AppState): void {

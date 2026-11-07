@@ -117,6 +117,12 @@
 .board-row-year .badge-estimate {
   vertical-align: 0.15em;
 }
+/* A row whose year is the row's above: the year is dimmed, so the rows of one year read as a group under the first;
+   the text stays (a screen reader hears every row's year). */
+.board-row.is-same-year .board-row-year {
+  color: var(--muted);
+  font-weight: 400;
+}
 .board-row-what {
   min-width: 0;
 }

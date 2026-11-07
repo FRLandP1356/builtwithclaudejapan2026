@@ -19,8 +19,17 @@ import { OFFICIAL_END_YEAR } from './sources';
 // ---------------------------------------------------------------------------------------------------------------
 
 export const BOARD_TITLE = '分かれ目';
-/** The number of rows the list shows before the rest is folded away. */
-export const BOARD_ROWS = 6;
+/** The number of rows the list shows before the rest is folded away (six until 2026-11-07; the owner asked for less on the first screen). */
+export const BOARD_ROWS = 3;
+
+/**
+ * Which rows of a list repeat the year of the row right before them. The first row of a list never does (a list
+ * starts with its year in full, the folded rest too). Rows of one year then read as a group: the year is dimmed on
+ * the repeats, never dropped (the row still says its year to a screen reader).
+ */
+export function repeatedYears(rows: readonly Pick<BoardRow, 'year'>[]): boolean[] {
+  return rows.map((r, i) => i > 0 && r.year === rows[i - 1].year);
+}
 
 /** The line under the title: what the list is, for the place on screen. */
 export function boardHeading(level: Level, name: string): string {
