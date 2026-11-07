@@ -256,11 +256,13 @@
 
 /* The folded parts (the rest of the list, the other facilities): the same disclosure mark as the other panels. */
 .board-more,
-.board-others {
+.board-others,
+.claims-more {
   margin-top: var(--sp-2);
 }
 .board-more > summary,
-.board-others > summary {
+.board-others > summary,
+.claims-more > summary {
   display: flex;
   align-items: center;
   min-height: var(--touch);
@@ -270,11 +272,13 @@
   list-style: none;
 }
 .board-more > summary::-webkit-details-marker,
-.board-others > summary::-webkit-details-marker {
+.board-others > summary::-webkit-details-marker,
+.claims-more > summary::-webkit-details-marker {
   display: none;
 }
 .board-more > summary::before,
-.board-others > summary::before {
+.board-others > summary::before,
+.claims-more > summary::before {
   content: '';
   flex: none;
   width: 7px;
@@ -285,11 +289,13 @@
   transform: rotate(-45deg);
 }
 .board-more[open] > summary::before,
-.board-others[open] > summary::before {
+.board-others[open] > summary::before,
+.claims-more[open] > summary::before {
   transform: rotate(45deg);
 }
 .board-more > .board-list,
-.board-others > .board-list {
+.board-others > .board-list,
+.claims-more > .claim-list {
   margin-top: 0;
 }
 
@@ -301,9 +307,11 @@
 .board-essential-note {
   margin-top: var(--sp-1);
 }
-/* After the section 「ここにある有名なもの」 (landmarks.css) the card's own notes start under a rule, so they read as the
-   card's and not as the list's. */
-.landmarks:not([hidden]) + .board-already {
+/* After the sections 「ここにある有名なもの」 (landmarks.css) and 「公表資料に書かれていること」 (claims.css) the card's own
+   notes start under a rule, so they read as the card's and not as the lists'. The claims section sits between the two and is
+   hidden for a town and for a prefecture without a quotation, so the rule follows whichever of the two is the last one shown. */
+.landmarks:not([hidden]) + .claims[hidden] + .board-already,
+.claims:not([hidden]) + .board-already {
   margin-top: var(--sp-5);
   padding-top: var(--sp-4);
   border-top: 1px solid var(--line-2);

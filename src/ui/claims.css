@@ -1,0 +1,53 @@
+/* 「公表資料に書かれていること」 inside the 分かれ目 card (claims.ts). Tokens only: every colour, size and space comes from
+   theme.css (see DESIGN.md). The list is ruled like the landmarks' list and the stance is the existing .tag in plain ink, so
+   nothing is coloured by stance. What makes a quotation read as one is a left rule in the line colour (not the accent, which
+   the title strip and the links own) and the 「」 the text carries. The whole section is one column at every width, so the
+   sentence keeps the width a phone has. The 「続きを見る」 fold is styled with the board's own (boardPanel.css). */
+
+.claims {
+  margin-bottom: var(--sp-5); /* the card's own notes under the section stay apart from the section's last item */
+}
+.claims-note {
+  margin: 0 0 var(--sp-3);
+}
+.claim-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line-2);
+}
+.claim {
+  display: grid;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.claim-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-2);
+}
+.claim-subject {
+  min-width: 0;
+  font-size: var(--fs-15);
+  font-weight: 600;
+  overflow-wrap: anywhere; /* a long subject wraps; it never widens the card */
+}
+.claim-stance {
+  flex: none;
+}
+/* The publisher's sentence: a quotation, set apart by a rule on its left; the user agent's own margins are cleared. */
+.claim-quote {
+  margin: 0;
+  padding: var(--sp-1) 0 var(--sp-1) var(--sp-3);
+  border-left: 3px solid var(--line-2);
+  font-size: var(--fs-15);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  word-break: auto-phrase;
+}
+.claim-source {
+  overflow-wrap: anywhere; /* a long source label may break anywhere: no horizontal scroll */
+}

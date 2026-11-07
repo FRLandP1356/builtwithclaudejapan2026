@@ -64,10 +64,11 @@ describe('a prefecture (和歌山県)', () => {
     for (const li of items()) expect([...li.querySelector('.landmark-kind')!.classList]).toEqual(['tag', 'landmark-kind']);
   });
 
-  test('the section sits after the rows (and their fold) and before the card\'s notes, with its own note at the end', () => {
+  test('the section sits after the rows (and their fold) and before the claims section, which comes before the card\'s notes; its own note is at the end', () => {
     const { q, landmarks } = setup({ selectedPref: '30' });
     expect(landmarks().previousElementSibling).toBe(q('.board-others'));
-    expect(landmarks().nextElementSibling).toBe(q('.board-already'));
+    expect(landmarks().nextElementSibling).toBe(q('.claims'));
+    expect(q('.claims')!.nextElementSibling).toBe(q('.board-already'));
     expect(landmarks().lastElementChild!.className).toBe('note landmarks-note');
     expect(landmarks().lastElementChild!.textContent).toBe(LANDMARKS_NOTE);
     expect(landmarks().firstElementChild!.tagName).toBe('H3');

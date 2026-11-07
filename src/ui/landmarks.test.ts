@@ -127,9 +127,9 @@ describe('landmarks.css: tokens only, a ruled list, a left column from 600px, lo
     expect(declarations('.landmarks-note')).toMatch(/margin-top:\s*var\(--sp-3\)/);
   });
 
-  test('boardPanel.css: after a shown section, the card\'s first note starts under a rule, so it reads as the card\'s and not the list\'s', () => {
+  test('boardPanel.css: after a shown section, the card\'s first note starts under a rule, so it reads as the card\'s and not the list\'s (the claims section sits between, hidden or not)', () => {
     const board = readFileSync(repoPath('src/ui/boardPanel.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-    const m = board.match(/\.landmarks:not\(\[hidden\]\) \+ \.board-already \{([^}]*)\}/);
+    const m = board.match(/\.landmarks:not\(\[hidden\]\) \+ \.claims\[hidden\] \+ \.board-already,\s*\.claims:not\(\[hidden\]\) \+ \.board-already \{([^}]*)\}/);
     expect(m).not.toBeNull();
     expect(m![1]).toMatch(/border-top:\s*1px solid var\(--line-2\)/);
     expect(m![1]).toMatch(/padding-top:\s*var\(--sp-4\)/);

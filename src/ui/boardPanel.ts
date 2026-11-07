@@ -10,8 +10,13 @@
 // After the rows, for a prefecture or a town, the section 「ここにある有名なもの」 (landmarks.ts) lists the famous places
 // and things that are there, with their sources: context, listed as facts, tied to no row and no guide.
 //
+// After that, for a prefecture only, the section 「公表資料に書かれていること」 (claims.ts) quotes, word for word and with the
+// document they come from, what published documents say about population decline for the prefecture. The app quotes; the
+// quotations are not its forecast and are tied to no row and no guide.
+//
 // Built once; a new selection or a new scenario rebuilds the strip and the list, a new year only moves the mark on the
 // strip. `mountBoardPanel` returns its teardown.
+import { indexClaims } from '../data/claims';
 import { indexLandmarks, landmarksOf } from '../data/landmarks';
 import {
   alreadyBelowAreas,
@@ -38,6 +43,7 @@ import {
   type BoardRow,
 } from './board';
 import { createBoardKeep, type BoardKeep, type BoardKeepContext } from './boardKeep';
+import { createClaimSection } from './claims';
 import { deriveTotals } from './derive';
 import { formatCount } from './format';
 import { createLandmarkSection, rowLandmarksText } from './landmarks';
@@ -186,6 +192,8 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
     areaName: (code) => areaByCode.get(code)?.name,
     select: (l) => store.set(pickArea({ code: l.areaCode, prefCode: l.prefCode })),
   });
+  // The claims file is optional too: without it the index is empty and the section stays hidden.
+  const claims = createClaimSection({ index: indexClaims(data.claims ?? []) });
 
   const root = h('div', 'board');
   const heading = h('h3', 'board-heading');
@@ -207,7 +215,7 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
   const essentialNote = h('p', 'note board-essential-note', BOARD_ESSENTIAL_NOTE);
   const guide = h('p', 'note board-note');
   guide.replaceChildren(...phraseNodes(BOARD_GUIDE_NOTE));
-  root.append(heading, strip.root, list, none, more, others, landmarks.root, already, essentialNote, guide);
+  root.append(heading, strip.root, list, none, more, others, landmarks.root, claims.root, already, essentialNote, guide);
   el.append(root);
 
   let scope: TownScope | undefined;
@@ -278,6 +286,7 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
     }
     paintStrip(strip, bars, sc.level, s.year);
     landmarks.render(sc.level, sc.key);
+    claims.render(sc.level, sc.key);
   }
 
   render(store.get());
