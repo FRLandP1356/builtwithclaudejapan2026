@@ -119,7 +119,8 @@ describe('app.css: the rules that behaviour depends on', () => {
     expect(declarations('.map-mode-label')).toMatch(/color:\s*var\(--ink-2\)/);
   });
 
-  test('on a desktop the map leaves room for everything else of the first view, the band and the colour choice included (395px since the menu left the band)', () => {
-    expect(declarations('.map-svg')).toMatch(/max-height:\s*max\(360px, calc\(100vh - 395px\)\)/);
+  test('on a desktop the map leaves room for everything else of the first view (340px since the colour choice moved into the foot and the place bar hides on the country, 2026-11-07; 400px between 1024 and 1280px where the lines wrap)', () => {
+    expect(declarations('.map-svg')).toMatch(/max-height:\s*max\(360px, calc\(100vh - 340px\)\)/);
+    expect(css).toMatch(/@media \(min-width: 1024px\) and \(max-width: 1279\.98px\) \{\s*\.map-svg \{\s*max-height:\s*max\(360px, calc\(100vh - 400px\)\);/);
   });
 });

@@ -9,6 +9,7 @@
   font-weight: 600;
   line-height: var(--lh-tight);
   text-wrap: balance;
+  word-break: auto-phrase; /* 「人口の目安を | 下回っていく順番」, not 「人口の目 | 安を」 at 390px (Chromium; anywhere elsewhere) */
 }
 
 /* The strip: 16 bars (2025 .. 2100) over one baseline; the value sits over the tallest bar and the year's bar. */

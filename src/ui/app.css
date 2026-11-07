@@ -804,13 +804,14 @@
     font-size: var(--fs-15);
     line-height: var(--lh-body);
   }
-  /* 395px: everything of the page but the map at a first, unscrolled view: the band (the title on one row, the
-     question on one row: about 95px), place bar, headline, the 50px colour choice or the allocation bar that replaces
-     it, legend and year. The menu that used to add 90px to the band is gone (2026-11-06, the first screen reduced to
-     what matters most). Measured on 2026-11-06 after the change (see appCss.test.ts for the constant). Once the band
-     has scrolled away the sticky column is only its own height (about 300px plus the map). */
+  /* 340px: everything of the page but the map at a first, unscrolled view: the band (the title on one row, the
+     question on one row: about 92px), the headline beside the search (about 52px; the place bar is hidden on the
+     country), the foot (the colour choice, the legend and the year side by side: about 165px) and the page's bottom
+     padding. The colour choice left the top of the column for the foot and the place bar hides on the country
+     (2026-11-07; 395px before). Measured on 2026-11-07 at 1512x949 (see appCss.test.ts for the constant). Once the
+     band has scrolled away the sticky column is only its own height (about 230px plus the map). */
   .map-svg {
-    max-height: max(360px, calc(100vh - 395px));
+    max-height: max(360px, calc(100vh - 340px));
   }
   /* The legend block (the colour choice, the title on one line, the bar, the ticks) on the left, the year on the
      right; the legend's side is the wider one so the title 「色は2020年の人口に対して、どれだけ残るか（薄いほど少ない）」 keeps
@@ -836,11 +837,11 @@
     font-size: var(--fs-14);
   }
 }
-/* Between 1024 and 1280px the legend's title wraps to three lines and the legend is 25px taller: the map gives that up,
-   so a 1024x800 window still ends its first view on the legend and the year. */
+/* Between 1024 and 1280px the headline and the legend's title wrap to two lines and the year's note too: the map gives
+   that up (60px), so a 1024x768 window still ends its first view on the legend and the year. */
 @media (min-width: 1024px) and (max-width: 1279.98px) {
   .map-svg {
-    max-height: max(360px, calc(100vh - 420px));
+    max-height: max(360px, calc(100vh - 400px));
   }
 }
 
