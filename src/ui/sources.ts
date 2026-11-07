@@ -40,8 +40,8 @@ export const NAV_SUMMARIES: Readonly<Record<string, string>> = {
 
 export { OFFICIAL_END_YEAR };
 
-/** Shown next to the year while year <= 2050. */
-export const OFFICIAL_NOTE = '2050年までは国立社会保障・人口問題研究所の公式推計';
+/** Shown under the year slider while year <= 2050: one line, the institute's full name (no abbreviation; 2026-11-07). */
+export const OFFICIAL_NOTE = '2050年まで公式推計（国立社会保障・人口問題研究所）';
 /** Shown next to the year while year > 2050 (never say 予測). */
 export const ESTIMATE_NOTE = '2050年より後は、このアプリの試算です（予測ではありません）';
 /** Text of the small dashed badge that marks any estimated figure. */
