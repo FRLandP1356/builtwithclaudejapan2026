@@ -515,6 +515,28 @@ describe('selection through the shell', () => {
     expect(visibleHost()?.classList.contains('map-host-national')).toBe(true);
   });
 
+  test('the place bar (breadcrumbs, back) is hidden on the whole country, where the headline says 日本, and shows once a prefecture or a town is chosen (2026-11-07)', async () => {
+    const { store, root, crumbs } = await mount();
+    const bar = root.querySelector<HTMLElement>('.map-bar')!;
+    expect(bar.hidden).toBe(true);
+    expect(bar.contains(root.querySelector('.crumbs'))).toBe(true);
+    expect(crumbs()).toBe('日本'); // the list is still built, only not shown
+    expect(root.querySelector('.map-headline-name')!.textContent).toBe('日本');
+    // the search and the headline stand in the same block, the search before the headline
+    const top = root.querySelector('.map-top')!;
+    expect([...top.children].map((c) => c.className.split(' ')[0])).toEqual(['map-bar', 'search', 'sr-only', 'map-headline']);
+    store.set({ selectedPref: '30' });
+    await settle();
+    expect(bar.hidden).toBe(false);
+    expect(crumbs()).toBe('日本›和歌山県');
+    store.set({ selectedArea: '30206' });
+    await settle();
+    expect(bar.hidden).toBe(false);
+    store.set({ selectedPref: undefined });
+    await settle();
+    expect(bar.hidden).toBe(true);
+  });
+
   test('an unknown code is rejected and the shell does not move', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { store, crumbs } = await mount();

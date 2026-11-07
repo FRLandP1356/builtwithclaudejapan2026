@@ -88,14 +88,23 @@
   }
 }
 
-/* Place bar: breadcrumb, back, search */
+/* The top of the map column: the place bar (breadcrumbs and back; hidden on the whole country, where the headline
+   already says 日本), the search and the headline. One column on a phone: bar, search, headline. From 1024px the
+   search keeps the right of the first row and the bar and the headline stack on its left, so on the whole country the
+   headline is the first row (2026-11-07). */
+.map-top {
+  display: grid;
+  gap: var(--sp-2) var(--sp-4);
+  padding: var(--sp-3) 0 0;
+}
 .map-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
   gap: var(--sp-2) var(--sp-4);
-  padding: var(--sp-3) 0;
+}
+.map-bar[hidden] {
+  display: none;
 }
 .crumbs ol {
   list-style: none;
@@ -143,7 +152,7 @@
 }
 .search {
   position: relative;
-  flex: 1 1 220px;
+  width: 100%;
   max-width: 360px;
 }
 .search-input {
@@ -211,6 +220,28 @@
   gap: var(--sp-1) var(--sp-4);
   padding: 0 0 var(--sp-2);
   min-height: 2.2em;
+}
+@media (min-width: 1024px) {
+  .map-top {
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 260px); /* the headline 「日本　2050年 1億469万人　2020年比 −17.0%　公式推計」 keeps one row beside the search */
+    grid-template-areas:
+      'bar search'
+      'headline search';
+    gap: var(--sp-1) var(--sp-4);
+    align-items: start;
+    padding-top: var(--sp-2);
+  }
+  .map-bar {
+    grid-area: bar;
+  }
+  .search {
+    grid-area: search;
+    justify-self: end;
+  }
+  .map-headline {
+    grid-area: headline;
+    align-self: center;
+  }
 }
 .map-headline-name {
   font-family: var(--font-display);
@@ -722,9 +753,6 @@
   /* One line (about 930px at 15px) so the question costs the band one row of height. */
   .app-problem {
     max-width: none;
-  }
-  .map-bar {
-    padding: var(--sp-2) 0;
   }
   /* 395px: everything of the page but the map at a first, unscrolled view: the band (the title on one row, the
      question on one row: about 95px), place bar, headline, the 50px colour choice or the allocation bar that replaces

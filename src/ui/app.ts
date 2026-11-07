@@ -248,15 +248,17 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   root.innerHTML = `${headerHtml()}
     <div class="app-inner"><main class="app-body">
       <section class="map-column" aria-label="地図">
-        <div class="map-bar">
-          <nav class="crumbs" aria-label="場所"><ol></ol></nav>
-          <button type="button" class="btn btn-quiet back" hidden></button>
+        <div class="map-top">
+          <div class="map-bar" hidden>
+            <nav class="crumbs" aria-label="場所"><ol></ol></nav>
+            <button type="button" class="btn btn-quiet back" hidden></button>
+          </div>
           <div class="search-slot"></div>
-        </div>
-        <p class="sr-only place-status" role="status"></p>
-        <div class="map-headline">
-          <span class="map-headline-name" tabindex="-1"></span>
-          <span class="map-headline-num"></span>
+          <p class="sr-only place-status" role="status"></p>
+          <div class="map-headline">
+            <span class="map-headline-name" tabindex="-1"></span>
+            <span class="map-headline-num"></span>
+          </div>
         </div>
         <div class="alloc-bar" hidden>
           <span class="alloc-bar-label">地図に反映中の割り振り：<b class="alloc-bar-name"></b></span>
@@ -282,6 +284,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     </main></div>`;
 
   const q = <T extends Element>(sel: string) => root.querySelector<T>(sel)!;
+  const mapBar = q<HTMLDivElement>('.map-bar');
   const crumbList = q<HTMLOListElement>('.crumbs ol');
   const backBtn = q<HTMLButtonElement>('.back');
   const placeStatus = q<HTMLParagraphElement>('.place-status');
@@ -475,10 +478,16 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   }
 
   // ---- place bar, headline, allocation bar -------------------------------------------------------------------------
+  /**
+   * The breadcrumbs and the back button: only once the reader has gone down to a prefecture or a town. On the whole
+   * country the headline already says 日本 and there is nowhere to go back to, so the bar stays hidden and the headline
+   * takes the first row next to the search (the owner, 2026-11-07: no 日本 twice at the top left).
+   */
   function renderPlace(s: AppState): void {
     const sel: Selection = s;
     const level = levelOf(sel);
     const crumbs = breadcrumbs(sel, names);
+    mapBar.hidden = level === 'japan';
     crumbList.replaceChildren(
       ...crumbs.map((c, i) => {
         const li = document.createElement('li');
