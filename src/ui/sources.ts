@@ -15,10 +15,11 @@ export const APP_PROBLEM =
   'いま、何を残したいかを決めておかなければ、あとから選べなくなるかもしれません。わたしたちは何を残すのか。2100年の数字から考えます。';
 
 /**
- * The way into the lower layer, under the board: the names of the folded panels, nothing more on the screen (the owner
- * asked for the first screen to show only what matters most, 2026-11-06). One line per panel, in the words the panel
- * itself uses, is kept for a screen reader as each link's description (it says what the panel does and never what to
- * do with the result). Keyed by the panel's id; the link's name is the panel's own title.
+ * The lower layer, under the board, headed 「くわしく見る」: the folded panels stand under it as light rows (the owner
+ * asked for the first screen to show only what matters most, 2026-11-06, and for one way in, not two, 2026-11-07).
+ * A closed row shows the panel's name and a few words in grey (`NAV_SUMMARIES`); the fuller sentence (`NAV_DESCRIPTIONS`,
+ * in the words the panel itself uses, saying what the panel does and never what to do with the result) is kept for a
+ * screen reader as the row's description. Both keyed by the panel's id; the row's name is the panel's own title.
  */
 export const NAV_TITLE = 'くわしく見る';
 export const NAV_DESCRIPTIONS: Readonly<Record<string, string>> = {
@@ -27,6 +28,14 @@ export const NAV_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'panel-allocation': '全国の人口は変えずに、ある地域を増やすと、ほかはどうなるかを見ます',
   'panel-ai': '日本語で聞くと、このアプリの計算を使って答えます',
   'panel-sources': '人口・境界・施設の目安・歳出の出典と、2050年より後の数字の前提',
+};
+/** The few words in grey after a closed row's name. */
+export const NAV_SUMMARIES: Readonly<Record<string, string>> = {
+  'panel-town': '選んだ町の人口・年齢・施設',
+  'panel-controls': '出生・移動・インフラの前提を変えて試す',
+  'panel-allocation': 'ある地域を増やすと、ほかはどうなるか',
+  'panel-ai': '日本語で聞くと、このアプリの計算で答える',
+  'panel-sources': '人口・境界・施設の目安・歳出の出典',
 };
 
 export { OFFICIAL_END_YEAR };

@@ -77,6 +77,33 @@ describe('a folded card (the lower layer, since 2026-11-06)', () => {
     expect(focus).toMatch(/outline:\s*2px solid var\(--accent-ink\)/);
     expect(focus).toMatch(/outline-offset:\s*-4px/);
   });
+
+  test('closed, the card is a light row (2026-11-07): no surface, no edge but a rule above, the title in the ink on nothing, a 44px button flush with the column', () => {
+    const closed = declarations(theme, '.panel.is-collapsed');
+    expect(closed).toMatch(/background:\s*transparent/);
+    expect(closed).toMatch(/border:\s*0/);
+    expect(closed).toMatch(/border-top:\s*1px solid var\(--line-2\)/);
+    expect(closed).toMatch(/border-radius:\s*0/);
+    const title = declarations(theme, '.panel.is-collapsed > .panel-title');
+    expect(title).toMatch(/background:\s*transparent/);
+    expect(title).toMatch(/color:\s*var\(--ink\)/);
+    const toggle = declarations(theme, '.panel.is-collapsed .panel-toggle');
+    expect(toggle).toMatch(/min-height:\s*var\(--touch\)/);
+    expect(toggle).toMatch(/padding:\s*var\(--sp-2\) 0/);
+    expect(toggle).toMatch(/flex-wrap:\s*wrap/); // the grey words drop under the name where they do not fit
+  });
+
+  test('the row\'s grey words are the body face in the second ink, gone once the card is open; the focus ring on a row is the accent ring, inside the row', () => {
+    const line = declarations(theme, '.panel-toggle-line');
+    expect(line).toMatch(/font-family:\s*var\(--font-body\)/);
+    expect(line).toMatch(/color:\s*var\(--ink-2\)/);
+    expect(declarations(theme, '.panel:not(.is-collapsed) .panel-toggle-line')).toMatch(/display:\s*none/);
+    const focus = declarations(theme, '.panel.is-collapsed .panel-toggle:focus-visible');
+    expect(focus).toMatch(/outline:\s*var\(--focus-ring\)/);
+    expect(focus).toMatch(/outline-offset:\s*-3px/);
+    // the 試算 mark on a closed row is the ordinary dashed mark (the light one would vanish on the paper)
+    expect(declarations(theme, '.panel.is-collapsed > .panel-title .badge-estimate')).toMatch(/color:\s*var\(--ink-2\)/);
+  });
 });
 
 describe('the sections inside a card', () => {

@@ -44,16 +44,14 @@
   font-size: var(--fs-15);
 }
 
-/* The row 「くわしく見る」 under the board: the heading and the names of the folded parts, as bordered links that wrap.
-   Nothing sticks and nothing scrolls sideways; a name is a 40px target. */
+/* The lower layer under the board, headed 「くわしく見る」: the folded cards stacked as light rows (theme.css
+   .panel.is-collapsed), rules between them and under the last one; an open card keeps a breath above and below so its
+   edge does not double a neighbour's rule. Nothing sticks and nothing scrolls sideways. */
 .app-more {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-2) var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
 }
 .app-more-title {
-  flex: none;
   margin: 0;
   font-family: var(--font-body);
   font-size: var(--fs-15);
@@ -61,29 +59,13 @@
   color: var(--ink-2);
 }
 .app-more-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
+  display: grid;
 }
-.app-more-item {
-  display: inline-flex;
-  align-items: center;
-  min-height: 40px;
-  padding: 0 var(--sp-3);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
-  color: var(--accent);
-  font-size: var(--fs-15);
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
+.app-more-list > .panel.is-collapsed:last-child {
+  border-bottom: 1px solid var(--line-2);
 }
-.app-more-item:hover,
-.app-more-item:focus-visible {
-  background: var(--accent-soft);
+.app-more-list > .panel:not(.is-collapsed) {
+  margin-block: var(--sp-3);
 }
 
 /* Two columns from 1024px */
@@ -726,7 +708,7 @@
     --panel-inset: var(--sp-3);
   }
 }
-/* Where a jump from the row 「くわしく見る」 lands: a breath under the top of the window (nothing sticks above it). */
+/* Where an opened card lands: a breath under the top of the window (nothing sticks above it). */
 .panel {
   scroll-margin-top: var(--sp-3);
 }
@@ -785,9 +767,9 @@
   }
 }
 
-/* Footer: the sources, a folded card like the rest of the lower layer (theme.css .panel, .panel-toggle). */
+/* The sources: a folded card like the rest of the lower layer (theme.css .panel, .panel-toggle), the last row under
+   「くわしく見る」. The small type and the muted ink are for its content; its title is the row's or the band's. */
 .app-foot {
-  margin-top: var(--sp-7);
   font-size: var(--fs-13);
   color: var(--muted);
 }

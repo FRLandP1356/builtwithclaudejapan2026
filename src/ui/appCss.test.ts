@@ -45,15 +45,13 @@ describe('app.css: the rules that behaviour depends on', () => {
     expect(declarations('.app-more-list')).not.toMatch(/overflow-x/);
   });
 
-  test('the row 「くわしく見る」 wraps its names, each a bordered 40px link in the accent, tinted on hover and focus', () => {
-    expect(declarations('.app-more')).toMatch(/flex-wrap:\s*wrap/);
-    expect(declarations('.app-more-list')).toMatch(/flex-wrap:\s*wrap/);
-    const item = declarations('.app-more-item');
-    expect(item).toMatch(/min-height:\s*40px/);
-    expect(item).toMatch(/border:\s*1px solid var\(--accent\)/);
-    expect(item).toMatch(/color:\s*var\(--accent\)/);
-    expect(item).toMatch(/text-decoration:\s*none/);
-    expect(css).toMatch(/\.app-more-item:hover,\s*\.app-more-item:focus-visible \{\s*background:\s*var\(--accent-soft\);/);
+  test('the lower layer stacks its closed cards as rows under 「くわしく見る」: a rule under the last one, a breath around an open card, no link row (2026-11-07)', () => {
+    expect(declarations('.app-more')).toMatch(/display:\s*grid/);
+    expect(declarations('.app-more-list')).toMatch(/display:\s*grid/);
+    expect(declarations('.app-more-list > .panel.is-collapsed:last-child')).toMatch(/border-bottom:\s*1px solid var\(--line-2\)/);
+    expect(declarations('.app-more-list > .panel:not(.is-collapsed)')).toMatch(/margin-block:\s*var\(--sp-3\)/);
+    expect(css).not.toMatch(/\.app-more-item\b|\.app-more-card\b/);
+    expect(declarations('.app-foot')).not.toMatch(/margin-top/); // the sources are a row in the stack, not a footer under the page
   });
 
   test('both colour maps draw their borders and coast in translucent ink (their palest class is white), and the legend bar keeps an edge', () => {

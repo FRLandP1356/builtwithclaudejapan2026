@@ -44,8 +44,8 @@
 ## 配置（slots）
 
 - 最初の画面に出すのは 4 つだけ（作者の指示 2026-11-06「大切なものから順に、大切なものだけ」）：題と問いの 1 文、地図と年と凡例、分かれ目、下層への入口「くわしく見る」。町を選んだ時の基本の数字 4 行（`#panel-facts`）は分かれ目の上。町の詳細・前提を変える・人口の割り振り・AIに質問・出典は下層で、最初は閉じている（`.panel.is-collapsed`：中身は DOM に残し、見出しの帯だけ出す）。
-- 390px：1 列。上から 帯（題・問い）→ 場所の行（パンくず・戻る・検索）→ 場所の数字 →（割り振り中は 割り振りの行、それ以外は 地図の色の 2 択）→ 地図 → 凡例 → 年 → `#panel-facts`（町の数字。町の時だけ）→ `#panel-board`（分かれ目）→ `nav.app-more`（くわしく見る）→ `#panel-town` → `#panel-controls` → `#panel-allocation` → `#panel-ai` → `#panel-sources`（出典）。
-- 1024px 以上：帯は窓の端から端まで（`--band` の地。中は `--page` 幅）。題の行と問いの行（約 95px）。その下は 2 列（地図 3 : パネル 2）。左の地図の列は `position: sticky` で、帯が流れ去ったあとは地図・凡例・年が 1 画面に収まる。最初の画面（動かさない状態）で帯・地図・凡例・年が収まるよう、地図の高さは `calc(100vh - 395px)` まで（帯 約 95px・場所の行・場所の数字・地図の色の 2 択（または割り振りの行）・凡例・年の分。以前の 485px は帯のメニュー 90px を含んでいた）。`appCss.test.ts` が検査する。右の列に、町の数字・分かれ目・くわしく見る・閉じたカード 4 枚が縦に並び、出典のカードは 2 列の下。
+- 390px：1 列。上から 帯（題・問い）→ 場所の行（パンくず・戻る・検索）→ 場所の数字 →（割り振り中は 割り振りの行、それ以外は 地図の色の 2 択）→ 地図 → 凡例 → 年 → `#panel-facts`（町の数字。町の時だけ）→ `#panel-board`（分かれ目）→ `section.app-more`（くわしく見る。中に `#panel-town` → `#panel-controls` → `#panel-allocation` → `#panel-ai` → `#panel-sources`（出典）が軽い行として縦に並ぶ）。
+- 1024px 以上：帯は窓の端から端まで（`--band` の地。中は `--page` 幅）。題の行と問いの行（約 95px）。その下は 2 列（地図 3 : パネル 2）。左の地図の列は `position: sticky` で、帯が流れ去ったあとは地図・凡例・年が 1 画面に収まる。最初の画面（動かさない状態）で帯・地図・凡例・年が収まるよう、地図の高さは `calc(100vh - 395px)` まで（帯 約 95px・場所の行・場所の数字・地図の色の 2 択（または割り振りの行）・凡例・年の分。以前の 485px は帯のメニュー 90px を含んでいた）。`appCss.test.ts` が検査する。右の列に、町の数字・分かれ目・「くわしく見る」（閉じたカード 5 枚＝軽い行。出典もここ）が縦に並ぶ。
 - パネルは `(el: HTMLElement, ctx: PanelContext)` で `el`（既にある `<section class="panel" id="panel-…">`）の中身を置き換え、片付けの関数を返す。`el` 自体の class と id は変えない。見出しは `h2.panel-title` を 1 つ残す（試算の印は `h2` の中に足す）。
 - 取り付けは `src/ui/app.ts` の `mountPanels(ctx, slots)`（「Panel registry」の印の付いた 5 行。返った片付けの関数は `destroy()` が呼ぶ）。
 - 横スクロールを出さない。横長の表は `.table-wrap` に入れる。
@@ -136,8 +136,8 @@
 | 要素 | class | 役割 |
 |---|---|---|
 | 帯 | `.app-head`（`--band` の地。中は `.app-head-inner`、`--page` 幅）`.app-title` `.app-problem` | 題と問いだけ。説明の 1 行（`APP_LEAD`）は出典のカードの先頭 `.app-foot-lead` に移した（2026-11-06） |
-| 下層への入口 | `.app-more`（`nav`、`aria-labelledby`。右の列の、分かれ目の次）`.app-more-title`（`h2`「くわしく見る」、ゴシック 15px）`.app-more-list`（`ul`、折り返す）`.app-more-card`（`li`）`.app-more-item`（`a`、`href="#panel-…"`、`data-panel`、`aria-describedby`。紺の 1px の枠の名前、40px。塗らない。hover と焦点で `--accent-soft`）`.app-more-desc`（`.sr-only`。1 行の説明は読み上げ用だけで、画面には名前だけ） | 町の詳細・前提を変える・人口の割り振り・AIに質問・出典の 5 つ。押すとそのカードを開き（`is-collapsed` を外し `aria-expanded=true`）、`scrollIntoView`（動きを減らす設定なら即時）でその欄へ（住所の # は変えない）、見出しの帯のボタン `.panel-toggle` に焦点を移す。貼り付く帯も横に動く帯も無い |
-| 閉じたカード | `.panel.is-collapsed`（`theme.css`：`> :not(.panel-title)` を `display:none`、下の余白 0。中身は DOM に残る）`.panel-toggle`（`h2.panel-title` の中の `button`、`aria-expanded`。帯いっぱい・50px・帯の文字色、左に枠線で描く印（開くと向きが変わる）。焦点の枠は帯の中に `--accent-ink` で描く）。試算の印は帯の中でボタンの右 | 町の詳細・前提を変える・人口の割り振り・AIに質問（右の列）と出典（`footer.app-foot.panel#panel-sources`、2 列の下）。最初は全部閉じている。見出しを押すと開き、もう一度押すと閉じる。分かれ目と町の数字のカードにはボタンが無く、常に開いている |
+| 下層（くわしく見る） | `.app-more`（`section`、`aria-labelledby`。右の列の、分かれ目の次）`.app-more-title`（`h2`「くわしく見る」、ゴシック 15px `--ink-2`）`.app-more-list`（縦に積む grid。中は閉じたカード 5 枚そのもの。最後は出典 `footer.app-foot.panel#panel-sources`）`.app-more-desc`（`.sr-only`。各カードの直前に置く 1 行の説明 `NAV_DESCRIPTIONS`。カードの外に置くので、カードの名前にも中身にも混ざらない） | 町の詳細・前提を変える・人口の割り振り・AIに質問・出典の 5 つが、見出しの下に縦に並ぶ。入口は 1 つ（2026-11-06 の「名前のボタンの行＋濃い帯」の二重表示を、2026-11-07 に本人指示で 1 つにした）。貼り付く帯も横に動く帯も無い |
+| 閉じたカード＝軽い行 | `.panel.is-collapsed`（`theme.css`：`> :not(.panel-title)` を `display:none`、下の余白 0、地と枠を消して上に `--line-2` の罫 1 本（最後の行は下にも）。中身は DOM に残る）`.panel-toggle`（`h2.panel-title` の中の `button`、`aria-expanded`、`aria-describedby`＝`.app-more-desc`。閉じている間は 44px・列の端いっぱい・墨の文字、左に枠線で描く印（開くと向きが変わる）。中は `.panel-toggle-name`（明朝 18px、ボタンの名前）と `.panel-toggle-line`（ゴシック 14px `--ink-2`、`aria-hidden`。`NAV_SUMMARIES` の短い説明。入りきらなければ名前の下に折れる。開くと消える）。焦点の輪は藍の `--focus-ring` を行の内側に）。試算の印は閉じている間は普通の破線の印、開くと帯の中で明るい色 | 最初は全部閉じている。閉じた行の見出しを押すと、開いて（`is-collapsed` を外し `aria-expanded=true`）、`scrollIntoView`（動きを減らす設定なら即時）でその欄を窓の上へ（住所の # は変えない）、焦点はそのボタンのまま（`goToPanel`）。開いたカードの見出しを押すと、その場で閉じる（動かない）。開いたカードは上下に `--sp-3` の余白（隣の行の罫と枠が重ならない）。分かれ目と町の数字のカードにはボタンが無く、常に開いている |
 
 読み込み中と読み込み失敗の画面にも帯は出す（データが届くとき、帯が動かない）。説明は欄の内側が言っていること（人口の割り振りなら「全国の人口は変えずに」）と合わせ、何を残すかの助言や「残せない」の断定は書かない（`sources.test.ts` が語を検査する）。
 

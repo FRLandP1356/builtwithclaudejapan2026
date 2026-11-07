@@ -261,18 +261,30 @@ a {
   color: var(--accent-ink);
   border-color: var(--accent-ink);
 }
-/* A folded card (the lower layer): only its title band shows; the band is a button that opens and closes it. The
-   content stays in the DOM. The mark is the same bordered chevron the disclosures use (no arrow characters). */
+/* A folded card (the lower layer): only its title shows; the title is a button that opens and closes it. The
+   content stays in the DOM. The mark is the same bordered chevron the disclosures use (no arrow characters).
+   Folded, the card is not a card but a light row: a rule above it, the chevron, the name in the ink and a few grey
+   words after it (one way into the lower layer, not two; the owner, 2026-11-07). Open, it is the card with its
+   indigo band. */
 .panel.is-collapsed > :not(.panel-title) {
   display: none;
 }
 .panel.is-collapsed {
   padding-bottom: 0;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line-2);
+  border-radius: 0;
 }
 .panel > .panel-title:has(.panel-toggle) {
   display: flex;
   align-items: center;
   padding: 0;
+}
+.panel.is-collapsed > .panel-title {
+  background: transparent;
+  color: var(--ink);
+  border-radius: 0;
 }
 .panel-toggle {
   flex: 1 1 auto;
@@ -310,6 +322,42 @@ a {
 }
 .panel > .panel-title:has(.panel-toggle) .badge-estimate {
   margin-right: var(--panel-inset);
+}
+/* The closed row: the button fills the row, flush with the column (no inset), 44px; the name in mincho 18px and the
+   grey words in the body face, on one line where they fit and under the name where they do not. */
+.panel.is-collapsed .panel-toggle {
+  flex-wrap: wrap;
+  align-items: baseline;
+  row-gap: 0;
+  min-height: var(--touch);
+  padding: var(--sp-2) 0;
+}
+.panel.is-collapsed .panel-toggle::before {
+  align-self: center;
+  color: var(--ink-2);
+}
+.panel-toggle-name {
+  font-size: var(--fs-18);
+}
+.panel-toggle-line {
+  font-family: var(--font-body);
+  font-size: var(--fs-14);
+  font-weight: 400;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+.panel:not(.is-collapsed) .panel-toggle-line {
+  display: none; /* the open card speaks for itself */
+}
+.panel.is-collapsed .panel-toggle:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -3px;
+}
+.panel.is-collapsed > .panel-title .badge-estimate,
+.panel.is-collapsed > .panel-title .badge-official {
+  margin-right: 0;
+  color: var(--ink-2);
+  border-color: var(--ink-2);
 }
 .panel-lead {
   color: var(--ink-2);

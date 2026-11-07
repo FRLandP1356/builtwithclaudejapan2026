@@ -3,8 +3,8 @@
 // and the footer (#panel-sources).
 // The first screen shows only what matters most (the owner, 2026-11-06): the title and the question, the map with
 // its year and legend, the board (分かれ目) and, for a town, its four numbers. Everything else is the lower layer: the
-// town panel, the assumptions, the allocation, the AI and the sources are folded cards, opened from the row
-// 「くわしく見る」 under the board or from their own title band.
+// town panel, the assumptions, the allocation, the AI and the sources are folded cards standing under the heading
+// 「くわしく見る」, each a light row (name and a few grey words) until its row is pressed; then it opens as a card.
 // While `store.get().allocation` is set the maps colour by the allocation's change in percent, draw rings on the towns
 // that crossed a focused facility's guide and count markers per prefecture, and the headline says 割り振り後.
 // Otherwise a segmented control above the map chooses what the maps colour by (`store.get().mapMode`): the change since
@@ -30,7 +30,7 @@ import { mountSearch } from './search';
 import { phrases } from './phrases';
 import { mountAIPanel } from './aiPanel';
 import { mountPlaceFacts } from './placeFacts';
-import { allocatedBasisNote, APP_LEAD, APP_PROBLEM, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, NAV_DESCRIPTIONS, NAV_TITLE, SOURCES, type SourceLine } from './sources';
+import { allocatedBasisNote, APP_LEAD, APP_PROBLEM, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, NAV_DESCRIPTIONS, NAV_SUMMARIES, NAV_TITLE, SOURCES, type SourceLine } from './sources';
 import { createAppStore, DEFAULT_YEAR, MAP_MODES, type AllocationOverlay, type AppState, type MapMode, type PanelContext, type Store } from './state';
 import { MAP_MODE_GROUP, MAP_MODE_LABELS, SUPPORT_LABEL, support2020Line, supportLine } from './support';
 import { mountTownPanel } from './townPanel';
@@ -68,7 +68,7 @@ interface PanelSpec {
   key: keyof PanelSlots;
   id: string;
   title: string;
-  /** The lower layer: folded at first, with a button in the title band and a link in the row 「くわしく見る」. */
+  /** The lower layer: folded at first, a light row under 「くわしく見る」 whose title is the button that opens it. */
   folded: boolean;
 }
 
@@ -80,9 +80,6 @@ const PANEL_TITLES: ReadonlyArray<PanelSpec> = [
   { key: 'allocation', id: 'panel-allocation', title: '人口の割り振り', folded: true },
   { key: 'ai', id: 'panel-ai', title: 'AIに質問', folded: true },
 ];
-
-/** The row 「くわしく見る」: the folded panels in page order, then the sources. */
-const MORE_ITEMS: ReadonlyArray<{ id: string; title: string }> = [...PANEL_TITLES.filter((p) => p.folded), SOURCES_PANEL];
 
 export const ALLOC_BADGE = '割り振り後';
 export const ALLOC_CLEAR = '割り振りを地図から消す';
@@ -128,21 +125,25 @@ function headerHtml(): string {
 }
 
 /**
- * The row under the board, the way into the lower layer: the names of the folded parts, nothing more on the screen.
- * Each link opens its panel, scrolls to it and puts the focus on the panel's title button; its one-line description is
- * kept for a screen reader only (`aria-describedby`, clipped).
+ * The lower layer under the board: the heading 「くわしく見る」 and, under it, the folded cards (`cards`, already
+ * rendered) in page order, the sources last. Each card's one-line description for a screen reader stands right before
+ * the card (`aria-describedby` from the card's title button; clipped from the screen), outside it, so no panel's own
+ * content and no panel's name is touched by it, and the last card is the list's last child.
  */
-function moreHtml(): string {
-  const items = MORE_ITEMS.map(
-    (p) =>
-      `<li class="app-more-card"><a class="app-more-item" href="#${p.id}" data-panel="${p.id}" aria-describedby="${p.id}-more-desc">${p.title}</a><span class="sr-only app-more-desc" id="${p.id}-more-desc">${escapeHtml(NAV_DESCRIPTIONS[p.id] ?? '')}</span></li>`,
-  ).join('');
-  return `<nav class="app-more" aria-labelledby="app-more-title"><h2 class="app-more-title" id="app-more-title">${NAV_TITLE}</h2><ul class="app-more-list">${items}</ul></nav>`;
+function moreHtml(cards: ReadonlyArray<{ id: string; html: string }>): string {
+  const items = cards.map((c) => `<span class="sr-only app-more-desc" id="${c.id}-more-desc">${escapeHtml(NAV_DESCRIPTIONS[c.id] ?? '')}</span>${c.html}`).join('');
+  return `<section class="app-more" aria-labelledby="app-more-title"><h2 class="app-more-title" id="app-more-title">${NAV_TITLE}</h2><div class="app-more-list">${items}</div></section>`;
 }
 
-/** The title band of a card: a plain heading, or (folded parts) a button that opens and closes the card. */
+/**
+ * The title band of a card: a plain heading, or (folded parts) a button that opens and closes the card. The button's
+ * name is the title alone; the few grey words after it are for the eye only (the fuller sentence is the button's
+ * description, see `moreHtml`), so the card's own name stays its title.
+ */
 function panelTitleHtml(id: string, title: string, folded: boolean): string {
-  const inner = folded ? `<button type="button" class="panel-toggle" aria-expanded="false">${title}</button>` : title;
+  const inner = folded
+    ? `<button type="button" class="panel-toggle" aria-expanded="false" aria-describedby="${id}-more-desc"><span class="panel-toggle-name">${title}</span><span class="panel-toggle-line" aria-hidden="true">${escapeHtml(NAV_SUMMARIES[id] ?? '')}</span></button>`
+    : title;
   return `<h2 class="panel-title" id="${id}-title">${inner}</h2>`;
 }
 
@@ -150,6 +151,16 @@ function panelHtml(p: PanelSpec): string {
   const cls = ['panel', p.folded ? 'is-collapsed' : '', p.key === 'facts' ? 'place-facts' : ''].filter(Boolean).join(' ');
   const hidden = p.key === 'facts' ? ' hidden' : '';
   return `<section class="${cls}" id="${p.id}" aria-labelledby="${p.id}-title"${hidden}>${panelTitleHtml(p.id, p.title, p.folded)}</section>`;
+}
+
+/** The sources: a folded card like the rest of the lower layer, the last row under 「くわしく見る」. */
+function sourcesHtml(): string {
+  return `<footer class="app-foot panel is-collapsed" id="${SOURCES_PANEL.id}" aria-labelledby="${SOURCES_PANEL.id}-title">
+      ${panelTitleHtml(SOURCES_PANEL.id, SOURCES_PANEL.title, true)}
+      <p class="app-foot-lead">${APP_LEAD}</p>
+      <dl>${SOURCES.map(sourceHtml).join('')}</dl>
+      <p>${FOOT_NOTE}</p>
+    </footer>`;
 }
 
 /** `<main>` stays a plain landmark; the live region is a child. */
@@ -228,11 +239,11 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   let totals: Totals = deriveTotals(store.get().series, data.groups);
   let supports: SupportRatios = deriveSupport(store.get().series, data.groups);
 
-  // The right column: the town's numbers, the board, the row into the lower layer, then the folded cards.
+  // The right column: the town's numbers, the board, then the lower layer (the folded cards and the sources under
+  // the heading 「くわしく見る」).
   const column = [
     ...PANEL_TITLES.filter((p) => !p.folded).map(panelHtml),
-    moreHtml(),
-    ...PANEL_TITLES.filter((p) => p.folded).map(panelHtml),
+    moreHtml([...PANEL_TITLES.filter((p) => p.folded).map((p) => ({ id: p.id, html: panelHtml(p) })), { id: SOURCES_PANEL.id, html: sourcesHtml() }]),
   ].join('');
   root.innerHTML = `${headerHtml()}
     <div class="app-inner"><main class="app-body">
@@ -268,13 +279,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
         </div>
       </section>
       <section class="panel-column" aria-label="詳細">${column}</section>
-    </main>
-    <footer class="app-foot panel is-collapsed" id="${SOURCES_PANEL.id}" aria-labelledby="${SOURCES_PANEL.id}-title">
-      ${panelTitleHtml(SOURCES_PANEL.id, SOURCES_PANEL.title, true)}
-      <p class="app-foot-lead">${APP_LEAD}</p>
-      <dl>${SOURCES.map(sourceHtml).join('')}</dl>
-      <p>${FOOT_NOTE}</p>
-    </footer></div>`;
+    </main></div>`;
 
   const q = <T extends Element>(sel: string) => root.querySelector<T>(sel)!;
   const crumbList = q<HTMLOListElement>('.crumbs ol');
@@ -641,12 +646,13 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   }
 
   const ac = new AbortController();
-  // ---- the lower layer: folded cards, the row 「くわしく見る」 and the title buttons -----------------------------------
+  // ---- the lower layer: folded cards under 「くわしく見る」, opened and closed by their title buttons ------------------
   /** Open or fold a card: the class hides everything but the title band; the button says which it is. */
   function setFolded(panel: HTMLElement, folded: boolean): void {
     panel.classList.toggle('is-collapsed', folded);
     panel.querySelector<HTMLButtonElement>(':scope > .panel-title > .panel-toggle')?.setAttribute('aria-expanded', String(!folded));
   }
+  /** Open a card, bring it to the top of the window and land keyboard focus on its title. */
   function goToPanel(id: string): void {
     const panel = root.querySelector<HTMLElement>(`#${id}`);
     if (!panel) return;
@@ -661,22 +667,16 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     if (!toggle && !title.hasAttribute('tabindex')) title.setAttribute('tabindex', '-1');
     title.focus({ preventScroll: true });
   }
-  for (const link of root.querySelectorAll<HTMLAnchorElement>('.app-more-item')) {
-    link.addEventListener(
-      'click',
-      (e) => {
-        e.preventDefault(); // the hash would change the address; open, scroll and focus ourselves
-        goToPanel(link.dataset.panel!);
-      },
-      { signal: ac.signal },
-    );
-  }
+  // A closed row's button opens its card and goes to it (the card's top at the top of the window, the focus on this
+  // button); an open card's button folds it again, where it is.
   for (const toggle of root.querySelectorAll<HTMLButtonElement>('.panel-toggle')) {
     toggle.addEventListener(
       'click',
       () => {
         const panel = toggle.closest<HTMLElement>('.panel');
-        if (panel) setFolded(panel, !panel.classList.contains('is-collapsed'));
+        if (!panel) return;
+        if (panel.classList.contains('is-collapsed')) goToPanel(panel.id);
+        else setFolded(panel, true);
       },
       { signal: ac.signal },
     );

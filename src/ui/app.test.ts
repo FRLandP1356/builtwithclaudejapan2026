@@ -10,7 +10,7 @@ import { allocationColor, SUPPORT_COLORS, supportColor } from '../map/colors';
 import { SUPPORT_TITLE } from '../map/legend';
 import type { Pop } from '../engine/types';
 import { ALLOC_BADGE, ALLOC_CLEAR, mountApp, SKIP_TO_YEAR, sourceHtml, type AppHandle } from './app';
-import { APP_LEAD, APP_PROBLEM, NAV_DESCRIPTIONS, NAV_TITLE, SOURCES } from './sources';
+import { APP_LEAD, APP_PROBLEM, NAV_DESCRIPTIONS, NAV_SUMMARIES, NAV_TITLE, SOURCES } from './sources';
 import { total } from '../engine/aggregate';
 import { formatPct, formatPop } from './format';
 import type { AllocationOverlay } from './state';
@@ -145,50 +145,57 @@ describe('mountApp shell', () => {
   });
 });
 
-describe('the lower layer: folded cards, and the row 「くわしく見る」 under the board as the way in', () => {
-  // the menu in the band was replaced on 2026-11-06: the owner asked for the first screen to show only what matters
-  // most and the rest to be folded away under it
+describe('the lower layer: the folded cards as light rows under the heading 「くわしく見る」', () => {
+  // the menu in the band was replaced on 2026-11-06 by a row of links above the folded cards; on 2026-11-07 the owner
+  // asked for one way in, not two: the links are gone and the closed cards themselves are the rows under the heading
   const FOLDED_IDS = ['panel-town', 'panel-controls', 'panel-allocation', 'panel-ai', 'panel-sources'];
   const toggleOf = (root: HTMLElement, id: string) => root.querySelector<HTMLButtonElement>(`#${id} > h2.panel-title > button.panel-toggle`)!;
 
-  test('a navigation landmark named by its heading 「くわしく見る」, after the board and before the folded cards, with the five in page order', async () => {
+  test('a region named by its heading 「くわしく見る」, after the board, holds the five folded cards in page order, the sources last; no link row remains', async () => {
     const { root } = await mount();
-    const nav = root.querySelector('nav.app-more')!;
-    const heading = nav.querySelector<HTMLElement>('h2.app-more-title')!;
+    const more = root.querySelector('section.app-more')!;
+    const heading = more.querySelector<HTMLElement>('h2.app-more-title')!;
     expect(heading.textContent).toBe(NAV_TITLE);
-    expect(nav.getAttribute('aria-labelledby')).toBe(heading.id);
-    const links = [...nav.querySelectorAll<HTMLAnchorElement>('a.app-more-item')];
-    expect(links.map((a) => a.getAttribute('href'))).toEqual(FOLDED_IDS.map((id) => `#${id}`));
-    expect(links.map((a) => a.dataset.panel)).toEqual(FOLDED_IDS);
-    // the name of an item is the name of its card (the text of the title band's button)
-    const names = FOLDED_IDS.map((id) => toggleOf(root, id).textContent!.trim());
-    expect(links.map((a) => a.textContent)).toEqual(names);
+    expect(more.getAttribute('aria-labelledby')).toBe(heading.id);
+    const list = more.querySelector('.app-more-list')!;
+    expect([...list.querySelectorAll(':scope > .panel')].map((p) => p.id)).toEqual(FOLDED_IDS);
+    expect(list.lastElementChild!.id).toBe('panel-sources'); // the sources are the last row, in the same stack
+    expect(list.lastElementChild!.matches('footer.app-foot')).toBe(true);
+    // the name of a row is the name of its card
+    const names = FOLDED_IDS.map((id) => toggleOf(root, id).querySelector('.panel-toggle-name')!.textContent);
     expect(names).toEqual(['町の詳細', '前提を変える', '人口の割り振り', 'AIに質問', '出典']);
-    // its place: after the board, before the first folded card
+    // its place: after the board, in the column
     const board = root.querySelector('#panel-board')!;
-    const town = root.querySelector('#panel-town')!;
-    expect(board.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(nav.compareDocumentPosition(town) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(nav.parentElement).toBe(root.querySelector('.panel-column'));
+    expect(board.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(more.parentElement).toBe(root.querySelector('.panel-column'));
+    expect(root.querySelector('a.app-more-item, nav.app-more')).toBeNull();
   });
 
-  test('each item is described for a screen reader by its one line, clipped from the screen; the link\'s name stays the short name', async () => {
+  test('each row is described for a screen reader by its one line, clipped from the screen and outside its card; the grey words on the row are for the eye only; the button\'s name stays the title', async () => {
     const { root } = await mount();
     for (const id of FOLDED_IDS) {
-      const link = root.querySelector<HTMLAnchorElement>(`a.app-more-item[data-panel="${id}"]`)!;
-      const desc = root.querySelector(`#${link.getAttribute('aria-describedby')}`)!;
+      const toggle = toggleOf(root, id);
+      const desc = root.querySelector(`#${toggle.getAttribute('aria-describedby')}`)!;
       expect(desc.textContent, id).toBe(NAV_DESCRIPTIONS[id]);
       expect(desc.classList.contains('sr-only')).toBe(true);
-      expect(link.contains(desc)).toBe(false);
+      expect(root.querySelector(`#${id}`)!.contains(desc), id).toBe(false); // outside the card: no panel's own content or name carries it
+      const line = toggle.querySelector<HTMLElement>('.panel-toggle-line')!;
+      expect(line.textContent, id).toBe(NAV_SUMMARIES[id]);
+      expect(line.getAttribute('aria-hidden')).toBe('true');
+      expect(toggle.querySelector('.panel-toggle-name')!.textContent).toBe(toggle.textContent!.replace(line.textContent!, '').trim());
     }
     expect(root.querySelector('.app-more-desc:not(.sr-only)')).toBeNull();
+    for (const text of Object.values(NAV_SUMMARIES)) {
+      for (const w of ['残せない', '閉鎖', '撤退', '廃止', '予測', '私', 'べき', '→']) expect(text, w).not.toContain(w);
+    }
   });
 
-  test('the band sits before the page: header, then the page-width wrapper with the main landmark and the footer', async () => {
+  test('the band sits before the page: header, then the page-width wrapper with the main landmark; the sources stand in the column, not under the page', async () => {
     const { root } = await mount();
     expect([...root.children].map((c) => c.className || c.tagName.toLowerCase())).toEqual(['app-head', 'app-inner']);
     expect(root.querySelector('.app-inner > main.app-body')).not.toBeNull();
-    expect(root.querySelector('.app-inner > footer.app-foot')).not.toBeNull(); // the footer is under main, inside the same wrapper
+    expect(root.querySelector('.app-inner > footer')).toBeNull(); // since 2026-11-07 the sources are the last row under 「くわしく見る」
+    expect(root.querySelector('.panel-column .app-more-list > footer.app-foot#panel-sources')).not.toBeNull();
     expect(root.querySelector('.app-nav, .app-nav-summary')).toBeNull();
   });
 
@@ -208,7 +215,7 @@ describe('the lower layer: folded cards, and the row 「くわしく見る」 un
     expect(root.querySelector('#panel-sources dl')).not.toBeNull(); // the sources stay in the page, folded
   });
 
-  test('pressing an item opens its card, scrolls to it, puts keyboard focus on the card\'s title button and leaves the address alone', async () => {
+  test('pressing a closed row opens its card, scrolls to it, keeps keyboard focus on the row\'s button and leaves the address alone', async () => {
     const { root } = await mount();
     const scrolled: Array<[string, ScrollIntoViewOptions | undefined]> = [];
     Element.prototype.scrollIntoView = function (this: Element, options?: boolean | ScrollIntoViewOptions) {
@@ -216,13 +223,10 @@ describe('the lower layer: folded cards, and the row 「くわしく見る」 un
     };
     const hashBefore = location.hash;
     for (const id of FOLDED_IDS) {
-      const link = root.querySelector<HTMLAnchorElement>(`a.app-more-item[data-panel="${id}"]`)!;
-      const click = new MouseEvent('click', { bubbles: true, cancelable: true });
-      link.dispatchEvent(click);
-      expect(click.defaultPrevented, id).toBe(true); // no jump of the address; the scroll is ours
+      const toggle = toggleOf(root, id);
+      toggle.click();
       const panel = root.querySelector<HTMLElement>(`#${id}`)!;
       expect(panel.classList.contains('is-collapsed'), id).toBe(false);
-      const toggle = toggleOf(root, id);
       expect(toggle.getAttribute('aria-expanded'), id).toBe('true');
       expect(document.activeElement, id).toBe(toggle);
     }
@@ -231,22 +235,26 @@ describe('the lower layer: folded cards, and the row 「くわしく見る」 un
     expect(location.hash).toBe(hashBefore);
   });
 
-  test('the title button folds and opens its own card, and an item on an open card leaves it open', async () => {
+  test('pressing an open card\'s button folds it where it is (no scroll), and the other cards are untouched either way', async () => {
     const { root } = await mount();
-    Element.prototype.scrollIntoView = () => undefined;
+    let scrolls = 0;
+    Element.prototype.scrollIntoView = () => void scrolls++;
     const panel = root.querySelector<HTMLElement>('#panel-controls')!;
     const toggle = toggleOf(root, 'panel-controls');
     toggle.click();
     expect(panel.classList.contains('is-collapsed')).toBe(false);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(scrolls).toBe(1);
     toggle.click();
     expect(panel.classList.contains('is-collapsed')).toBe(true);
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(scrolls).toBe(1); // folding does not move the page
     toggle.click();
-    root.querySelector<HTMLAnchorElement>('a.app-more-item[data-panel="panel-controls"]')!.click();
     expect(panel.classList.contains('is-collapsed')).toBe(false);
+    expect(scrolls).toBe(2);
     // the other cards are untouched
     expect(root.querySelector('#panel-town')!.classList.contains('is-collapsed')).toBe(true);
+    expect(root.querySelector('#panel-sources')!.classList.contains('is-collapsed')).toBe(true);
   });
 
   test('the scroll is instant for a reader who asked for reduced motion, smooth otherwise', async () => {
@@ -255,26 +263,27 @@ describe('the lower layer: folded cards, and the row 「くわしく見る」 un
     Element.prototype.scrollIntoView = function (this: Element, options?: boolean | ScrollIntoViewOptions) {
       seen.push(typeof options === 'object' ? options.behavior : undefined);
     };
-    const link = root.querySelector<HTMLAnchorElement>('a.app-more-item[data-panel="panel-ai"]')!;
-    link.click();
+    const toggle = toggleOf(root, 'panel-ai');
+    toggle.click();
     expect(seen.pop()).toBe('smooth'); // jsdom has no matchMedia: the default
+    toggle.click(); // fold again
     const win = window as unknown as { matchMedia?: (q: string) => { matches: boolean } };
     const original = win.matchMedia;
     win.matchMedia = (q: string) => ({ matches: q.includes('reduce') });
-    link.click();
+    toggle.click();
     expect(seen.pop()).toBe('auto');
     win.matchMedia = original;
   });
 
-  test('keyboard: the items are links in the tab order, Enter on one opens the card and lands on its title button', async () => {
+  test('keyboard: the rows\' buttons are in the tab order; Enter on one opens its card and the focus stays on the button', async () => {
     const { root } = await mount();
     Element.prototype.scrollIntoView = () => undefined;
-    const link = root.querySelector<HTMLAnchorElement>('a.app-more-item[data-panel="panel-controls"]')!;
-    link.focus();
-    expect(document.activeElement).toBe(link);
-    expect(link.tabIndex).toBe(0);
-    link.click(); // the browser turns Enter on a link into this click
-    expect(document.activeElement).toBe(toggleOf(root, 'panel-controls'));
+    const toggle = toggleOf(root, 'panel-controls');
+    toggle.focus();
+    expect(document.activeElement).toBe(toggle);
+    expect(toggle.tabIndex).toBe(0);
+    toggle.click(); // the browser turns Enter on a button into this click
+    expect(document.activeElement).toBe(toggle);
     expect(root.querySelector('#panel-controls')!.classList.contains('is-collapsed')).toBe(false);
   });
 
