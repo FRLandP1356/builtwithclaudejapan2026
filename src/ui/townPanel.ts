@@ -7,14 +7,20 @@
 // The panel is built once. A store notification only changes the parts whose inputs changed: the selection rebuilds the
 // lines and the facility rows' owner, a new year rewrites the tiles, the pyramid, the facility tags and moves the
 // chart's marker, and a new scenario (a new `series`) redraws the lines. `mountTownPanel` returns its teardown.
+//
+// The five sections after the tiles stand behind their headings (2026-11-07, the owner's "the important things first,
+// the rest a layer down"): each is a `details` whose summary is the section's band with, while closed, one line of its
+// gist. The facilities open first; the pyramid, the two charts and the spending block start closed. What a section
+// holds when open is unchanged.
 import { ageGroups, sumSeries, total } from '../engine/aggregate';
 import { DEFAULT_SCENARIO, type Area, type Pop, type Series } from '../engine/types';
 import type { AppData } from '../data/loader';
 import { populationAt, type PopulationAt } from './allocationCore';
 import { allocationView, overlayCovers, placeNumbers } from './allocationView';
+import { ownFigure } from './burden';
 import { mountBurdenPanel } from './burdenPanel';
 import { deriveSupport, deriveTotals, type Totals } from './derive';
-import { mountFacilityPanel } from './facilityPanel';
+import { evaluateFacilities, mountFacilityPanel, summaryLine } from './facilityPanel';
 import { formatPct, formatPop, formatSupport } from './format';
 import { levelOf, type Level, type Selection } from './nav';
 import { mountPyramid } from './pyramid';
@@ -86,6 +92,23 @@ export function splitUnit(text: string): [string, string] {
 
 const pctText = (share: number) => (Number.isFinite(share) ? `${(share * 100).toFixed(1)}%` : '－');
 
+function sum(xs: ArrayLike<number>): number {
+  let t = 0;
+  for (let i = 0; i < xs.length; i++) t += xs[i];
+  return t;
+}
+
+/** The gist of the pyramid section: 「男 2.0万人、女 2.2万人」 for the year shown. */
+export function pyramidGist(pop: Pop): string {
+  return `男 ${formatPop(sum(pop.M))}、女 ${formatPop(sum(pop.F))}`;
+}
+
+/** The gist of a chart section: its first and last year, 「2020年7.0万人、2100年1.2万人」 (the 試算 mark is added beside it). */
+export function seriesGist(years: readonly number[], row: ArrayLike<number> | undefined, format: (v: number) => string): string {
+  const last = years.length - 1;
+  return `${years[0]}年${format(row?.[0] ?? NaN)}、${years[last]}年${format(row?.[last] ?? NaN)}`;
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // DOM pieces
 // ---------------------------------------------------------------------------------------------------------------
@@ -136,6 +159,52 @@ function makeHeading(): { el: HTMLHeadingElement; set(text: string, estimate: bo
     set(t, estimate) {
       text.data = t;
       if (estimate && !badge.isConnected) el.append(' ', badge);
+      else if (!estimate && badge.isConnected) {
+        badge.previousSibling?.remove();
+        badge.remove();
+      }
+    },
+  };
+}
+
+/**
+ * A section behind its heading: a `details` whose summary is the section's band (the h3 stays an h3, so the outline
+ * keeps it), then the gist in one line while the section is closed (the css hides it when open), and whose body holds
+ * what the section always held. The 試算 mark goes beside the gist when the gist's own figures are this app's estimate;
+ * a section whose heading already carries the mark does not repeat it.
+ */
+interface Fold {
+  el: HTMLDetailsElement;
+  summary: HTMLElement;
+  body: HTMLDivElement;
+  setGist(text: string, estimate: boolean): void;
+}
+
+function makeFold(sectionClass: string, open: boolean, heading?: HTMLElement): Fold {
+  const el = document.createElement('details');
+  el.className = `panel-section ${sectionClass} town-fold`;
+  el.open = open;
+  const summary = document.createElement('summary');
+  summary.className = 'town-fold-summary';
+  const gist = document.createElement('span');
+  gist.className = 'town-fold-gist';
+  const gistText = document.createTextNode('');
+  const badge = document.createElement('span');
+  badge.className = 'badge-estimate';
+  badge.textContent = ESTIMATE_BADGE;
+  gist.append(gistText);
+  if (heading) summary.append(heading);
+  summary.append(gist);
+  const body = document.createElement('div');
+  body.className = 'town-fold-body';
+  el.append(summary, body);
+  return {
+    el,
+    summary,
+    body,
+    setGist(text, estimate) {
+      if (gistText.data !== text) gistText.data = text;
+      if (estimate && !badge.isConnected) gist.append(' ', badge);
       else if (!estimate && badge.isConnected) {
         badge.previousSibling?.remove();
         badge.remove();
@@ -220,40 +289,31 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
   allocNote.hidden = true;
   kpiSection.append(allocNote);
 
-  const pyramidSection = document.createElement('div');
-  pyramidSection.className = 'panel-section town-pyramid';
+  // The sections behind their headings: closed at first, except the facilities (the reason a town is chosen).
   const pyramidHeading = makeHeading();
-  const pyramidHost = document.createElement('div');
-  pyramidSection.append(pyramidHeading.el, pyramidHost);
-  const pyramid = mountPyramid(pyramidHost);
+  const pyramidFold = makeFold('town-pyramid', false, pyramidHeading.el);
+  const pyramid = mountPyramid(pyramidFold.body);
 
-  const seriesSection = document.createElement('div');
-  seriesSection.className = 'panel-section town-series';
   const seriesHeading = makeHeading();
   seriesHeading.set('人口の推移', false);
-  const seriesHost = document.createElement('div');
-  seriesSection.append(seriesHeading.el, seriesHost);
-  const chart = mountSeriesChart(seriesHost);
+  const seriesFold = makeFold('town-series', false, seriesHeading.el);
+  const chart = mountSeriesChart(seriesFold.body);
 
-  const supportSection = document.createElement('div');
-  supportSection.className = 'panel-section town-support';
   const supportHeading = makeHeading();
   supportHeading.set(SUPPORT_CHART.title, false);
-  const supportHost = document.createElement('div');
-  supportSection.append(supportHeading.el, supportHost);
-  const supportChart = mountSeriesChart(supportHost, SUPPORT_CHART);
+  const supportFold = makeFold('town-support', false, supportHeading.el);
+  const supportChart = mountSeriesChart(supportFold.body, SUPPORT_CHART);
 
-  const facilitySection = document.createElement('div');
-  facilitySection.className = 'panel-section town-facilities';
-  const facilities = mountFacilityPanel(facilitySection, data.facilities);
+  // The facility panel and the spending block put their own h3 into the summary of their fold.
+  const facilityFold = makeFold('town-facilities', true);
+  const facilities = mountFacilityPanel(facilityFold.body, data.facilities, facilityFold.summary);
 
   // After the facilities: also for a town only, and the one block that is an actual of today rather than this app's own
   // calculation, so it closes the panel.
-  const burdenSection = document.createElement('div');
-  burdenSection.className = 'panel-section town-burden';
-  const burden = mountBurdenPanel(burdenSection, data.finance);
+  const burdenFold = makeFold('town-burden', false);
+  const burden = mountBurdenPanel(burdenFold.body, data.finance, burdenFold.summary);
 
-  root.append(head, hint, kpiSection, pyramidSection, seriesSection, supportSection);
+  root.append(head, hint, kpiSection, pyramidFold.el, seriesFold.el, supportFold.el);
   el.append(root);
 
   // Per-selection and per-series caches.
@@ -328,11 +388,11 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
       hint.hidden = scope.level === 'area';
       hint.textContent = scope.level === 'japan' ? '町を選ぶと、ここにその町の数字と施設の目安が出ます。' : '市区町村を選ぶと、その町の施設の目安も出ます。';
       if (scope.level === 'area') {
-        if (!facilitySection.isConnected) root.append(facilitySection);
-        if (!burdenSection.isConnected) root.append(burdenSection);
+        if (!facilityFold.el.isConnected) root.append(facilityFold.el);
+        if (!burdenFold.el.isConnected) root.append(burdenFold.el);
       } else {
-        facilitySection.remove();
-        burdenSection.remove();
+        facilityFold.el.remove();
+        burdenFold.el.remove();
       }
     }
     const sc = scope!;
@@ -368,6 +428,10 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
     basis.textContent = b.text;
     pyramidHeading.set(`${s.year}年の年齢別の人口`, estimate);
     pyramid.update({ pop, year: s.year, place: sc.name, axisMax: axisMaxFor(s.series, sc, totals.years) });
+    // The gists on the closed sections: the pyramid's is the year shown (its heading carries the mark after 2050), the
+    // charts' are 2020 and 2100 whatever the year (2100 is always this app's estimate, so the mark is always there).
+    pyramidFold.setGist(pyramidGist(pop), false);
+    seriesFold.setGist(seriesGist(totals.years, row, formatPop), true);
 
     // The support ratio tile: the selected year, 2020 under it, and the 試算 mark after 2050 (as the figure is then).
     const supports = deriveSupport(s.series, data.groups);
@@ -380,6 +444,7 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
       supportBadge.previousSibling?.remove();
       supportBadge.remove();
     }
+    supportFold.setGist(seriesGist(supports.years, supportRow, formatSupport), true);
 
     // The line charts: redraw when the place or the scenario changed, otherwise only move the markers.
     let redraw = false;
@@ -411,10 +476,16 @@ export function mountTownPanel(el: HTMLElement, ctx: PanelContext): () => void {
     }
 
     // Spending per resident: only for a town; the band is chosen by the population of the selected year (the number above).
-    if (sc.level === 'area' && sc.area) burden.update({ code: sc.area.code, kind: sc.area.kind, year: s.year, population: row[idx] });
+    if (sc.level === 'area' && sc.area) {
+      burden.update({ code: sc.area.code, kind: sc.area.kind, year: s.year, population: row[idx] });
+      // The gist is the town's own figure (an actual: no mark), the first line of the block.
+      burdenFold.setGist(ownFigure(data.finance, sc.area.code, sc.area.kind).text, false);
+    }
 
     // Facilities: only for a town, judged on the unrounded projected population.
     if (sc.level === 'area' && sc.area) {
+      // The gist is the block's own summary line, from the same evaluation; the heading carries the mark after 2050.
+      facilityFold.setGist(summaryLine(evaluateFacilities(row[idx], data.facilities).belowCount, data.facilities.length), false);
       facilities.update({
         pop: row[idx],
         year: s.year,

@@ -29,6 +29,58 @@
   vertical-align: baseline;
 }
 
+/* A section behind its heading (2026-11-07): the summary is the section's band, the same strip the h3 drew (the h3
+   inside it keeps its type and loses its own box), with the bordered chevron the other disclosures use and, while the
+   section is closed, one line of its gist in the second ink. Open, the gist goes: the section speaks for itself. Closed
+   rows stand close together; an open section keeps the band's room below it. */
+.town-fold > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--sp-3);
+  min-height: var(--touch);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--accent-soft);
+  border-left: 4px solid var(--accent);
+  list-style: none;
+  cursor: pointer;
+}
+.town-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.town-fold > summary::before {
+  content: '';
+  flex: none;
+  align-self: center;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+.town-fold[open] > summary::before {
+  transform: rotate(45deg);
+}
+.town-fold > summary > .panel-section-title {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border-left: 0;
+}
+.town-fold-gist {
+  font-size: var(--fs-14);
+  color: var(--ink-2);
+}
+.town-fold[open] > summary .town-fold-gist {
+  display: none;
+}
+.town-fold[open] > summary {
+  margin-bottom: var(--sp-3);
+}
+.town-fold:not([open]) + .town-fold:not([open]) {
+  margin-top: var(--sp-2);
+}
+
 /* Charts: inline SVG, text in ink (never in a series colour), hairline solid grid. */
 .chart-figure {
   margin: 0;

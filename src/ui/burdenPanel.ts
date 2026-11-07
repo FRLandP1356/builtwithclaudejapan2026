@@ -60,7 +60,8 @@ function hereMark(): HTMLSpanElement {
   return s;
 }
 
-export function mountBurdenPanel(host: HTMLElement, finance: Finance): BurdenView {
+/** `titleHost`: where the h3 goes (the summary of the folded section in the town panel); the rest goes into `host`. */
+export function mountBurdenPanel(host: HTMLElement, finance: Finance, titleHost: HTMLElement = host): BurdenView {
   const title = el('h3', 'panel-section-title');
   title.replaceChildren(...phraseNodes(TITLE_PARTS));
   const lead = el('p', 'note burden-lead');
@@ -151,7 +152,8 @@ export function mountBurdenPanel(host: HTMLElement, finance: Finance): BurdenVie
   pubNote.replaceChildren(...phraseNodes(BURDEN_TEXT.publishedNote));
   details.append(tableUnit, bandWrap, national, pubTitle, pubWrap, pubNote);
 
-  host.append(title, lead, own, year, band, figure, limits, source, details);
+  titleHost.prepend(title);
+  host.append(lead, own, year, band, figure, limits, source, details);
 
   let shown: string | undefined;
 
@@ -199,6 +201,7 @@ export function mountBurdenPanel(host: HTMLElement, finance: Finance): BurdenVie
       mark(index);
     },
     destroy() {
+      title.remove();
       host.replaceChildren();
     },
   };

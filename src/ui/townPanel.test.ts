@@ -251,7 +251,7 @@ describe('mountTownPanel: updates only what changed', () => {
 describe('mountTownPanel: facility panel details', () => {
   test('essential facilities are the primary list and the other 40 sit in a collapsed group', () => {
     const { q } = setup({ selectedArea: '30206', year: 2100 });
-    const primary = q('.town-facilities > .table-wrap')!;
+    const primary = q('.town-facilities > .town-fold-body > .table-wrap')!; // the section is a disclosure since 2026-11-07: its body holds the tables
     expect(primary.querySelectorAll('tr[data-facility-id]')).toHaveLength(8);
     const others = q<HTMLDetailsElement>('details.facility-others')!;
     expect(others.open).toBe(false);
@@ -478,9 +478,10 @@ describe('the facility panel is judged on the unrounded population', () => {
 describe('DOM order of the facility panel', () => {
   test('the essential table comes before the collapsed group, which comes before the permanent note', () => {
     const { q } = setup({ selectedArea: '30206' });
-    const essential = q('.town-facilities > .table-wrap')!;
-    const others = q('.town-facilities > details.facility-others')!;
-    const note = q('.town-facilities > .facility-note')!;
+    // the section is a disclosure since 2026-11-07: the h3 is in its summary, everything else in its body
+    const essential = q('.town-facilities > .town-fold-body > .table-wrap')!;
+    const others = q('.town-facilities > .town-fold-body > details.facility-others')!;
+    const note = q('.town-facilities > .town-fold-body > .facility-note')!;
     expect(essential.compareDocumentPosition(others) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(others.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(essential.querySelectorAll('tr[data-facility-id]')).toHaveLength(8);
@@ -1116,5 +1117,93 @@ describe('mountTownPanel: spending per resident (令和6年度 actuals of munici
     teardown();
     expect(section.querySelector('.town-burden')).toBeNull();
     expect(section.querySelector('.burden-bars')).toBeNull();
+  });
+});
+
+// Since 2026-11-07 the five sections after the tiles stand behind their headings (the owner: the important things
+// first, the rest a layer down): each is a details whose summary is the band with the h3 and, while closed, a gist.
+describe('mountTownPanel: the sections fold behind their headings', () => {
+  const folds = (section: HTMLElement) => [...section.querySelectorAll<HTMLDetailsElement>('.town > details.town-fold')];
+  const gist = (d: Element) => d.querySelector('.town-fold-gist')!.textContent;
+
+  test('a town: five disclosures in order, the facilities open and the rest closed; each summary starts with the h3, then the gist', () => {
+    const { section } = setup({ selectedArea: '30206', year: 2050 });
+    const d = folds(section);
+    expect(d.map((x) => x.classList[1])).toEqual(['town-pyramid', 'town-series', 'town-support', 'town-facilities', 'town-burden']);
+    expect(d.map((x) => x.open)).toEqual([false, false, false, true, false]);
+    for (const x of d) {
+      const summary = x.firstElementChild!;
+      expect(summary.tagName).toBe('SUMMARY');
+      expect(summary.firstElementChild!.matches('h3.panel-section-title')).toBe(true);
+      expect(summary.lastElementChild!.classList.contains('town-fold-gist')).toBe(true);
+      expect(x.querySelector(':scope > .town-fold-body')).not.toBeNull();
+      expect(x.querySelectorAll('h3')).toHaveLength(1); // one heading per section, in the outline as before
+    }
+    // the gists: the pyramid's totals by sex, the charts' first and last year with the mark, the facilities' summary
+    // line, the spending block's own figure (an actual, no mark)
+    expect(gist(d[0])).toBe('男 2.0万人、女 2.2万人');
+    expect(gist(d[1])).toBe('2020年7.0万人、2100年1.2万人 試算');
+    expect(gist(d[2])).toBe('2020年1.6人、2100年0.8人 試算');
+    expect(gist(d[3])).toBe('全48種類のうち18種類が目安を下回ります');
+    expect(gist(d[4])).toBe('この町の令和6年度：1人あたり約680千円');
+    expect(d[1].querySelector('.town-fold-gist .badge-estimate')!.textContent).toBe('試算');
+    expect(d[4].querySelector('.badge-estimate')).toBeNull();
+  });
+
+  test('the gists follow the year and the place: the pyramid and the facilities say the year shown, the charts always 2020 and 2100', () => {
+    const { section, store, q } = setup({ selectedArea: '30206', year: 2050 });
+    const d = folds(section);
+    store.set({ year: 2100 });
+    expect(gist(d[0])).not.toBe('男 2.0万人、女 2.2万人');
+    expect(gist(d[1])).toBe('2020年7.0万人、2100年1.2万人 試算');
+    expect(gist(d[3])).toBe('全48種類のうち29種類が目安を下回ります');
+    expect(gist(d[3])).toBe(q('.facility-summary')!.textContent);
+    // after 2050 the mark is on the heading of the pyramid and of the facilities, not repeated in their gist
+    expect(d[0].querySelector('summary h3 .badge-estimate')!.textContent).toBe('試算');
+    expect(d[0].querySelector('.town-fold-gist .badge-estimate')).toBeNull();
+    expect(d[3].querySelector('summary h3 .badge-estimate')!.textContent).toBe('試算');
+    expect(d[3].querySelector('.town-fold-gist .badge-estimate')).toBeNull();
+    store.set({ selectedPref: '30', selectedArea: undefined });
+    const pref = folds(section);
+    expect(pref.map((x) => x.classList[1])).toEqual(['town-pyramid', 'town-series', 'town-support']);
+    expect(gist(pref[1])).toMatch(/^2020年.+万人、2100年.+万人 試算$/);
+    expect(gist(pref[2])).toMatch(/^2020年\d\.\d人、2100年\d\.\d人 試算$/);
+  });
+
+  test('open or closed is DOM state: it survives a year step and a change of town', () => {
+    const { section, store } = setup({ selectedArea: '30206', year: 2050 });
+    const [pyramid, , , facilities] = folds(section);
+    pyramid.open = true;
+    facilities.open = false;
+    store.set({ year: 2100 });
+    store.set({ selectedArea: '01101' });
+    expect(folds(section)[0]).toBe(pyramid);
+    expect(folds(section)[3]).toBe(facilities);
+    expect(pyramid.open).toBe(true);
+    expect(facilities.open).toBe(false);
+  });
+
+  test('townPanel.css: the summary is the band with the chevron and a 44px row; the gist is in the second ink and goes when open', () => {
+    const css = readFileSync(repoPath('src/ui/townPanel.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const declarations = (selector: string): string => {
+      const want = selector.replace(/\s+/g, ' ');
+      const found: string[] = [];
+      for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        if (m[1].split(',').map((s) => s.trim().replace(/\s+/g, ' ')).includes(want)) found.push(m[2]);
+      }
+      return found.join(';').replace(/\s+/g, ' ');
+    };
+    const summary = declarations('.town-fold > summary');
+    expect(summary).toMatch(/background:\s*var\(--accent-soft\)/);
+    expect(summary).toMatch(/border-left:\s*4px solid var\(--accent\)/);
+    expect(summary).toMatch(/min-height:\s*var\(--touch\)/);
+    expect(summary).toMatch(/list-style:\s*none/);
+    expect(declarations('.town-fold > summary::before')).toMatch(/border-right:\s*2px solid currentColor/);
+    expect(declarations('.town-fold[open] > summary::before')).toMatch(/rotate\(45deg\)/);
+    const h3 = declarations('.town-fold > summary > .panel-section-title');
+    expect(h3).toMatch(/margin:\s*0/);
+    expect(h3).toMatch(/background:\s*transparent/);
+    expect(declarations('.town-fold-gist')).toMatch(/color:\s*var\(--ink-2\)/);
+    expect(declarations('.town-fold[open] > summary .town-fold-gist')).toMatch(/display:\s*none/);
   });
 });

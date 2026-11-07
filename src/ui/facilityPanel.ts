@@ -145,7 +145,8 @@ interface RowEls {
   keep: KeepRow;
 }
 
-export function mountFacilityPanel(host: HTMLElement, facilities: readonly Facility[]): FacilityPanelView {
+/** `titleHost`: where the h3 goes (the summary of the folded section in the town panel); the rest goes into `host`. */
+export function mountFacilityPanel(host: HTMLElement, facilities: readonly Facility[], titleHost: HTMLElement = host): FacilityPanelView {
   const title = document.createElement('h3');
   title.className = 'panel-section-title';
   const titleText = document.createTextNode('施設の目安');
@@ -187,7 +188,8 @@ export function mountFacilityPanel(host: HTMLElement, facilities: readonly Facil
   permanent.className = 'note facility-note';
   permanent.replaceChildren(...phraseNodes(PERMANENT_NOTE));
 
-  host.append(title, summary, notices, lead, essentialTitle, essentialTable.wrap, others, permanent);
+  titleHost.prepend(title);
+  host.append(summary, notices, lead, essentialTitle, essentialTable.wrap, others, permanent);
 
   function notice(cls: string, text: string): HTMLDivElement {
     const d = document.createElement('div');
@@ -277,6 +279,7 @@ export function mountFacilityPanel(host: HTMLElement, facilities: readonly Facil
       othersTable.caption.textContent = `${input.place}の${input.year}年、その他の施設`;
     },
     destroy() {
+      title.remove();
       host.replaceChildren();
     },
   };
