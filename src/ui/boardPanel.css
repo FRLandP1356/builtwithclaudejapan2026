@@ -260,14 +260,17 @@
   flex: 1 1 12em;
 }
 
-/* The folded parts (the rest of the list, the other facilities): the same disclosure mark as the other panels. */
+/* The folded parts (the rest of the list, the other facilities, what the guide is): the same disclosure mark as the
+   other panels. */
 .board-more,
 .board-others,
+.board-guide,
 .claims-more {
   margin-top: var(--sp-2);
 }
 .board-more > summary,
 .board-others > summary,
+.board-guide > summary,
 .claims-more > summary {
   display: flex;
   align-items: center;
@@ -279,11 +282,13 @@
 }
 .board-more > summary::-webkit-details-marker,
 .board-others > summary::-webkit-details-marker,
+.board-guide > summary::-webkit-details-marker,
 .claims-more > summary::-webkit-details-marker {
   display: none;
 }
 .board-more > summary::before,
 .board-others > summary::before,
+.board-guide > summary::before,
 .claims-more > summary::before {
   content: '';
   flex: none;
@@ -296,6 +301,7 @@
 }
 .board-more[open] > summary::before,
 .board-others[open] > summary::before,
+.board-guide[open] > summary::before,
 .claims-more[open] > summary::before {
   transform: rotate(45deg);
 }
@@ -305,13 +311,20 @@
   margin-top: 0;
 }
 
-.board-already,
-.board-essential-note,
-.board-note {
+/* The card's own notes: one line (what is already below in 2020) and, under 「人口の目安とは」, the two sentences that
+   say what the guide is and what it is not (closed at first; the sentences do not change). */
+.board-already {
   margin-top: var(--sp-3);
 }
-.board-essential-note {
-  margin-top: var(--sp-1);
+.board-guide {
+  margin-top: 0;
+}
+.board-guide > .note {
+  margin: 0 0 var(--sp-2);
+  max-width: 40em;
+}
+.board-guide > .note[hidden] {
+  display: none;
 }
 /* After the sections 「ここにある有名なもの」 (landmarks.css) and 「公表資料に書かれていること」 (claims.css) the card's own
    notes start under a rule, so they read as the card's and not as the lists'. The claims section sits between the two and is

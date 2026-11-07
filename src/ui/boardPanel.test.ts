@@ -49,8 +49,16 @@ describe('what the panel shows', () => {
     expect(more.querySelector('summary')!.textContent).toBe('続きを見る（残り125件）'); // 128 rows, 3 shown (6 until 2026-11-07)
     expect(more.querySelectorAll('.board-row')).toHaveLength(125);
     expect(q('.board-others')!.hasAttribute('hidden')).toBe(true);
-    expect(q('.board-already')!.textContent).toBe('2020年の時点で、すでに主な8施設のいずれかの目安を下回る：470町');
+    expect(q('.board-already')!.textContent).toBe('2020年の時点で、すでに下回る：470町');
+    // what the guide is, and the eight, under one closed disclosure after that line (2026-11-07); the sentences unchanged
+    const guide = q<HTMLDetailsElement>('.board-guide')!;
+    expect(guide.previousElementSibling).toBe(q('.board-already'));
+    expect(guide.open).toBe(false);
+    expect(guide.querySelector('summary')!.textContent).toBe('人口の目安とは');
+    expect(guide.querySelector('.board-essential-note')!.textContent).toBe('日々の暮らしに関わる主な8施設で数えています。');
+    expect(guide.querySelector('.board-note')!.textContent).toBe(BOARD_GUIDE_NOTE);
     expect(q('.board-note')!.textContent).toBe(BOARD_GUIDE_NOTE);
+    expect(guide.nextElementSibling).toBeNull(); // nothing else under the card
     expect(q('.board-none')!.hidden).toBe(true);
   });
 
@@ -59,7 +67,7 @@ describe('what the panel shows', () => {
     expect(q('.board-heading')!.textContent).toBe('和歌山県で、人口の目安を下回っていく順番');
     expect(rows()[0]).toBe('2025年 銀行（中央銀行を除く） 美浜町 ほか1町');
     expect(rows()[2]).toBe('2025年 訪問介護事業 日高川町');
-    expect(q('.board-already')!.textContent).toBe('2020年の時点で、すでに主な8施設のいずれかの目安を下回る：12町');
+    expect(q('.board-already')!.textContent).toBe('2020年の時点で、すでに下回る：12町');
     expect(q('.board-essential-note')!.hidden).toBe(false);
   });
 
@@ -76,7 +84,7 @@ describe('what the panel shows', () => {
     expect(otherRows.slice(0, 3)).toEqual(['2035年 結婚式場業', '2035年 博物館、美術館', '2035年 法律事務所']);
     expect(otherRows.at(-1)).toBe('2090年 試算 税理士事務所');
     expect(q('.board-more')!.hasAttribute('hidden')).toBe(true);
-    expect(q('.board-already')!.textContent).toBe('2020年の時点で、すでに目安を下回る：11種類');
+    expect(q('.board-already')!.textContent).toBe('2020年の時点で、すでに下回る：11種類');
     expect(q('.board-years-lead')!.textContent).toBe('5年ごとに、新しく人口の目安を下回る施設の数');
     expect(qa('.board-bar').find((b) => (b as HTMLElement).dataset.year === '2065')!.querySelector('.board-bar-value')!.textContent).toBe('4');
     expect(q('.board-essential-note')!.hidden).toBe(true);

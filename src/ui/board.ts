@@ -47,6 +47,8 @@ export const BOARD_ESSENTIAL_NOTE = '日々の暮らしに関わる主な8施設
 /** The one sentence that says what the guide is and what it is not. */
 export const BOARD_GUIDE_NOTE =
   '人口の目安は、その人口の町の半分でその施設がある、という国土交通省の統計（2009〜2012年）です。下回っても、その施設がなくなると決まるわけではありません。';
+/** The disclosure under the card that holds the two notes above (closed at first; the owner, 2026-11-07: less on the first screen). */
+export const BOARD_GUIDE_SUMMARY = '人口の目安とは';
 export const BOARD_NONE = '2100年までに、主な8施設の人口の目安を新しく下回る町はありません。';
 export const BOARD_NONE_ESSENTIAL = '2100年までに、主な8施設で新しく人口の目安を下回るものはありません。';
 export const BOARD_OTHERS = 'その他の施設';
@@ -66,10 +68,13 @@ export function barsSummary(bars: BoardBars, unit: string): string {
   return `いちばん多いのは${years}（${formatCount(bars.max)}${unit}）。`;
 }
 
-/** 「2020年の時点で、すでに目安を下回る：3種類」 for a town; the towns already below any essential guide for a scope. */
+/**
+ * 「2020年の時点で、すでに下回る：3種類」 for a town (facilities); 「…：470町」 for a scope (towns below any essential
+ * guide). One short line; which guide, and that the count is on the eight essential facilities, is said under
+ * 「人口の目安とは」 (BOARD_ESSENTIAL_NOTE, BOARD_GUIDE_NOTE).
+ */
 export function alreadyBelowText(level: Level, count: number): string {
-  if (level === 'area') return `2020年の時点で、すでに目安を下回る：${formatCount(count)}種類`;
-  return `2020年の時点で、すでに主な8施設のいずれかの目安を下回る：${formatCount(count)}町`;
+  return `2020年の時点で、すでに下回る：${formatCount(count)}${level === 'area' ? '種類' : '町'}`;
 }
 
 /** 「田辺市」 / 「田辺市 ほか3町」. */

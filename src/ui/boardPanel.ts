@@ -24,6 +24,7 @@ import {
   BOARD_BAR_SUMMARY_NONE,
   BOARD_ESSENTIAL_NOTE,
   BOARD_GUIDE_NOTE,
+  BOARD_GUIDE_SUMMARY,
   BOARD_NONE,
   BOARD_NONE_ESSENTIAL,
   BOARD_OTHERS,
@@ -217,10 +218,14 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
   others.append(othersSummary, othersList);
   others.hidden = true;
   const already = h('p', 'note board-already');
+  // What the guide is, and that the count is on the eight essential facilities: one disclosure, closed at first.
+  const guideBox = h('details', 'board-guide');
+  guideBox.append(h('summary', undefined, BOARD_GUIDE_SUMMARY));
   const essentialNote = h('p', 'note board-essential-note', BOARD_ESSENTIAL_NOTE);
   const guide = h('p', 'note board-note');
   guide.replaceChildren(...phraseNodes(BOARD_GUIDE_NOTE));
-  root.append(heading, strip.root, list, none, more, others, landmarks.root, claims.root, already, essentialNote, guide);
+  guideBox.append(essentialNote, guide);
+  root.append(heading, strip.root, list, none, more, others, landmarks.root, claims.root, already, guideBox);
   el.append(root);
 
   let scope: TownScope | undefined;

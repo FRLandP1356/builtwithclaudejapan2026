@@ -7,6 +7,7 @@ import {
   alreadyBelowText,
   BOARD_ESSENTIAL_NOTE,
   BOARD_GUIDE_NOTE,
+  BOARD_GUIDE_SUMMARY,
   BOARD_NONE,
   BOARD_NONE_ESSENTIAL,
   BOARD_ROWS,
@@ -45,10 +46,11 @@ describe('wording', () => {
     expect(townsText('歌志内市（北海道）', 12)).toBe('歌志内市（北海道） ほか12町');
   });
 
-  test('what is already below in 2020: facilities for a town, towns for a scope', () => {
-    expect(alreadyBelowText('area', 11)).toBe('2020年の時点で、すでに目安を下回る：11種類');
-    expect(alreadyBelowText('pref', 12)).toBe('2020年の時点で、すでに主な8施設のいずれかの目安を下回る：12町');
-    expect(alreadyBelowText('japan', 470)).toBe('2020年の時点で、すでに主な8施設のいずれかの目安を下回る：470町');
+  test('what is already below in 2020, one short line: facilities for a town, towns for a scope (the guide and the eight are said under 人口の目安とは)', () => {
+    expect(alreadyBelowText('area', 11)).toBe('2020年の時点で、すでに下回る：11種類');
+    expect(alreadyBelowText('pref', 12)).toBe('2020年の時点で、すでに下回る：12町');
+    expect(alreadyBelowText('japan', 470)).toBe('2020年の時点で、すでに下回る：470町');
+    expect(BOARD_GUIDE_SUMMARY).toBe('人口の目安とは');
   });
 
   test('the strip\'s lead and summary', () => {
@@ -77,6 +79,7 @@ describe('wording', () => {
       boardBarsLead('pref'),
       boardBarsLead('area'),
       BOARD_GUIDE_NOTE,
+      BOARD_GUIDE_SUMMARY,
       BOARD_ESSENTIAL_NOTE,
       BOARD_NONE,
       BOARD_NONE_ESSENTIAL,
