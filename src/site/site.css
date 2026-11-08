@@ -1187,3 +1187,20 @@ svg text {
 /* the chain steps shrink with the screen: a long name wraps inside its card */
 .steps, .step, .node, .node-main, .node-t, .node-h { min-width: 0; max-width: 100%; }
 .node-t, .node-h, .node-main { overflow-wrap: anywhere; word-break: break-all; }
+
+.more {
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+.more a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+.links li a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 18px;
+  font-family: var(--font-display);
+}

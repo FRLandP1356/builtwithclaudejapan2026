@@ -98,7 +98,8 @@ const PLAIN: Readonly<Record<Status, string>> = { jisseki: '実際', suikei: '�
 function chip(status: Status): string {
   return `<span class="chip ${status}">${PLAIN[status]}</span>`;
 }
-const more = (key: string): string => `<p class="more"><a href="#/kuwashiku/${key}">くわしく</a></p>`;
+const MORE_TARGET: Readonly<Record<string, string>> = { home: 'sources', meisho: 'sources', hito: 'sources', tsunagari: 'idea', mise: 'idea', futan: 'sources', okane: 'idea', yoryoku: 'not-counted', chizu: 'sources', awase: 'sources', ai: 'sources' };
+const more = (key: string): string => `<p class="more"><a href="#/about/${MORE_TARGET[key] ?? 'sources'}">くわしく</a></p>`;
 
 // -----------------------------------------------------------------------------------------------------------------
 // Site state (built once after the data is loaded)
@@ -992,21 +993,47 @@ function pageAi(site: Site): Page {
   return { html, after, title: 'AIに聞く' };
 }
 
-function pageAbout(site: Site): Page {
+const ABOUT_PAGES: ReadonlyArray<{ key: string; title: string }> = [
+  { key: 'purpose', title: '何のために' },
+  { key: 'idea', title: '考え方' },
+  { key: 'not-counted', title: '数えていないこと' },
+  { key: 'sources', title: '数字の出どころ' },
+];
+
+function pageAbout(site: Site, sub?: string): Page {
   const m = site.model;
-  const by = (label: string) => SITE_SOURCES.find((s) => s.label === label);
+  const back = `<p class="more"><a href="#/about">このアプリについて</a> ／ <a href="#/">ホーム</a></p>`;
+  if (!sub) {
+    return {
+      html: `<section class="screen"><div class="wrap"><h1>このアプリについて。</h1><ul class="src links">${ABOUT_PAGES.map((x) => `<li><a href="#/about/${x.key}">${x.title}</a></li>`).join('')}</ul></div></section>`,
+      title: 'このアプリについて',
+    };
+  }
+  const by = (label: string) => SITE_SOURCES.find((x) => x.label === label);
   const line = (label: string): string => {
-    const s = by(label);
-    return s ? `<li>${esc(s.label)}：${esc(s.text)}。<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url)}</a>（${esc(s.retrieved)}取得）${s.approval ? `。${esc(s.approval)}` : ''}</li>` : '';
+    const x = by(label);
+    return x ? `<li>${esc(x.label)}：${esc(x.text)}。<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.url)}</a>（${esc(x.retrieved)}取得）${x.approval ? `。${esc(x.approval)}` : ''}</li>` : '';
   };
-  const html = `<section class="screen"><div class="wrap"><h1>出どころと、数えていないこと。</h1>
-  <h2>このアプリは何のために</h2>
-  <p class="approach">日本に暮らすわたしたちは、「何を残すか」を決めないといけない時に来ています。まだ、そのことが広く知られていません。<br>このアプリは、何を残せば何が残せなくなるか、何を残せば負担がどう増えるか、何を残さないと国防が危うくなる可能性があるか、を町ごとの数字で見せます。<br>理解したあとに決めるための、材料です。決めるのは使う人で、このアプリは勧めません。</p>
-  <h2 style="margin-top:32px">このアプリの考え方</h2>
+  let body = '';
+  let title = '';
+  if (sub === 'purpose') {
+    title = '何のために';
+    body = `<h1>何のために。</h1>
+  <p class="approach">日本に暮らすわたしたちは、「何を残すか」を決めないといけない時に来ています。まだ、そのことが広く知られていません。<br>このアプリは、何を残せば何が残せなくなるか、何を残せば負担がどう増えるか、何を残さないと国防が危うくなる可能性があるか、を町ごとの数字で見せます。<br>理解したあとに決めるための、材料です。決めるのは使う人で、このアプリは勧めません。</p>`;
+  } else if (sub === 'idea') {
+    title = '考え方';
+    body = `<h1>考え方。</h1>
   <p class="approach">問いは「何を残すか」。残す対象は、名勝・名物・観光地・食・建物・衣装など、日本らしいもの。<br>それを残すのは人で、人が住み続けるには、暮らしと仕事の場が要ります。<br>人口が減ると、病院や店のような暮らしの場が成り立つ人口の目安を下回り、住みにくくなって、人の減りが速まります。<br>暮らしの場を残すには、町の収益で足りない分を、人口の多い地域と働く世代が負担します。人口が減るほど、1人あたりの費用は大きく、1人が支える人は増えます。<br>負担は有限なので、ここを残せば、ほかの町やほかの日本らしいものを残す余力が減ります。重くなりすぎれば、次の世代の重荷になります。</p>
-  <h2 style="margin-top:32px">数えていないこと</h2>
-  <p>人がいなくなる地域の国防は、別の形で考える必要があります。このアプリでは数えていません（数字は出せません）。ほかに、国土の管理、災害への備え、水源や森林の手入れも数えていません。</p>
-  <h2 style="margin-top:32px">数字の出どころ</h2>
+  <p class="sm">「人がさらに減る場合」は、病院や店などが成り立たなくなると住みたい人が減り、人の減りが速まる、と置いた計算です（弱・強）。速まり方はこのアプリの仮定で、測った根拠はありません。2050年以降に当てはめています。予測ではありません。</p>
+  <p class="sm">ここを保つ人数は、日本全体の人を変えずに、ほかの町から人口に比例して動かす「もし移ったら」の計算で、実際の人の動きの予測ではありません。</p>
+  <div class="opinion"><div class="sm">作者の考え</div><p>文化を残すには、人が暮らし続けられることが前提です。暮らしの場を、その町の収益だけでまかなえないなら、足りない分は人口の多い地域が負担します。それが続くと、将来の世代の負担が重くなる、とわたしは考えています。</p><p>病院などの暮らしを支えるものを残すには、人口の少ない町ほど、1人あたりの費用が大きくなります。その負担が、文化など、ほかに残したいものを残す余力を減らす、とわたしは考えています。</p></div>`;
+  } else if (sub === 'not-counted') {
+    title = '数えていないこと';
+    body = `<h1>数えていないこと。</h1>
+  <p>人がいなくなる地域の国防は、別の形で考える必要があります。このアプリでは数えていません（数字は出せません）。ほかに、国土の管理、災害への備え、水源や森林の手入れも数えていません。</p>`;
+  } else if (sub === 'sources') {
+    title = '数字の出どころ';
+    body = `<h1>数字の出どころ。</h1>
   <ul class="src">
     ${line('人口')}
     ${line('人口の実績')}
@@ -1017,8 +1044,11 @@ function pageAbout(site: Site): Page {
     ${line('市町村の歳出')}
     ${line('歳出の公表値')}
   </ul>
-  </div></section>`;
-  return { html, title: '出どころ' };
+  <p class="sm">${HAMAMATSU_NOTE}</p>`;
+  } else {
+    return page404();
+  }
+  return { html: `<section class="screen"><div class="wrap">${body}${back}</div></section>`, title };
 }
 
 function page404(): Page {
@@ -1034,7 +1064,7 @@ export const NAV: ReadonlyArray<{ key: string; label: string }> = [
   { key: 'chizu', label: '地図' },
   { key: 'awase', label: '答え合わせ' },
   { key: 'ai', label: 'AIに聞く' },
-  { key: 'about', label: '出どころ' },
+  { key: 'about', label: 'このアプリについて' },
 ];
 
 function shellHtml(): string {
@@ -1054,8 +1084,7 @@ export function routePage(site: Site, hash: string): { top: string; page: Page }
   if (top === 'chizu') return { top, page: pageChizu(site, parts[1], parts[2]) };
   if (top === 'awase') return { top, page: pageAwase(site, parts[1]) };
   if (top === 'ai') return { top, page: pageAi(site) };
-  if (top === 'about') return { top, page: pageAbout(site) };
-  if (top === 'kuwashiku') return { top: 'about', page: pageAbout(site) }; // the detail pages open the about page until they are written
+  if (top === 'about') return { top, page: pageAbout(site, parts[1]) };
   return { top, page: page404() };
 }
 
