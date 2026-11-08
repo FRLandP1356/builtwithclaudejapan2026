@@ -17,7 +17,9 @@ import { bandIndexFor } from '../data/finance';
 import { total } from '../engine/aggregate';
 import { projectArea, projectAreaFromActual } from '../engine/project';
 import { DEFAULT_SCENARIO } from '../engine/types';
+import type { PopulationAt } from '../ui/allocationCore';
 import { INFRA_STRENGTH } from '../ui/controls';
+import { computeKeep } from '../ui/keepGuide';
 import { barRows } from '../ui/burden';
 import { mountAIPanel } from '../ui/aiPanel';
 import { SITE_SOURCES } from '../ui/sources';
@@ -39,6 +41,7 @@ import {
   groupBySlug,
   groupOf,
   GROUPS,
+  highestBelow,
   homeHeading,
   INTERIM_LABEL,
   LOW_BIRTH_NOTE,
@@ -414,6 +417,19 @@ function pageMeisho(site: Site, slug: string | undefined): Page {
 
 const personSvg = (): string => '<svg viewBox="0 0 10 22" aria-hidden="true"><circle cx="5" cy="3" r="2.6"/><path d="M1.6 7h6.8v7H6.9v7.4H3.1V14H1.6z"/></svg>';
 
+/** Every area's population in `year` (the standard series), for the what-if of 「ここを残すには」. */
+function populationAtYear(site: Site, year: number): PopulationAt {
+  const popByArea = new Map<string, number>();
+  const areaPref = new Map<string, string>();
+  for (const a of site.model.areas) {
+    popByArea.set(a.code, std(site.model.town.get(a.code)!)[year]);
+    areaPref.set(a.code, a.prefCode);
+  }
+  return { popByArea, areaPref };
+}
+
+const WORKING = '働く世代（15〜64歳）';
+
 function pageLandmark(site: Site, id: string): Page {
   const l = site.lmById.get(id);
   if (!l) return page404();
@@ -426,17 +442,8 @@ function pageLandmark(site: Site, id: string): Page {
   const share2100 = Math.round((s[END_YEAR] / s[ACTUAL_YEAR]) * 100);
   const ages = m.standardSeries.get(l.areaCode)!;
   const fin = site.data.finance;
-  const A = `<section class="screen"><div class="wrap">
-    <h1>${esc(l.name)}は、${esc(area.prefName)}${esc(area.name)}にあります。${esc(area.name)}の人は、2025年の100人が、2100年には約${share2100}人（試算）。</h1>
-    <p class="lead">文化を残すには、人が要ります。人がいれば、暮らしを支える道や水や医療が要ります。</p>
-    <div class="two"><div class="mapwrap" id="lmMap">${japanSvg(site, { viewBox: viewBoxOf(pref.bb, 30), sel: l.prefCode, filter: (o) => o.id === l.id, dotScale: 2.2, label: `${pref.name}の地図` })}${legendShare()}<p class="map-note" id="lmMapNote">町の境界を読み込んでいます。</p></div>
-    <div><div class="people" id="people" aria-label="100人の並び">${Array.from({ length: 100 }, (_, i) => `<span class="p" data-i="${i}">${personSvg()}</span>`).join('')}</div>
-    <p style="margin:16px 0 0"><span class="bign num" id="lmPop">${figure(s[ACTUAL_YEAR], statusOf(ACTUAL_YEAR, t.hasActual))}</span> <span id="lmChip">${chip(statusOf(ACTUAL_YEAR, t.hasActual))}</span><br><span class="sm">1人の記号＝2025年の人口の1%。${esc(area.name)}。${
-      t.hasActual ? `2025年は国勢調査の実績。2030年からは${STANDARD_LABEL}：${lowBirthLegend(m)}` : `2025年の実績がありません（${HAMAMATSU_NOTE}）。2050年までは公式推計、その先は公式の前提を延ばした試算。`
-    }</span></p></div></div>
-  </div></section>`;
-  // B: the chain. The eight essential facilities are supporting players: the lights go out where the town's population
-  // is under the guide; the three 2100 figures show the standard run and the runs where the loss speeds the outflow.
+  const facById = new Map(m.facilities.map((f) => [f.id, f]));
+  // the runs where the loss of a place of daily life speeds the outflow (an assumption of this app, from 2050 on)
   const scen = (k: 'weak' | 'strong') => ({ ...DEFAULT_SCENARIO, infraStrength: INFRA_STRENGTH[k] });
   const run2100 = (k: 'weak' | 'strong'): number => {
     const sc = scen(k);
@@ -444,81 +451,147 @@ function pageLandmark(site: Site, id: string): Page {
     return total(r[END_YEAR]);
   };
   const chain = area.assumptions ? { weak: run2100('weak'), strong: run2100('strong') } : undefined;
-  const Bchain = `<section class="screen"><div class="wrap">
-    <h2>人が減ると、病院や店が成り立たなくなり、人がさらに減ります。</h2>
-    <p class="lead">${esc(area.name)}の人口が、暮らしを支える8種それぞれの人口の目安（その施設がある市町村の人口の中央値。国土交通省）を下回ると、明かりが消えます。年のつまみで動きます。</p>
+  const belowCount = (p: number): number => m.facilities.filter((f) => p < f.p50).length;
+  const firstBelow = ((): { year: number; n: number } | undefined => {
+    for (const y of YEARS) {
+      const n = belowCount(s[y]);
+      if (n > 0) return { year: y, n };
+    }
+    return undefined;
+  })();
+  const nat25 = supportLoad(m.nationStandardAges[ACTUAL_YEAR]).perWorker;
+  const nat100 = supportLoad(m.nationStandardAges[END_YEAR]).perWorker;
+  const rows = barRows(fin);
+  const band25 = bandIndexFor(fin.bands, Math.round(s[ACTUAL_YEAR]));
+
+  const A = `<section class="screen" id="sec-people"><div class="wrap">
+    <h1>${esc(l.name)}は、${esc(area.prefName)}${esc(area.name)}にあります。${esc(area.name)}の人は、2025年の100人が、2100年には約${share2100}人（試算）。</h1>
+    <p class="lead">残すのは、人です。人が住み続けるには、暮らしと仕事の場が要ります。</p>
+    <div class="two"><div class="mapwrap" id="lmMap">${japanSvg(site, { viewBox: viewBoxOf(pref.bb, 30), sel: l.prefCode, filter: (o) => o.id === l.id, dotScale: 2.2, label: `${pref.name}の地図` })}${legendShare()}<p class="map-note" id="lmMapNote">町の境界を読み込んでいます。</p></div>
+    <div><div class="people" id="people" aria-label="100人の並び">${Array.from({ length: 100 }, (_, i) => `<span class="p" data-i="${i}">${personSvg()}</span>`).join('')}</div>
+    <p style="margin:16px 0 0"><span class="bign num" id="lmPop">${figure(s[ACTUAL_YEAR], statusOf(ACTUAL_YEAR, t.hasActual))}</span> <span id="lmChip">${chip(statusOf(ACTUAL_YEAR, t.hasActual))}</span><br><span class="sm">1人の記号＝2025年の人口の1%。${
+      t.hasActual ? `2025年は国勢調査の実績。先は「${STANDARD_LABEL}」＝${lowBirthLegend(m)}` : `2025年の実績がありません（${HAMAMATSU_NOTE}）。`
+    }</span></p></div></div>
+  </div></section>`;
+
+  const ICO: Record<string, string> = {
+    place: ICONS[groupOf(l.kind)?.slug ?? 'jinja-jiin'],
+    people: '<circle cx="17" cy="14" r="5"/><path d="M9 40v-9a8 8 0 0 1 16 0v9M31 40v-7a6 6 0 0 1 12 0v7"/><circle cx="37" cy="21" r="4"/>',
+    places: '<path d="M8 40V20l16-10 16 10v20H8zM20 40V30h8v10M8 20h32"/>',
+    out: '<path d="M10 24h22M26 16l8 8-8 8M38 10v28"/>',
+    load: '<circle cx="24" cy="12" r="5"/><path d="M14 40v-10a10 10 0 0 1 20 0v10M6 20l8-4M42 20l-8-4"/>',
+    cost: '<ellipse cx="24" cy="14" rx="14" ry="5"/><path d="M10 14v10c0 3 6 5 14 5s14-2 14-5V14M10 24v10c0 3 6 5 14 5s14-2 14-5V24"/>',
+    keep: '<path d="M24 8v32M8 16h32M12 16l-6 12h12l-6-12zM36 16l-6 12h12l-6-12zM16 40h16"/>',
+  };
+  const dimFrom = firstBelow === undefined; // nothing is under a guide to 2100: the chain thins out after 暮らしの場
+  const node = (target: string, key: string, title: string, valueId: string, hint: string, dim = false): string =>
+    `<li class="step${dim ? ' dim' : ''}"><button type="button" class="node" data-go="${target}"><svg class="ico" viewBox="0 0 48 48" aria-hidden="true">${ICO[key]}</svg><span class="node-main"><span class="node-t">${title}</span><span class="node-v num" id="${valueId}"></span></span><span class="node-h">${hint}</span></button></li>`;
+  const arrow = (label: string, dim = false): string => `<li class="step-arrow${dim ? ' dim' : ''}" aria-hidden="true"><span>${label}</span></li>`;
+  const strip = YEARS.filter((y) => y >= ACTUAL_YEAR)
+    .map((y) => `<span class="yb" data-y="${y}" style="height:${Math.max(4, Math.round((s[y] / s[ACTUAL_YEAR]) * 100))}%" title="${y}年 ${figure(s[y], statusOf(y, t.hasActual))}"></span>`)
+    .join('');
+  const CHAIN = `<section class="screen" id="sec-chain"><div class="wrap">
+    <h2>人が減ると、暮らしの場、流出、負担へとつながります。</h2>
+    <p class="lead">${esc(area.name)}の数字で、つながりを1枚に。年のつまみで動きます。押すと、その説明へ。</p>
+    <div class="chain-wrap"><ol class="steps">
+      ${node('sec-people', 'place', esc(l.name), 'nd-place', '残すのは、人')}
+      ${arrow('担い手')}
+      ${node('sec-people', 'people', '人', 'nd-pop', `${esc(area.name)}の人口`)}
+      ${arrow('暮らしの場が成り立つか')}
+      ${node('sec-places', 'places', '暮らしの場', 'nd-places', '8種のうち、人口の目安を下回る数')}
+      ${arrow('足りなければ', dimFrom)}
+      ${node('sec-places', 'out', '流出が速まる', 'nd-out', '2100年の人口（弱〜強。仮定）', dimFrom)}
+      ${arrow('残すなら', dimFrom)}
+      ${node('sec-support', 'load', '負担', 'nd-load', `${WORKING}1人が支える人`, dimFrom)}
+      ${arrow('費用は', dimFrom)}
+      ${node('sec-cost', 'cost', '1人あたりの費用', 'nd-cost', '同じ規模の町（令和6年度、実績）', dimFrom)}
+      ${arrow('そのぶん', dimFrom)}
+      ${node('sec-keep', 'keep', 'ほかを残す余力', 'nd-keep', '動かす人数と、ほかの何町', dimFrom)}
+    </ol>
+    <div class="trend" aria-label="${esc(area.name)}の人口、2025年から2100年"><div class="sm">人口の推移（2025年＝100）</div><div class="ybars">${strip}</div><div class="ticks"><span>2025</span><span>2050</span><span>2075</span><span>2100</span></div><div class="sm" id="trendNote"></div></div></div>
+  </div></section>`;
+
+  const PLACES = `<section class="screen" id="sec-places"><div class="wrap">
+    <h2>暮らしの場が成り立たなくなると、住みにくくなり、人の減りが速まります。</h2>
+    <p class="lead">病院・店・郵便のような暮らしの場には、成り立つ人口の目安（その場がある市町村の人口の中央値、国土交通省）があります。${esc(area.name)}の人口が目安を下回ると、明かりが消えます。</p>
     <div class="lamps" id="lamps">${m.facilities
       .map((f) => `<div class="lamp" data-id="${esc(f.id)}"><svg viewBox="0 0 48 60" aria-hidden="true"><circle class="bulb" cx="24" cy="22" r="16"/><path d="M18 42h12M20 48h8M24 38v4" stroke="#5b6470" stroke-width="1.5" fill="none"/></svg>${esc(f.name)}<span class="th">目安 ${fmt(f.p50)}人</span></div>`)
       .join('')}</div>
-    ${chain ? `<div class="three"><div class="box"><div class="sm">2100年 ${STANDARD_LABEL}</div><div class="v num">${approx(s[END_YEAR])}</div></div><div class="box"><div class="sm">流出が加速する場合・弱</div><div class="v num dec">${approx(chain.weak)}</div></div><div class="box"><div class="sm">流出が加速する場合・強</div><div class="v num dec">${approx(chain.strong)}</div></div></div>` : `<p class="sm">${esc(area.name)}は前提の公表がない村で、流出が加速する場合の試算はありません。</p>`}
-    <p class="sm" style="margin-top:12px">人口の目安を下回ると、住みたい人が減り、流出が速まる、と考えられます。速まり方は、このアプリの仮定で、測った根拠はありません。2050年以降に当てはめています。</p>
+    ${chain ? `<div class="three"><div class="box"><div class="sm">2100年 ${STANDARD_LABEL}</div><div class="v num">${approx(s[END_YEAR])}</div></div><div class="box"><div class="sm">流出が速まる場合・弱</div><div class="v num dec">${approx(chain.weak)}</div></div><div class="box"><div class="sm">流出が速まる場合・強</div><div class="v num dec">${approx(chain.strong)}</div></div></div>` : `<p class="sm">${esc(area.name)}は前提の公表がない村で、流出が速まる場合の試算はありません。</p>`}
+    <p class="sm" style="margin-top:12px">目安を下回ると、住みたい人が減り、流出が速まる、と考えられます。速まり方は、このアプリの仮定で、測った根拠はありません。2050年以降に当てはめています。</p>
   </div></section>`;
-  const nat25 = supportLoad(m.nationStandardAges[ACTUAL_YEAR]).perWorker;
-  const nat100 = supportLoad(m.nationStandardAges[END_YEAR]).perWorker;
-  const B = `<section class="screen"><div class="wrap">
-    <h2>人が減ると、1人が支える人が増えます。</h2>
-    <p class="lead">${esc(area.name)}の15〜64歳の人1人が支える人（0〜14歳と65歳以上）の数。2025年は実績、先は${STANDARD_LABEL}。</p>
-    <div class="carry"><div class="carry-side"><div class="people ten" aria-hidden="true">${Array.from({ length: 10 }, () => `<span class="p">${personSvg()}</span>`).join('')}</div><div class="sm">15〜64歳の10人が</div></div>
+
+  const SUPPORT = `<section class="screen" id="sec-support"><div class="wrap">
+    <h2>人が減ると、${WORKING}の1人が支える人が増えます。</h2>
+    <p class="lead">${esc(area.name)}で、${WORKING}の1人が支える人（0〜14歳と65歳以上）の数。2025年は実績、先は${STANDARD_LABEL}。</p>
+    <div class="carry"><div class="carry-side"><div class="people ten" aria-hidden="true">${Array.from({ length: 10 }, () => `<span class="p">${personSvg()}</span>`).join('')}</div><div class="sm">${WORKING}の10人が</div></div>
     <div class="carry-side"><div class="people ten carried" id="carried" aria-hidden="true"></div><div class="sm" id="carriedLabel"></div></div></div>
     <p style="margin:16px 0 0"><span class="bign num" id="loadN"></span> <span id="loadChip"></span><br><span class="sm" id="loadDetail"></span></p>
     <p class="sm">全国：2025年 ${nat25.toFixed(2)}人 → 2100年 ${nat100.toFixed(2)}人（1人が支える人。2100年は${STANDARD_LABEL}）。</p>
   </div></section>`;
-  const rows = barRows(fin);
-  const C = `<section class="screen"><div class="wrap">
-    <h2>その費用は、だれが負担するのか。</h2>
+
+  const COST = `<section class="screen" id="sec-cost"><div class="wrap">
+    <h2>いま、人口が少ない町ほど、1人あたりの費用が大きくなっています。</h2>
     <p class="lead">人口の規模ごとの、市町村が1年に使ったお金（歳出総額 ÷ 住民基本台帳人口）の中央値。令和${fin.fiscalYear - 2018}年度の決算（実績）。${esc(area.name)}の2025年の規模と、年のつまみの年の規模に印。</p>
     <div class="hist fin" id="fin" role="img" aria-label="人口の規模別、1人あたりの歳出の中央値（千円）">${rows
       .map((r, i) => `<div class="bar-row" data-band="${i}"><span>${esc(r.label)}</span><div class="track"><div class="fill" style="width:${(r.widthPct * 0.7).toFixed(1)}%"></div><span class="val num">${fmt(r.median)}千円</span><span class="mark" id="finMark${i}"></span></div></div>`)
       .join('')}</div>
-    <p class="sm" style="margin-top:12px">実績の比較で、この町の将来の費用の予測ではありません。出典：総務省「令和${fin.fiscalYear - 2018}年度 市町村別決算状況調」。</p>
-    <div class="opinion"><div class="sm">作者の考え</div><p>文化も、そのまわりの暮らしと仕事も、収益が出なければ、費用は人口の多い所が負担することになります。それは、未来の人にとって負の遺産になる、とわたしは考えています。</p><p>病院などの暮らしを支えるものを残すには、人口の少ない町ほど、1人あたりの費用が大きくなります（上の棒）。その負担が、文化など、ほかに残したいものを残す余力を減らす、とわたしは考えています。</p></div>
+    <p class="sm" style="margin-top:12px">いまの町どうしの比較で、この町の将来の費用の予測ではありません。原因を示すものでもありません。出典：総務省「令和${fin.fiscalYear - 2018}年度 市町村別決算状況調」。</p>
+    <div class="opinion"><div class="sm">作者の考え</div><p>文化を残すには、人が暮らし続けられることが前提です。暮らしの場を、その町の収益だけでまかなえないなら、足りない分は人口の多い地域が負担します。それが続くと、将来の世代の負担が重くなる、とわたしは考えています。</p></div>
   </div></section>`;
-  const D = claims.length
+
+  const KEEP = `<section class="screen" id="sec-keep"><div class="wrap">
+    <h2>ここを残すと、ほかを残す余力が減ります。</h2>
+    <p class="lead">全国の人口は変わりません。ある町の暮らしの場を保つ人数は、ほかの町から動くことになります。</p>
+    <div id="keepBody"></div>
+    <p class="sm" style="margin-top:12px">人数は「もし移ったら」を見るための計算で、実際の人の動きの予測ではありません。ほかの町からは人口に比例して減らしています。</p>
+  </div></section>`;
+
+  const E = claims.length
     ? `<section class="screen"><div class="wrap"><h2>${esc(area.prefName)}について、公表資料が人口減少に触れている言葉。</h2>${claims
         .map((c) => `<div class="quote"><blockquote>「${esc(c.quote)}」</blockquote><div class="s">${esc(c.subject)}。出典：${esc(c.sourceLabel)}${c.date ? `（${esc(c.date)}）` : ''}</div></div>`)
         .join('')}</div></section>`
     : '';
   const bar = `<div class="ybar">${yearControl('lmYear', ACTUAL_YEAR, t.hasActual)}</div>`;
+
   const after: After = () => {
+    const q = (sel: string) => document.getElementById(sel);
     const people = document.querySelectorAll<HTMLElement>('#people .p');
-    const pop = document.getElementById('lmPop')!;
-    const ch = document.getElementById('lmChip')!;
-    const carried = document.getElementById('carried')!;
-    const carriedLabel = document.getElementById('carriedLabel')!;
-    const loadN = document.getElementById('loadN')!;
-    const loadChip = document.getElementById('loadChip')!;
-    const loadDetail = document.getElementById('loadDetail')!;
-    const map = document.getElementById('lmMap')!;
-    wireDots(site, map);
     const lamps = document.querySelectorAll<HTMLElement>('#lamps .lamp');
-    const facById = new Map(m.facilities.map((f) => [f.id, f]));
-    const band25 = bandIndexFor(fin.bands, Math.round(s[ACTUAL_YEAR]));
+    const map = q('lmMap')!;
+    wireDots(site, map);
     let year = ACTUAL_YEAR;
+    const setText = (sel: string, text: string): void => {
+      const el = q(sel);
+      if (el) el.textContent = text;
+    };
     const show = (y: number): void => {
       year = y;
       const p = s[y];
+      const st = statusOf(y, t.hasActual);
       const n = Math.round((p / s[ACTUAL_YEAR]) * 100);
       people.forEach((el, i) => el.classList.toggle('off', i >= n));
-      const st = statusOf(y, t.hasActual);
-      pop.textContent = figure(p, st);
-      ch.innerHTML = chip(st);
+      q('lmPop')!.textContent = figure(p, st);
+      q('lmChip')!.innerHTML = chip(st);
       recolor(site, map, y);
+      // places of daily life
       lamps.forEach((el) => {
         const f = facById.get(el.dataset.id ?? '');
         el.classList.toggle('off', !!f && p < f.p50);
       });
-      // C: who supports whom
+      const nb = belowCount(p);
+      // who supports whom
       const load = supportLoad(ages[y]);
       const k = Number.isFinite(load.perWorker) ? Math.round(load.perWorker * 10) : 0;
-      carried.innerHTML = Array.from({ length: k }, () => `<span class="p">${personSvg()}</span>`).join('');
-      carriedLabel.textContent = `支える人：${k}人`;
-      loadN.textContent = Number.isFinite(load.perWorker) ? `1人が支える人 ${load.perWorker.toFixed(2)}人` : '15〜64歳の人がいません';
-      loadChip.innerHTML = chip(st);
-      loadDetail.textContent = `0〜14歳 ${figure(load.young, st)}と65歳以上 ${figure(load.old, st)}を、15〜64歳 ${figure(load.working, st)}で。`;
-      // C: the band of this year's population
+      q('carried')!.innerHTML = Array.from({ length: k }, () => `<span class="p">${personSvg()}</span>`).join('');
+      setText('carriedLabel', `支える人：${k}人`);
+      setText('loadN', Number.isFinite(load.perWorker) ? `1人が支える人 ${load.perWorker.toFixed(2)}人` : `${WORKING}がいません`);
+      q('loadChip')!.innerHTML = chip(st);
+      setText('loadDetail', `0〜14歳 ${figure(load.young, st)}と65歳以上 ${figure(load.old, st)}を、${WORKING} ${figure(load.working, st)}で。`);
+      // the cost band
       const bandY = bandIndexFor(fin.bands, Math.round(p));
       fin.bands.forEach((_, i) => {
-        const mark = document.getElementById(`finMark${i}`);
+        const mark = q(`finMark${i}`);
         if (!mark) return;
         const tags: string[] = [];
         if (i === band25) tags.push('2025年の規模');
@@ -526,27 +599,61 @@ function pageLandmark(site: Site, id: string): Page {
         mark.textContent = tags.join('・');
         mark.closest('.bar-row')?.classList.toggle('here', tags.length > 0);
       });
+      // keeping this place: the what-if (existing computeKeep), only while a place is under its guide
+      const target = highestBelow(p, m.facilities);
+      const keep = target ? computeKeep(populationAtYear(site, y), site.data.facilities, target, l.areaCode) : undefined;
+      let keepHtml: string;
+      let keepShort: string;
+      if (!target) {
+        keepHtml = `<p>${y}年の${esc(area.name)}は、暮らしの場の人口の目安を下回っていません。動かす人数はありません。</p>`;
+        keepShort = '下回る場がない';
+      } else if (keep && keep.outcome.kind === 'ok') {
+        const eff = keep.outcome.effects;
+        keepHtml = `<div class="swap"><div class="box"><div class="sm">${esc(area.name)}に</div><div class="v num">+${approx(keep.outcome.people)}</div><div class="sm">いれば、${esc(target.name)}の目安（${fmt(target.p50)}人）を保てます</div></div><svg class="arrow" width="64" height="44" viewBox="0 0 64 44" aria-hidden="true"><path d="M60 14H8m0 0l8-8M8 14l8 8" stroke="#2b4c7e" stroke-width="2" fill="none"/><path d="M4 30h52m0 0l-8-8m8 8l-8 8" stroke="#a43d2b" stroke-width="2" fill="none"/></svg><div class="box"><div class="sm">ほかの町から</div><div class="v num dec">−${approx(keep.outcome.people)}</div><div class="sm">${eff.areaCount === 0 ? 'そのとき、ほかの町で新しく目安を下回る場はありません' : `そのとき、ほかの${fmt(eff.areaCount)}町で、新しく目安を下回る場が出ます`}</div></div></div>`;
+        keepShort = `${approx(keep.outcome.people)}を動かすと、ほか${fmt(eff.areaCount)}町`;
+      } else if (keep) {
+        keepHtml = `<p>${esc(target.name)}の目安（${fmt(target.p50)}人）まで、あと${approx(keep.needs.need50)}。人数が大きすぎて、ほかの町への影響は計算できません。</p>`;
+        keepShort = `あと${approx(keep.needs.need50)}`;
+      } else {
+        keepHtml = '<p>計算できませんでした。</p>';
+        keepShort = '';
+      }
+      q('keepBody')!.innerHTML = keepHtml;
+      // the chain's nodes
+      setText('nd-place', '');
+      setText('nd-pop', figure(p, st));
+      setText('nd-places', dimFrom ? '2100年まで、8種とも目安を下回りません' : nb === 0 ? `0 / 8（${firstBelow!.year}年に${firstBelow!.n}種が下回る）` : `${nb} / 8 が目安を下回る`);
+      document.querySelectorAll<HTMLElement>('.ybars .yb').forEach((el) => el.classList.toggle('on', Number(el.dataset.y) === y));
+      setText('trendNote', `${y}年 ${figure(p, st)}`);
+      setText('nd-out', chain ? `${approx(chain.weak)}〜${approx(chain.strong).replace('約', '')}` : '前提なし');
+      setText('nd-load', Number.isFinite(load.perWorker) ? `${load.perWorker.toFixed(2)}人` : '—');
+      setText('nd-cost', `${fmt(fin.bands[bandY].median)}千円`);
+      setText('nd-keep', keepShort);
     };
     wireYear('lmYear', show, t.hasActual);
     show(ACTUAL_YEAR);
-    // the town boundaries arrive after the page: the map is redrawn with the town coloured and selected
+    for (const b of document.querySelectorAll<HTMLButtonElement>('.node[data-go]')) {
+      b.addEventListener('click', () => {
+        const target = q(b.dataset.go ?? '');
+        target?.scrollIntoView({ block: 'start', behavior: reduced() ? 'auto' : 'smooth' });
+      });
+    }
     const token = ++routeToken;
     void townsOf(site, l.prefCode).then(
       (towns) => {
         if (token !== routeToken) return;
         const svgWrap = map.querySelector('svg');
         if (!svgWrap) return;
-        const vb = viewBoxOf(unionBB(towns), 10);
-        svgWrap.outerHTML = japanSvg(site, { viewBox: vb, towns, selTown: l.areaCode, filter: (o) => o.id === l.id, dotScale: 2.2, year, label: `${area.prefName}の町の地図` });
-        document.getElementById('lmMapNote')?.remove();
+        svgWrap.outerHTML = japanSvg(site, { viewBox: viewBoxOf(unionBB(towns), 10), towns, selTown: l.areaCode, filter: (o) => o.id === l.id, dotScale: 2.2, year, label: `${area.prefName}の町の地図` });
+        q('lmMapNote')?.remove();
       },
       () => {
-        const note = document.getElementById('lmMapNote');
+        const note = q('lmMapNote');
         if (note) note.textContent = '町の境界を読み込めませんでした。県の形だけを示しています。';
       },
     );
   };
-  return { html: A + Bchain + B + C + D + bar, after, title: l.name };
+  return { html: A + CHAIN + PLACES + SUPPORT + COST + KEEP + E + bar, after, title: l.name };
 }
 
 let routeToken = 0;
@@ -894,8 +1001,10 @@ function pageAbout(site: Site): Page {
     ${line('市町村の歳出')}
     ${line('歳出の公表値')}
   </ul>
-  <h2 style="margin-top:40px">数えていないこと</h2>
-  <p>人がいなくなる地域の国防は、このアプリでは数えていません。人がいないことは、国防を別の形で考える必要があることを意味します（作者の考え）。ほかにも、数えていないことがあります。</p>
+  <h2 style="margin-top:40px">このアプリの考え方</h2>
+  <p class="approach">問いは「何を残すか」。残す対象は、名勝・名物・観光地・食・建物・衣装など、日本らしいもの。<br>それを残すのは人で、人が住み続けるには、暮らしと仕事の場が要ります。<br>人口が減ると、病院や店のような暮らしの場が成り立つ人口の目安を下回り、住みにくくなって、人の減りが速まります。<br>暮らしの場を残すには、町の収益で足りない分を、人口の多い地域と働く世代が負担します。人口が減るほど、1人あたりの費用は大きく、1人が支える人は増えます。<br>負担は有限なので、ここを残せば、ほかの町やほかの日本らしいものを残す余力が減ります。重くなりすぎれば、次の世代の重荷になります。</p>
+  <h2 style="margin-top:32px">数えていないこと</h2>
+  <p>人がいなくなる地域で別に考える必要があること（国防、国土の管理、災害への備え、水源や森林の手入れ）は、このアプリでは数えていません。数字は出していません。</p>
   </div></section>`;
   return { html, title: '出どころ' };
 }
