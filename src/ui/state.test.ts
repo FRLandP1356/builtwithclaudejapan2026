@@ -4,7 +4,7 @@ import { loadFacilities } from '../../test/helpers/loadFacilities';
 import { createRunner } from '../data/runner';
 import { DEFAULT_SCENARIO } from '../engine/types';
 import type { Series } from '../engine/types';
-import { createAppStore, createStore, isValidYear, type AppState } from './state';
+import { createAppStore, createStore, DEFAULT_YEAR, isValidYear, type AppState } from './state';
 
 function initial(): AppState {
   return { year: 2050, scenario: DEFAULT_SCENARIO, series: new Map<string, Series>(), mapMode: 'change' };
@@ -166,7 +166,8 @@ describe('createAppStore', () => {
 
   test('starts at the default year and scenario with the series already computed', () => {
     const store = createAppStore(runner, data);
-    expect(store.get().year).toBe(2050);
+    expect(DEFAULT_YEAR).toBe(2100); // the page opens on 2100: the first heading and the map say the same thing (2026-11-08)
+    expect(store.get().year).toBe(DEFAULT_YEAR);
     expect(store.get().scenario).toEqual(DEFAULT_SCENARIO);
     expect(store.get().series).toBe(runner.run(DEFAULT_SCENARIO));
     expect(store.get().selectedPref).toBeUndefined();

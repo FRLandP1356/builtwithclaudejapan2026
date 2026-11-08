@@ -67,6 +67,7 @@ export function mountChooseScreen(el: HTMLElement, ctx: PanelContext): () => voi
 
   function showMessage(text: string): void {
     current = undefined;
+    example.hidden = true; // nothing is being shown as an example
     for (const n of [lead, figure, same, effect, actions]) n.hidden = true;
     message.textContent = text;
     message.hidden = false;

@@ -39,7 +39,7 @@ interface World {
 }
 
 function setup(initial: Parameters<typeof createAppStore>[2] = {}, wrap?: (s: Store) => Store, world: World = { data, runner }) {
-  const baseStore = createAppStore(world.runner, world.data, initial);
+  const baseStore = createAppStore(world.runner, world.data, { year: 2050, ...initial }); // these tests read the panel at 2050 (the page itself opens on 2100)
   const store = wrap ? wrap(baseStore) : baseStore;
   const section = document.createElement('section');
   section.className = 'panel';

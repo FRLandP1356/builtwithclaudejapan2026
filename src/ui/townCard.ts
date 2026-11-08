@@ -27,12 +27,8 @@ function h<K extends Tag>(tag: K, className?: string, text?: string): HTMLElemen
   return node;
 }
 
-/** The three facilities of daily life the card lists, with the short name it prints. */
-export const CARD_FACILITIES: ReadonlyArray<{ id: string; label: string }> = [
-  { id: 'clinic', label: '診療所' },
-  { id: 'post_office', label: '郵便局' },
-  { id: 'bank', label: '銀行' },
-];
+/** The three facilities of daily life the card lists, by id (the names printed are the data's: Ruling 16, never typed here). */
+export const CARD_FACILITY_IDS: readonly string[] = ['clinic', 'post_office', 'bank'];
 
 export const CARD_FACILITIES_LEAD = '人口の目安を下回る年';
 export const CARD_ALREADY = '2020年の時点で、すでに目安を下回る';
@@ -61,10 +57,11 @@ export function mountTownCard(el: HTMLElement, ctx: PanelContext): () => void {
   facilitiesLead.id = 'town-card-facilities-lead';
   const list = h('ul', 'town-card-list');
   list.setAttribute('aria-labelledby', facilitiesLead.id);
-  const rows = CARD_FACILITIES.map((f) => {
+  const cardFacilities: Facility[] = CARD_FACILITY_IDS.flatMap((id) => data.facilities.filter((x) => x.id === id));
+  const rows = cardFacilities.map((f) => {
     const li = h('li', 'town-card-row');
     li.dataset.facility = f.id;
-    const name = h('span', 'town-card-name', f.label);
+    const name = h('span', 'town-card-name', f.name);
     const when = h('span', 'town-card-when');
     li.append(name, when);
     list.append(li);
@@ -75,8 +72,6 @@ export function mountTownCard(el: HTMLElement, ctx: PanelContext): () => void {
   slot.append(card);
 
   const chart: SeriesChartView = mountSeriesChart(chartHost);
-  const cardFacilities: Facility[] = CARD_FACILITIES.flatMap((f) => data.facilities.filter((x) => x.id === f.id));
-
   let input: Omit<SeriesPointsInput, 'year'> | undefined;
 
   /** The official totals (2020 census and 2025-2050) of the town, for the solid part of the line. */

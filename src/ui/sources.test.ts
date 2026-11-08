@@ -15,10 +15,10 @@ describe('APP_PROBLEM: the question the app starts from', () => {
 
 describe('the row 「くわしく見る」: the way into the folded parts', () => {
   // the menu 「この地図でできること」 became this row on 2026-11-06 (the first screen reduced to what matters most)
-  const PANEL_IDS = ['panel-town', 'panel-controls', 'panel-allocation', 'panel-ai', 'panel-sources'];
+  const PANEL_IDS = ['panel-town', 'panel-controls', 'panel-allocation']; // the AI and the sources have screens of their own since 2026-11-08
   const all = [NAV_TITLE, ...Object.values(NAV_DESCRIPTIONS)];
 
-  test('the heading and one line (for a screen reader) for each of the five folded parts, no more and no fewer', () => {
+  test('the heading and one line (for a screen reader) for each of the three folded parts, no more and no fewer', () => {
     expect(NAV_TITLE).toBe('くわしく見る');
     expect(Object.keys(NAV_DESCRIPTIONS)).toEqual(PANEL_IDS);
     for (const id of PANEL_IDS) expect(NAV_DESCRIPTIONS[id].length, id).toBeGreaterThan(10);
@@ -58,6 +58,7 @@ describe('SOURCES: the footer attributions', () => {
     expect(SOURCES).toEqual([
       {
         label: '人口',
+        primary: true,
         text: '国立社会保障・人口問題研究所「日本の地域別将来推計人口（令和5年推計）」を加工して作成（公共データ利用規約 第1.0版（PDL1.0））。国立社会保障・人口問題研究所がこのアプリの内容を保証するものではありません',
         url: 'https://www.ipss.go.jp/pp-shicyoson/j/shicyoson23/t-page.asp',
         retrieved: '2026年11月5日',
@@ -71,12 +72,14 @@ describe('SOURCES: the footer attributions', () => {
       },
       {
         label: '施設の目安',
+        primary: true,
         text: '国土交通省国土政策局「サービス施設の立地する確率が50%・80%となる自治体の人口規模（三大都市圏を除く）」（2009〜2012年の統計）を加工して作成（図の数値を施設ごとの人口の目安として転記）',
         url: 'https://www.mlit.go.jp/common/001042019.pdf',
         retrieved: '2026年11月5日',
       },
       {
         label: '市町村の歳出',
+        primary: true,
         text: '総務省「令和6年度 市町村別決算状況調」（都市別・町村別の概況）を加工して作成（歳出総額を住民基本台帳人口（令和7年1月1日）で割り、人口の規模ごとに中央値と四分位を計算。令和6年度の決算の実績で、国が作成した数字ではありません）',
         url: 'https://www.soumu.go.jp/iken/zaisei/r06_shichouson.html',
         retrieved: '2026年11月6日',

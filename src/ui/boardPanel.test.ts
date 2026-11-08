@@ -48,6 +48,7 @@ describe('what the panel shows', () => {
     expect(more.hidden).toBe(false);
     expect(more.querySelector('summary')!.textContent).toBe('続きを見る（残り125件）'); // 128 rows, 3 shown (6 until 2026-11-07)
     expect(more.querySelectorAll('.board-row')).toHaveLength(125);
+    expect(more.contains(q('.board-already')) && more.contains(q('.board-guide'))).toBe(true); // the notes are behind the fold, not under the first rows
     expect(q('.board-others')!.hasAttribute('hidden')).toBe(true);
     expect(q('.board-already')!.textContent).toBe('2020年の時点で、すでに下回る：470町');
     // what the guide is, and the eight, under one closed disclosure after that line (2026-11-07); the sentences unchanged
@@ -83,7 +84,11 @@ describe('what the panel shows', () => {
     const otherRows = [...others.querySelectorAll('.board-row')].map(rowText);
     expect(otherRows.slice(0, 3)).toEqual(['2035年 結婚式場業', '2035年 博物館、美術館', '2035年 法律事務所']);
     expect(otherRows.at(-1)).toBe('2090年 試算 税理士事務所');
-    expect(q('.board-more')!.hasAttribute('hidden')).toBe(true);
+    // one fold holds everything the first look leaves out: the other facilities, what is already below, the note on the guide
+    const more = q<HTMLDetailsElement>('.board-more')!;
+    expect(more.hidden).toBe(false);
+    expect(more.querySelector('summary')!.textContent).toBe('続きを見る（残り18件）');
+    expect(more.contains(others) && more.contains(q('.board-already')) && more.contains(q('.board-guide'))).toBe(true);
     expect(q('.board-already')!.textContent).toBe('2020年の時点で、すでに下回る：11種類');
     expect(q('.board-years-lead')!.textContent).toBe('5年ごとに、新しく人口の目安を下回る施設の数');
     expect(qa('.board-bar').find((b) => (b as HTMLElement).dataset.year === '2065')!.querySelector('.board-bar-value')!.textContent).toBe('4');

@@ -28,9 +28,7 @@ describe('the right column: four cards, each with a title band', () => {
     expect(panel).toMatch(/border:\s*1px solid var\(--line-2\)/);
     expect(panel).toMatch(/border-radius:\s*var\(--radius\)/);
     expect(theme).toMatch(/--card:\s*#ffffff/);
-    const column = declarations(app, '.panel-column');
-    expect(column).toMatch(/display:\s*grid/);
-    expect(column).toMatch(/gap:\s*var\(--sp-6\)/);
+    expect(app).not.toMatch(/\.panel-column\b/); // the right column is gone (2026-11-08): the screens stand one under the other
   });
 
   test('the title is a solid indigo band across the top of the card, flush with its edges, light text on it', () => {

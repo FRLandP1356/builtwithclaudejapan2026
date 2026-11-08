@@ -155,7 +155,7 @@ export function japanScope(data: Parameters<typeof resolveScope>[0], areaByCode:
 // ---------------------------------------------------------------------------------------------------------------
 
 /**
- * 「田辺市は、2100年に約3.4万人。一般診療所が人口の目安を下回るのは2050年。」 for a town; the same for a prefecture with the
+ * 「田辺市は、2100年に約3.4万人。（施設の名前）が人口の目安を下回るのは2035年。」 for a town; the same for a prefecture with the
  * town that comes first left out (「…下回る町が出るのは…」); nothing selected: a question. `pop2100` is the place's 2100 population.
  */
 export function townHeadline(p: { level: ReturnType<typeof levelOf>; name: string; pop2100: number; first: FirstRow }): string {

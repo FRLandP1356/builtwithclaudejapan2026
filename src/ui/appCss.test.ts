@@ -23,15 +23,10 @@ describe('app.css: the rules that behaviour depends on', () => {
     expect(declarations('.app-foot dd')).toMatch(/overflow-wrap:\s*anywhere/); // the URLs may break anywhere: no horizontal scroll
   });
 
-  test('the header question has a row of its own under the title, and from 1024px it runs on one line (the band keeps its height)', () => {
-    expect(declarations('.app-problem')).toMatch(/flex:\s*1 0 100%/);
-    expect(declarations('.app-problem')).toMatch(/max-width:\s*44em/);
-    expect(css).toMatch(/@media \(min-width: 1024px\) \{[^@]*?\.app-problem \{[^}]*max-width:\s*none;[^}]*\}/);
-    // on a phone the question is 14px with a tighter leading (three rows at 390px, 2026-11-07); 15px from 1024px
-    expect(declarations('.app-problem')).toMatch(/font-size:\s*var\(--fs-14\)/);
-    expect(declarations('.app-problem')).toMatch(/line-height:\s*1\.5/);
-    expect(css).toMatch(/@media \(min-width: 1024px\) \{[^@]*?\.app-problem \{[^}]*font-size:\s*var\(--fs-15\);[^}]*\}/);
-    expect(css).not.toMatch(/\.app-lead\b/); // the one-line description left the band on 2026-11-06 (it is in the sources card)
+  test('the question band is gone: the title of the loaded page is the small h1 of the first screen, the band is the loading and error screens\' title only', () => {
+    expect(css).not.toMatch(/\.app-problem\b|\.app-lead\b/); // the question left the page on 2026-11-08 (the first screen says its own heading and line)
+    expect(css).not.toMatch(/\.map-headline/); // the headline over the map is the first screen's h2 (screens.css)
+    expect(declarations('.app-title')).toMatch(/font-size:\s*var\(--fs-28\)/);
   });
 
   test('the band runs edge to edge in its own field; its content and the page under it keep to the page width', () => {
@@ -75,9 +70,11 @@ describe('app.css: the rules that behaviour depends on', () => {
     expect(css).not.toMatch(/scroll-margin-top:\s*64px/);
   });
 
-  test('the footer is a folded card: no rule of its own above it (the card has an edge), and its lead is the quiet description', () => {
-    expect(declarations('.app-foot')).not.toMatch(/border-top|padding-top/);
-    expect(declarations('.app-foot-lead')).toMatch(/max-width:\s*44em/);
+  test('the sources are the body of the sixth screen: no card of their own, no lead (the screen\'s heading says what it is), the credit lines quiet under each source', () => {
+    expect(declarations('.app-foot')).not.toMatch(/border-top|padding-top|margin-top/);
+    expect(css).not.toMatch(/\.app-foot-lead\b/);
+    expect(declarations('.app-foot .src-where')).toMatch(/font-size:\s*var\(--fs-13\)/);
+    expect(declarations('.app-foot .src-approval')).toMatch(/color:\s*var\(--muted\)/);
   });
 
   test('the skip link is hidden until it has focus, and hidden by clipping (never display:none, which would make it unfocusable)', () => {
@@ -119,8 +116,18 @@ describe('app.css: the rules that behaviour depends on', () => {
     expect(declarations('.map-mode-label')).toMatch(/color:\s*var\(--ink-2\)/);
   });
 
-  test('on a desktop the map leaves room for everything else of the first view (340px since the colour choice moved into the foot and the place bar hides on the country, 2026-11-07; 400px between 1024 and 1280px where the lines wrap)', () => {
-    expect(declarations('.map-svg')).toMatch(/max-height:\s*max\(360px, calc\(100vh - 340px\)\)/);
-    expect(css).toMatch(/@media \(min-width: 1024px\) and \(max-width: 1279\.98px\) \{\s*\.map-svg \{\s*max-height:\s*max\(360px, calc\(100vh - 400px\)\);/);
+  test('the map leaves room for everything else of the first screen (heading, line, legend, year, note, cue): measured in a real browser at 390x844 and 1512x949 on 2026-11-08', () => {
+    expect(declarations('.map-svg')).toMatch(/max-height:\s*max\(220px, calc\(100svh - 600px\)\)/);
+    // a prefecture or a town adds the place bar (crumbs and the way back) above the heading: the map gives that up
+    expect(declarations(".map-column:has(.map-bar:not([hidden])) .map-svg")).toMatch(/max-height:\s*max\(200px, calc\(100svh - 645px\)\)/);
+    expect(css).toMatch(/@media \(min-width: 1024px\) \{\s*\.map-svg \{\s*max-height:\s*max\(320px, calc\(100svh - 500px\)\);\s*\}\s*\.map-column:has\(\.map-bar:not\(\[hidden\]\)\) \.map-svg \{\s*max-height:\s*max\(320px, calc\(100svh - 520px\)\);/);
+  });
+
+  test('on a phone the legend\'s title and the year\'s numeral are a size smaller, and the year\'s note leaves the eye but stays a status region for a screen reader', () => {
+    const phone = /@media \(max-width: 599\.98px\) \{\s*\.legend-title[\s\S]*?\n\}/.exec(css)![0];
+    expect(phone).toMatch(/\.legend-title \{\s*font-size:\s*var\(--fs-13\)/);
+    expect(phone).toMatch(/\.year-value \{\s*font-size:\s*var\(--fs-32\)/);
+    expect(phone).toMatch(/\.year-note \{[^}]*clip:\s*rect\(0 0 0 0\)/);
+    expect(phone).not.toMatch(/\.year-note \{[^}]*display:\s*none/); // display: none would take it out of the accessibility tree
   });
 });

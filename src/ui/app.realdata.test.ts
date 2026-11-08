@@ -9,6 +9,7 @@ import { computeAllocation, populationAt } from './allocationPanel';
 import { total } from '../engine/aggregate';
 import { mountApp, type AppHandle } from './app';
 import { formatPop } from './format';
+import { approxPopulation } from './screens';
 import { SUPPORT_COLORS } from '../map/colors';
 
 const diskFetch = (async (input: string | URL | Request) => {
@@ -54,8 +55,8 @@ describe('和歌山県 +10% in 2100 on the real maps', () => {
     expect(label(svg, '30')).toContain('割り振りによる変化 +10.0%');
     for (const pp of ['01', '13', '27', '47']) expect(label(svg, pp)).toContain('割り振りによる変化 −0.04%');
     expect(root.querySelector('.legend')!.textContent).toContain('割り振りによる人口の変化（%）');
-    // the country's total does not change: no second number in the headline, no note in the town panel
-    expect(root.querySelector('.map-headline')!.textContent).not.toContain('割り振り前');
+    // the country's total does not change: no second number in the heading, no note in the town panel
+    expect(root.querySelector('#screen-entry-title')!.textContent).not.toContain('割り振り前');
     expect(root.querySelector<HTMLElement>('#panel-town .town-alloc-note')!.hidden).toBe(true);
   });
 
@@ -76,10 +77,12 @@ describe('和歌山県 +10% in 2100 on the real maps', () => {
     expect(label(pref, '30344')).toContain('高野町');
     expect(label(pref, '30344')).toContain('飲食料品小売業が人口の目安を下回らなくなる');
     expect(label(pref, '30344')).toContain('割り振りによる変化 +10.0%');
-    // headline and town panel agree: both numbers in the headline, the after-number in the panel's note
+    // heading and town panel agree: the after-number in the heading with the number before it beside it, the after-number in the panel's note
     const series = handle.store.get().series;
     const before = handle.ctx.data.areas.filter((a) => a.prefCode === '30').reduce((t, a) => t + total(series.get(a.code)![2100]), 0);
-    expect(root.querySelector('.map-headline-num')!.textContent).toContain(`${formatPop(before * 1.1)}（割り振り前 ${formatPop(before)}）`);
+    const heading = root.querySelector('#screen-entry-title')!.textContent!;
+    expect(heading).toContain(`2100年、和歌山県の人口は${approxPopulation(before * 1.1)}`);
+    expect(heading).toContain(`（割り振り前 ${formatPop(before)}）`);
     const note = root.querySelector<HTMLElement>('#panel-town .town-alloc-note')!;
     expect(note.hidden).toBe(false);
     expect(note.textContent).toBe(`地図は割り振り後（${formatPop(before * 1.1)}）です。この欄の数字は割り振り前です。`);
@@ -204,7 +207,8 @@ describe('the support ratio on the real maps (people aged 15-64 per person aged 
     const { store } = handle.ctx;
     store.set({ allocation: undefined, selectedPref: undefined, mapMode: 'support' });
     await settle();
-    const head = () => root.querySelector('.map-headline-num b')!.textContent;
+    // the heading says the ratio in a sentence: 「2050年、日本で、高齢者1人を支える現役世代は1.4人。2020年は2.1人です。」
+    const head = () => /現役世代は([\d.]+人)/.exec(root.querySelector('#screen-entry-title')!.textContent!)![1];
     const national = root.querySelector('.map-host-national svg')!;
     const want = { 2020: ['2.1', '1.7', '1.6'], 2050: ['1.4', '1.1', '0.9'], 2100: ['1.4', '1.1', '0.8'] } as const;
     for (const year of [2020, 2050, 2100] as const) {
@@ -228,6 +232,49 @@ describe('the support ratio on the real maps (people aged 15-64 per person aged 
     const fills = new Set([...pref.querySelectorAll('path.area')].map((p) => p.getAttribute('fill')));
     for (const f of fills) expect(SUPPORT_COLORS).toContain(f);
     store.set({ mapMode: 'change', selectedArea: undefined });
+    await settle();
+  }, 30_000);
+});
+
+describe('the choice screen on the real maps (the third screen)', () => {
+  const side = (i: number) => root.querySelectorAll('#screen-choose .choose-side')[i];
+  const amount = (i: number) => side(i).querySelector('.choose-amount')!.textContent!;
+
+  test('the country: the earliest row of the whole country is the example, said in small type; the two boxes carry the same number of people', async () => {
+    const { store } = handle.ctx;
+    store.set({ allocation: undefined, selectedPref: undefined, selectedArea: undefined, year: 2100 });
+    await settle();
+    const card = root.querySelector('#screen-choose .choose')!;
+    expect(card.querySelector<HTMLElement>('.choose-example')!.hidden).toBe(false);
+    expect(card.querySelector('.choose-example')!.textContent).toBe('日本全体の例');
+    expect(side(0).querySelector('.choose-side-title')!.textContent).toBe('ここを残すには');
+    expect(side(1).querySelector('.choose-side-title')!.textContent).toBe('代わりに、ほかの町から');
+    expect(amount(0)).toMatch(/^\+約[\d,.万]+人$/);
+    expect(amount(1)).toBe(amount(0).replace('+', '−')); // the country's population does not change: one number, two signs
+    expect(card.querySelector('.choose-same')!.textContent).toBe('同じ人数が入れ替わるだけです。日本全体の人口は変わりません。');
+    expect(card.querySelector('.choose-lead')!.textContent).toMatch(/に届くには/);
+    expect(card.querySelector('.choose-effect')!.textContent).toMatch(/^このとき、/);
+    // the same row as the first row of the board
+    const first = root.querySelector<HTMLElement>('#panel-board .board-row')!;
+    expect(card.querySelector('.choose-lead')!.textContent).toContain(`${first.dataset.year}年に`);
+  }, 30_000);
+
+  test('a prefecture with rows of its own uses its first row (no example label); the button hands the what-if to the map in the row\'s year', async () => {
+    const { store } = handle.ctx;
+    store.set({ selectedPref: '30', year: 2050 });
+    await settle();
+    const card = root.querySelector('#screen-choose .choose')!;
+    expect(card.querySelector<HTMLElement>('.choose-example')!.hidden).toBe(true);
+    const first = root.querySelector<HTMLElement>('#panel-board .board-row')!;
+    expect(card.querySelector('.choose-lead')!.textContent).toContain(`${first.dataset.year}年に`);
+    Element.prototype.scrollIntoView = () => undefined;
+    root.querySelector<HTMLButtonElement>('#screen-choose .choose-reflect')!.click();
+    const a = store.get().allocation!;
+    expect(a).toBeDefined();
+    expect(store.get().year).toBe(Number(first.dataset.year));
+    expect(a.year).toBe(Number(first.dataset.year));
+    expect(root.querySelector('#screen-choose .choose-status')!.textContent).toContain('地図に反映しました');
+    store.set({ allocation: undefined, selectedPref: undefined, year: 2100 });
     await settle();
   }, 30_000);
 });

@@ -10,7 +10,8 @@ import { allocationColor, SUPPORT_COLORS, supportColor } from '../map/colors';
 import { SUPPORT_TITLE } from '../map/legend';
 import type { Pop } from '../engine/types';
 import { ALLOC_BADGE, ALLOC_CLEAR, mountApp, SKIP_TO_YEAR, sourceHtml, type AppHandle } from './app';
-import { APP_LEAD, APP_PROBLEM, NAV_DESCRIPTIONS, NAV_SUMMARIES, NAV_TITLE, SOURCES } from './sources';
+import { APP_TITLE, NAV_DESCRIPTIONS, NAV_SUMMARIES, NAV_TITLE, SOURCES } from './sources';
+import { approxPopulation, compareClause, ENTRY_LEAD, ENTRY_NEXT, ENTRY_NOTE, entryHeadline, SCREEN_IDS, TOWN_TITLE_NONE } from './screens';
 import { total } from '../engine/aggregate';
 import { formatPct, formatPop } from './format';
 import type { AllocationOverlay } from './state';
@@ -61,6 +62,9 @@ function makeFetch(control: Control) {
   return { fetchStub: fetchStub as unknown as typeof fetch, pending };
 }
 
+/** The first screen's heading: the sentence made from the numbers, with its marks. */
+const entryTitle = (root: HTMLElement) => root.querySelector<HTMLElement>(`#${SCREEN_IDS.entry}-title`)!;
+
 const flush = () => new Promise((r) => setTimeout(r, 0));
 async function settle(): Promise<void> {
   for (let i = 0; i < 6; i++) await flush();
@@ -88,70 +92,108 @@ afterEach(() => {
 });
 
 describe('mountApp shell', () => {
-  test('renders the landmark, the four panel slots in order and the national map', async () => {
+  test('renders the landmark, the six screens in order with one heading each, the folded cards under them and the national map', async () => {
     const { root, visibleHost, crumbs } = await mount();
     expect(root.querySelector('main')).not.toBeNull();
-    // since 2026-11-06 (the owner: show first what matters most) the column is the town's numbers (hidden here), the
-    // board (分かれ目), then the folded cards; the sources are a folded card under the page
-    expect([...root.querySelectorAll('.panel')].map((p) => p.id)).toEqual(['panel-facts', 'panel-board', 'panel-town', 'panel-controls', 'panel-allocation', 'panel-ai', 'panel-sources']);
-    expect(root.querySelector('#panel-board .board-heading')!.textContent).toBe('日本全体で、人口の目安を下回っていく順番');
-    expect(root.querySelector<HTMLElement>('#panel-facts')!.hidden).toBe(true);
-    expect(root.querySelectorAll('.panel .panel-empty')).toHaveLength(1); // all four panels are mounted; only the town panel's Japan-summary hint line remains
-    expect(root.querySelectorAll('#panel-ai .ai-samples button')).toHaveLength(5);
+    // since 2026-11-08 (the owner: one message to a screen) the page is six screens, then the lower layer of folded cards
+    const screens = [...root.querySelectorAll('main > section.screen')];
+    expect(screens.map((x) => x.id)).toEqual(Object.values(SCREEN_IDS));
+    for (const screen of screens) {
+      const heads = screen.querySelectorAll('h2');
+      expect(heads, screen.id).toHaveLength(1); // one heading to a screen: the screen's one message
+      expect(screen.getAttribute('aria-labelledby'), screen.id).toBe(heads[0].id);
+      expect(heads[0].classList.contains('screen-title')).toBe(true);
+    }
+    expect(root.querySelectorAll('h1')).toHaveLength(1);
+    expect([...root.querySelectorAll('.panel')].map((p) => p.id)).toEqual(['panel-town', 'panel-controls', 'panel-allocation']); // the cards that stay folded
+    expect(root.querySelector('#screen-board #panel-board .board-heading')!.textContent).toBe('日本全体で、人口の目安を下回っていく順番');
+    expect(root.querySelector('#panel-facts')).toBeNull(); // the town's four numbers left the page: the town screen's card says them
+    expect(root.querySelectorAll('.panel .panel-empty')).toHaveLength(1); // only the town panel's Japan-summary hint line remains
+    expect(root.querySelectorAll('#screen-ai #panel-ai .ai-samples button')).toHaveLength(5);
     expect(visibleHost()?.classList.contains('map-host-national')).toBe(true);
     expect(visibleHost()?.querySelectorAll('path.area')).toHaveLength(3);
     expect(crumbs()).toBe('日本');
   });
 
-  test('the header is the title and the question the app starts from, nothing else (the one-line description moved to the sources card)', async () => {
+  test('the first screen: the title as a small h1, then the heading made from the numbers, its line, the map, the note and the cue to the next screen', async () => {
     const { root } = await mount();
-    const head = root.querySelector('header.app-head .app-head-inner')!;
-    expect([...head.children].map((c) => c.className)).toEqual(['app-title', 'app-problem']);
-    expect(head.querySelector('.app-problem')!.textContent).toBe(APP_PROBLEM);
-    expect(head.querySelectorAll('.app-problem .keep').length).toBeGreaterThan(2); // laid out phrase by phrase
-    expect(root.querySelector('.app-lead')).toBeNull();
-    expect(root.querySelector('#panel-sources .app-foot-lead')!.textContent).toBe(APP_LEAD);
+    const entry = root.querySelector('#screen-entry')!;
+    expect(entry.querySelector('h1.app-title')!.textContent).toBe(APP_TITLE);
+    expect(root.querySelector('.app-head')).toBeNull(); // the band is the loading and error screens' title only
+    expect(entry.querySelector('.screen-lead')!.textContent).toBe(ENTRY_LEAD);
+    expect(entry.querySelector('.screen-note')!.textContent).toBe(ENTRY_NOTE);
+    const next = entry.querySelector<HTMLAnchorElement>('a.screen-next')!;
+    expect(next.textContent).toBe(ENTRY_NEXT);
+    expect(next.getAttribute('href')).toBe('#screen-board');
+    expect(entryTitle(root).textContent).toMatch(/^2100年、日本の人口は約[\d,億万]+人。2020年の/);
+    expect(entryTitle(root).querySelectorAll('.keep').length).toBeGreaterThan(1); // laid out phrase by phrase
+    const order = [entryTitle(root), entry.querySelector('.map-stage')!, entry.querySelector('.map-foot')!, entry.querySelector('.screen-note')!, next];
+    for (let i = 1; i < order.length; i++) expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING, `${i}`).toBeTruthy();
   });
 
-  test('the loading screen shows the same header, question included', async () => {
+  test('the cue at the foot of the first screen goes to the board\'s screen and lands on its heading, leaving the address alone', async () => {
+    const { root } = await mount();
+    const scrolled: Array<[string, ScrollIntoViewOptions | undefined]> = [];
+    Element.prototype.scrollIntoView = function (this: Element, options?: boolean | ScrollIntoViewOptions) {
+      scrolled.push([this.id, typeof options === 'object' ? options : undefined]);
+    };
+    const hashBefore = location.hash;
+    root.querySelector<HTMLAnchorElement>('a.screen-next')!.click();
+    expect(scrolled.map(([id]) => id)).toEqual(['screen-board']);
+    expect(scrolled[0][1]?.block).toBe('start');
+    expect(document.activeElement).toBe(root.querySelector('#screen-board-title'));
+    expect(location.hash).toBe(hashBefore);
+  });
+
+  test('the loading screen shows the title in its band', async () => {
     const root = document.createElement('div');
     document.body.append(root);
     const never = vi.fn(() => new Promise<Response>(() => undefined));
     void mountApp(root, { fetch: never, base: '/', prefGeoCache: new Map(), timeoutMs: 5000 });
-    expect(root.querySelector('.app-head .app-problem')!.textContent).toBe(APP_PROBLEM);
+    expect(root.querySelector('.app-head .app-title')!.textContent).toBe(APP_TITLE);
     expect(root.querySelector('.app-inner main .load-skeleton')).not.toBeNull(); // the page content sits in the page-width wrapper
   });
 
-  test('the error screen keeps the header around the message', async () => {
+  test('the error screen keeps the title around the message', async () => {
     const root = document.createElement('div');
     document.body.append(root);
     const failing = vi.fn(() => Promise.resolve({ ok: false, status: 500, json: async () => ({}) } as unknown as Response));
     void mountApp(root, { fetch: failing as unknown as typeof fetch, base: '/', prefGeoCache: new Map(), timeoutMs: 5000 });
     await settle();
     expect(root.querySelector('.load-error')).not.toBeNull();
-    expect(root.querySelector('.app-head .app-problem')!.textContent).toBe(APP_PROBLEM);
+    expect(root.querySelector('.app-head .app-title')!.textContent).toBe(APP_TITLE);
   });
 
-  test('the headline badge follows the year: census at 2020, official to 2050, estimate after', async () => {
+  test('the heading follows the year, from the figures: no mark up to 2050 (the line under the map says it is the official projection), 試算 after', async () => {
     const { root, store } = await mount();
-    const badge = () => root.querySelector('.map-headline-num [class^="badge-"]')!.textContent;
+    const mark = () => entryTitle(root).querySelector('[class^="badge-"]');
+    const ratioAt = (y: number) => {
+      const series = store.get().series;
+      const all = sample.map((a) => a.code);
+      return all.reduce((t, c) => t + total(series.get(c)![y]), 0) / all.reduce((t, c) => t + total(series.get(c)![2020]), 0);
+    };
+    const popAt = (y: number) => sample.reduce((t, a) => t + total(store.get().series.get(a.code)![y]), 0);
+    for (const y of [2020, 2050, 2055, 2100]) {
+      store.set({ year: y });
+      expect(entryTitle(root).textContent!.replace(/\s*試算$/, ''), String(y)).toBe(entryHeadline({ place: '日本', year: y, pop: popAt(y), ratio: ratioAt(y) }));
+    }
     store.set({ year: 2020 });
-    expect(badge()).toBe('実績（国勢調査）');
+    expect(mark()).toBeNull();
     store.set({ year: 2050 });
-    expect(badge()).toBe('公式推計');
+    expect(mark()).toBeNull();
     store.set({ year: 2055 });
-    expect(badge()).toBe('試算');
-    expect(root.querySelector('.map-headline-num [class^="badge-"]')!.className).toBe('badge-estimate');
+    expect(mark()!.className).toBe('badge-estimate');
+    expect(mark()!.textContent).toBe('試算');
   });
 });
 
 describe('the lower layer: the folded cards as light rows under the heading 「くわしく見る」', () => {
   // the menu in the band was replaced on 2026-11-06 by a row of links above the folded cards; on 2026-11-07 the owner
   // asked for one way in, not two: the links are gone and the closed cards themselves are the rows under the heading
-  const FOLDED_IDS = ['panel-town', 'panel-controls', 'panel-allocation', 'panel-ai', 'panel-sources'];
+  const FOLDED_IDS = ['panel-town', 'panel-controls', 'panel-allocation']; // the AI and the sources have screens of their own since 2026-11-08
   const toggleOf = (root: HTMLElement, id: string) => root.querySelector<HTMLButtonElement>(`#${id} > h2.panel-title > button.panel-toggle`)!;
 
-  test('a region named by its heading 「くわしく見る」, after the board, holds the five folded cards in page order, the sources last; no link row remains', async () => {
+  test('a region named by its heading 「くわしく見る」, after the sixth screen, holds the three folded cards in page order; no link row remains', async () => {
     const { root } = await mount();
     const more = root.querySelector('section.app-more')!;
     const heading = more.querySelector<HTMLElement>('h2.app-more-title')!;
@@ -159,15 +201,14 @@ describe('the lower layer: the folded cards as light rows under the heading 「�
     expect(more.getAttribute('aria-labelledby')).toBe(heading.id);
     const list = more.querySelector('.app-more-list')!;
     expect([...list.querySelectorAll(':scope > .panel')].map((p) => p.id)).toEqual(FOLDED_IDS);
-    expect(list.lastElementChild!.id).toBe('panel-sources'); // the sources are the last row, in the same stack
-    expect(list.lastElementChild!.matches('footer.app-foot')).toBe(true);
+    expect(list.lastElementChild!.id).toBe('panel-allocation');
     // the name of a row is the name of its card
     const names = FOLDED_IDS.map((id) => toggleOf(root, id).querySelector('.panel-toggle-name')!.textContent);
-    expect(names).toEqual(['町の詳細', '前提を変える', '人口の割り振り', 'AIに質問', '出典']);
-    // its place: after the board, in the column
-    const board = root.querySelector('#panel-board')!;
-    expect(board.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(more.parentElement).toBe(root.querySelector('.panel-column'));
+    expect(names).toEqual(['町の詳細', '前提を変える', '人口の割り振り']);
+    // its place: after the sixth screen, in the page
+    const sources = root.querySelector('#screen-sources')!;
+    expect(sources.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(more.parentElement).toBe(root.querySelector('main.screens'));
     expect(root.querySelector('a.app-more-item, nav.app-more')).toBeNull();
   });
 
@@ -190,16 +231,17 @@ describe('the lower layer: the folded cards as light rows under the heading 「�
     }
   });
 
-  test('the band sits before the page: header, then the page-width wrapper with the main landmark; the sources stand in the column, not under the page', async () => {
+  test('the page is the page-width wrapper with the main landmark and the six screens; no band, no menu; the sources are the sixth screen', async () => {
     const { root } = await mount();
-    expect([...root.children].map((c) => c.className || c.tagName.toLowerCase())).toEqual(['app-head', 'app-inner']);
-    expect(root.querySelector('.app-inner > main.app-body')).not.toBeNull();
-    expect(root.querySelector('.app-inner > footer')).toBeNull(); // since 2026-11-07 the sources are the last row under 「くわしく見る」
-    expect(root.querySelector('.panel-column .app-more-list > footer.app-foot#panel-sources')).not.toBeNull();
-    expect(root.querySelector('.app-nav, .app-nav-summary')).toBeNull();
+    expect([...root.children].map((c) => c.className || c.tagName.toLowerCase())).toEqual(['app-inner']);
+    expect(root.querySelector('.app-inner > main.app-body.screens')).not.toBeNull();
+    expect(root.querySelector('.app-inner > footer')).toBeNull();
+    expect(root.querySelector('section#screen-sources > .screen-body#panel-sources')).not.toBeNull();
+    expect(root.querySelector('.app-more-list #panel-sources')).toBeNull(); // no longer a row under 「くわしく見る」
+    expect(root.querySelector('.app-nav, .app-nav-summary, .panel-column')).toBeNull();
   });
 
-  test('every folded card starts closed (its content in the DOM, the band a button that says so); the board and the facts are open with no button', async () => {
+  test('every folded card starts closed (its content in the DOM, the band a button that says so); the board, the AI and the sources are screens, open with no button', async () => {
     const { root } = await mount();
     for (const id of FOLDED_IDS) {
       const panel = root.querySelector<HTMLElement>(`#${id}`)!;
@@ -209,10 +251,11 @@ describe('the lower layer: the folded cards as light rows under the heading 「�
       expect(toggle.type).toBe('button');
       expect(panel.children.length, id).toBeGreaterThan(1); // the content is mounted, only hidden by the class
     }
-    expect(root.querySelector('#panel-board')!.classList.contains('is-collapsed')).toBe(false);
-    expect(root.querySelector('#panel-board .panel-toggle')).toBeNull();
-    expect(root.querySelector('#panel-facts .panel-toggle')).toBeNull();
-    expect(root.querySelector('#panel-sources dl')).not.toBeNull(); // the sources stay in the page, folded
+    for (const id of ['panel-board', 'panel-ai', 'panel-sources']) {
+      expect(root.querySelector(`#${id}`)!.classList.contains('is-collapsed'), id).toBe(false);
+      expect(root.querySelector(`#${id} .panel-toggle`), id).toBeNull();
+    }
+    expect(root.querySelector('#panel-sources dl')).not.toBeNull(); // the sources are on the page, three at once
   });
 
   test('pressing a closed row opens its card, scrolls to it, keeps keyboard focus on the row\'s button and leaves the address alone', async () => {
@@ -254,7 +297,7 @@ describe('the lower layer: the folded cards as light rows under the heading 「�
     expect(scrolls).toBe(2);
     // the other cards are untouched
     expect(root.querySelector('#panel-town')!.classList.contains('is-collapsed')).toBe(true);
-    expect(root.querySelector('#panel-sources')!.classList.contains('is-collapsed')).toBe(true);
+    expect(root.querySelector('#panel-allocation')!.classList.contains('is-collapsed')).toBe(true);
   });
 
   test('the scroll is instant for a reader who asked for reduced motion, smooth otherwise', async () => {
@@ -263,7 +306,7 @@ describe('the lower layer: the folded cards as light rows under the heading 「�
     Element.prototype.scrollIntoView = function (this: Element, options?: boolean | ScrollIntoViewOptions) {
       seen.push(typeof options === 'object' ? options.behavior : undefined);
     };
-    const toggle = toggleOf(root, 'panel-ai');
+    const toggle = toggleOf(root, 'panel-allocation');
     toggle.click();
     expect(seen.pop()).toBe('smooth'); // jsdom has no matchMedia: the default
     toggle.click(); // fold again
@@ -287,16 +330,23 @@ describe('the lower layer: the folded cards as light rows under the heading 「�
     expect(root.querySelector('#panel-controls')!.classList.contains('is-collapsed')).toBe(false);
   });
 
-  test('a town\'s four numbers appear above the board when a town is selected, and go away for a prefecture', async () => {
+  test('the fourth screen: a question and the search when no place is chosen; a town gives a sentence from its numbers and a card; a prefecture its own sentence and no card', async () => {
     const { root, store } = await mount();
-    const facts = root.querySelector<HTMLElement>('#panel-facts')!;
+    const title = root.querySelector('#screen-town-title')!;
+    const card = root.querySelector<HTMLElement>('.town-card')!;
+    expect(title.textContent).toBe(TOWN_TITLE_NONE);
+    expect(card.hidden).toBe(true);
+    expect(root.querySelector('#screen-town .search-input')).not.toBeNull(); // the search stands on this screen now
     store.set({ selectedArea: '30206' });
-    expect(facts.hidden).toBe(false);
-    expect(facts.querySelector('.place-facts-name')!.textContent).toBe('田辺市');
-    expect([...facts.querySelectorAll('.place-fact dt')].map((d) => d.textContent)).toEqual(['2050年の人口', '2020年比', '65歳以上の割合', '高齢者1人を支える現役世代']);
-    expect(facts.compareDocumentPosition(root.querySelector('#panel-board')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(title.textContent).toMatch(/^田辺市は、2100年に約[\d,.万]+人。.+が人口の目安を下回るのは\d{4}年。\s*試算$/);
+    expect(title.querySelector('.badge-estimate')!.textContent).toBe('試算'); // the 2100 figure is this app's estimate
+    expect(card.hidden).toBe(false);
+    expect(card.querySelectorAll('.town-card-row')).toHaveLength(3);
+    expect([...card.querySelectorAll('.town-card-row')].map((r) => (r as HTMLElement).dataset.facility)).toEqual(['clinic', 'post_office', 'bank']);
+    expect(card.querySelector('.town-card-chart svg')).not.toBeNull(); // the population from 2020 to 2100
     store.set({ selectedPref: '30', selectedArea: undefined });
-    expect(facts.hidden).toBe(true);
+    expect(title.textContent).toMatch(/^和歌山県は、2100年に約[\d,.万]+人。/);
+    expect(card.hidden).toBe(true);
   });
 });
 
@@ -304,10 +354,11 @@ describe('footer attribution', () => {
   test('each source is a label and a text that says it was processed, then its page as a link showing the URL, then the day it was read', async () => {
     const { root } = await mount();
     const entries = [...root.querySelectorAll('.app-foot dl dd')];
-    expect([...root.querySelectorAll('.app-foot dl dt')].map((d) => d.textContent)).toEqual(['人口', '境界', '施設の目安', '市町村の歳出', '歳出の公表値']);
+    const shown = [...SOURCES.filter((x) => x.primary), ...SOURCES.filter((x) => !x.primary)]; // three at once, the rest behind 「ほかの出典」
+    expect([...root.querySelectorAll('.app-foot dl dt')].map((d) => d.textContent)).toEqual(['人口', '施設の目安', '市町村の歳出', '境界', '歳出の公表値']);
     expect(entries).toHaveLength(SOURCES.length);
     entries.forEach((dd, i) => {
-      const src = SOURCES[i];
+      const src = shown[i];
       expect(dd.querySelector('.src-text')!.textContent).toBe(src.text);
       const links = dd.querySelectorAll('a');
       expect(links).toHaveLength(1);
@@ -330,7 +381,7 @@ describe('footer attribution', () => {
 
   test('the facility line says 加工して作成 and the boundary line keeps the approval number, last', async () => {
     const { root } = await mount();
-    const [, boundary, facility] = [...root.querySelectorAll('.app-foot dl dd')];
+    const [, facility, , boundary] = [...root.querySelectorAll('.app-foot dl dd')];
     expect(facility.textContent).toContain('国土交通省国土政策局「サービス施設の立地する確率が50%・80%となる自治体の人口規模（三大都市圏を除く）」（2009〜2012年の統計）を加工して作成');
     expect(facility.querySelector('.src-approval')).toBeNull();
     expect(boundary.querySelector('.src-approval')!.textContent).toBe('測量法に基づく国土地理院長承認（複製）R2JHf 450');
@@ -501,7 +552,7 @@ describe('selection through the shell', () => {
     await settle();
     expect(store.get()).toMatchObject({ selectedPref: '30', selectedArea: '30206' });
     expect(crumbs()).toBe('日本›和歌山県›田辺市');
-    expect(root.querySelector('.map-headline-name')!.textContent).toBe('田辺市');
+    expect(entryTitle(root).textContent).toMatch(/^2100年、田辺市の人口は/);
     expect(root.querySelector<HTMLButtonElement>('.back')!.textContent).toBe('県全体へ戻る');
     expect(visibleHost()?.querySelector('path.area[data-code="30206"]')).not.toBeNull();
     expect(visibleHost()?.querySelector('.ring-selected')?.getAttribute('d')).not.toBe('');
@@ -515,16 +566,18 @@ describe('selection through the shell', () => {
     expect(visibleHost()?.classList.contains('map-host-national')).toBe(true);
   });
 
-  test('the place bar (breadcrumbs, back) is hidden on the whole country, where the headline says 日本, and shows once a prefecture or a town is chosen (2026-11-07)', async () => {
+  test('the place bar (breadcrumbs, back) is hidden on the whole country, where the heading says 日本, and shows once a prefecture or a town is chosen (2026-11-07)', async () => {
     const { store, root, crumbs } = await mount();
     const bar = root.querySelector<HTMLElement>('.map-bar')!;
     expect(bar.hidden).toBe(true);
     expect(bar.contains(root.querySelector('.crumbs'))).toBe(true);
     expect(crumbs()).toBe('日本'); // the list is still built, only not shown
-    expect(root.querySelector('.map-headline-name')!.textContent).toBe('日本');
-    // the search and the headline stand in the same block, the search before the headline
+    expect(entryTitle(root).textContent).toMatch(/^2100年、日本の人口は/);
+    // the place bar stands above the heading; the search moved to the fourth screen (2026-11-08)
     const top = root.querySelector('.map-top')!;
-    expect([...top.children].map((c) => c.className.split(' ')[0])).toEqual(['map-bar', 'search', 'sr-only', 'map-headline']);
+    expect([...top.children].map((c) => c.className.split(' ')[0])).toEqual(['map-bar', 'sr-only']);
+    expect(top.compareDocumentPosition(entryTitle(root)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(root.querySelector('#screen-town .search')).not.toBeNull();
     store.set({ selectedPref: '30' });
     await settle();
     expect(bar.hidden).toBe(false);
@@ -546,11 +599,11 @@ describe('selection through the shell', () => {
     expect(warn).toHaveBeenCalled();
   });
 
-  test('focus moves to the headline when the map is replaced', async () => {
+  test('focus moves to the heading when the map is replaced', async () => {
     const { store, root } = await mount();
     store.set({ selectedPref: '30' });
     await settle();
-    expect(document.activeElement).toBe(root.querySelector('.map-headline-name'));
+    expect(document.activeElement).toBe(entryTitle(root));
   });
 });
 
@@ -614,7 +667,7 @@ describe('Task 8 leftovers', () => {
 
   test('the headline is not a live region; the place status is announced once per selection change', async () => {
     const { root, store } = await mount();
-    expect(root.querySelector('.map-headline')!.getAttribute('aria-live')).toBeNull();
+    expect(entryTitle(root).getAttribute('aria-live')).toBeNull();
     const status = root.querySelector('.place-status')!;
     expect(status.getAttribute('role')).toBe('status');
     expect(status.textContent).toBe('');
@@ -659,12 +712,12 @@ describe('Task 8 leftovers', () => {
     expect(get).not.toHaveBeenCalled(); // no tooltip was computed for the torn-down map
   });
 
-  test('focus moves to the headline without scrolling', async () => {
+  test('focus moves to the heading without scrolling', async () => {
     const { store, root } = await mount();
     const focus = vi.spyOn(HTMLElement.prototype, 'focus');
     store.set({ selectedPref: '30' });
     await settle();
-    const head = root.querySelector('.map-headline-name');
+    const head = entryTitle(root);
     expect(document.activeElement).toBe(head);
     const onHead = focus.mock.contexts.map((c, i) => [c, focus.mock.calls[i]![0]] as const).filter(([c]) => c === head);
     expect(onHead.length).toBeGreaterThan(0);
@@ -699,8 +752,8 @@ describe('allocation overlay on the map', () => {
     expect(legend.textContent).toContain('割り振りによる人口の変化（%）');
     expect([...legend.querySelectorAll('.legend-tick')].map((t) => t.textContent)).toEqual(['−10%', '−5%', '0', '+5%', '+10%']);
     // 2100 keeps its 試算 mark; the allocation adds its own mark next to it.
-    expect(root.querySelector('.map-headline-num .badge-estimate')!.textContent).toBe('試算');
-    expect(root.querySelector('.map-headline-num .badge-alloc')!.textContent).toBe(ALLOC_BADGE);
+    expect(entryTitle(root).querySelector('.badge-estimate')!.textContent).toBe('試算');
+    expect(entryTitle(root).querySelector('.badge-alloc')!.textContent).toBe(ALLOC_BADGE);
     const bar = root.querySelector<HTMLElement>('.alloc-bar')!;
     expect(bar.hidden).toBe(false);
     expect(bar.textContent).toContain('和歌山県 +10%');
@@ -717,12 +770,11 @@ describe('allocation overlay on the map', () => {
     const before2100 = codes.reduce((t, c) => t + total(series.get(c)![2100]), 0);
     const base2020 = codes.reduce((t, c) => t + total(series.get(c)![2020]), 0);
     const after = before2100 * 1.1; // every Wakayama area is at +10% in this overlay
-    expect(root.querySelector('.map-headline-num b')!.textContent).toBe(formatPop(before2100));
+    expect(entryTitle(root).textContent).toContain(`2100年、和歌山県の人口は${approxPopulation(before2100)}。${compareClause(before2100 / base2020)}`);
     store.set({ allocation: overlay() });
-    const num = root.querySelector('.map-headline-num')!;
-    expect(num.querySelector('b')!.textContent).toBe(formatPop(after));
-    expect(num.textContent).toContain(`${formatPop(after)}（割り振り前 ${formatPop(before2100)}）`); // both numbers in sight
-    expect(num.textContent).toContain(`2020年比 ${formatPct(after / base2020)}`);
+    const num = entryTitle(root);
+    expect(num.textContent).toContain(`2100年、和歌山県の人口は${approxPopulation(after)}。${compareClause(after / base2020)}`);
+    expect(num.textContent).toContain(`（割り振り前 ${formatPop(before2100)}）`); // the number without the allocation stays in sight
     expect(num.querySelector('.badge-estimate')!.textContent).toBe('試算');
     expect(num.querySelector('.badge-alloc')!.textContent).toBe(ALLOC_BADGE);
 
@@ -744,11 +796,10 @@ describe('allocation overlay on the map', () => {
 
   test('up to 2050 an allocation is no longer the official figure: 割り振り後 with its basis replaces 公式推計 where the figure changes', async () => {
     const { root, store } = await mount();
-    const num = () => root.querySelector('.map-headline-num')!;
+    const num = () => entryTitle(root);
     store.set({ year: 2050, selectedPref: '30' });
     await settle();
-    expect(num().querySelector('.badge-official')!.textContent).toBe('公式推計');
-    expect(num().querySelector('.badge-alloc')).toBeNull();
+    expect(num().querySelector('[class^="badge-"]')).toBeNull(); // up to 2050 the heading has no mark: the line under the map says 公式推計
     expect(num().querySelector('.head-basis')).toBeNull();
 
     store.set({ allocation: overlay({ year: 2050 }) }); // 和歌山県: three towns +10%
@@ -763,15 +814,15 @@ describe('allocation overlay on the map', () => {
     expect(num().querySelector('.badge-alloc')).toBeNull();
 
     store.set({ year: 2050 });
-    expect(num().querySelector('.badge-official')).toBeNull();
+    expect(num().querySelector('.badge-alloc')).not.toBeNull();
     store.set({ allocation: undefined });
-    expect(num().querySelector('.badge-official')!.textContent).toBe('公式推計');
+    expect(num().querySelector('[class^="badge-"]')).toBeNull();
     expect(num().querySelector('.head-basis')).toBeNull();
   });
 
-  test('where the allocation cannot change the figure (the whole country, or a place at 0 %) the original mark stays', async () => {
+  test('where the allocation cannot change the figure (the whole country, or a place at 0 %) the heading says nothing more', async () => {
     const { root, store } = await mount();
-    const num = () => root.querySelector('.map-headline-num')!;
+    const num = () => entryTitle(root);
     store.set({ year: 2050 });
     // A zero-sum allocation (as the allocation panel makes it): 和歌山県の田辺市 +10 %, the other towns give the same people up.
     const at2050 = (code: string) => total(store.get().series.get(code)![2050]);
@@ -781,7 +832,6 @@ describe('allocation overlay on the map', () => {
     const zeroSum = (patch: Partial<AllocationOverlay> = {}) =>
       overlay({ year: 2050, changePercent: { '30206': 10, '30201': 0, '30427': 0, ...Object.fromEntries(others.map((c) => [c, give])) }, ...patch });
     store.set({ allocation: zeroSum() }); // Japan: the total of a zero-sum allocation
-    expect(num().querySelector('.badge-official')!.textContent).toBe('公式推計');
     expect(num().querySelector('.head-basis')).toBeNull();
     expect(num().textContent).not.toContain('このアプリが計算');
     expect(num().textContent).not.toContain('割り振り前'); // the same total: no second number either
@@ -789,20 +839,18 @@ describe('allocation overlay on the map', () => {
     // 東京都 changes by a real amount: the official mark gives way
     store.set({ selectedPref: '13' });
     await settle();
-    expect(num().querySelector('.badge-official')).toBeNull();
     expect(num().querySelector('.head-basis')!.textContent).toBe('公式推計をもとにこのアプリが計算');
 
     // 北海道 has a change of 0: its figure is the unallocated one
     store.set({ allocation: zeroSum({ changePercent: { '30206': 10, '01101': 0 } }), selectedPref: '01' });
     await settle();
-    expect(num().querySelector('.badge-official')!.textContent).toBe('公式推計');
     expect(num().querySelector('.head-basis')).toBeNull();
   });
 
   test('after 2050 the headline keeps 試算 and adds 割り振り後, with no basis note', async () => {
     const { root, store } = await mount();
     store.set({ year: 2100, allocation: overlay() });
-    const num = root.querySelector('.map-headline-num')!;
+    const num = entryTitle(root);
     expect(num.querySelector('.badge-estimate')!.textContent).toBe('試算');
     expect(num.querySelector('.badge-alloc')!.textContent).toBe(ALLOC_BADGE);
     expect(num.querySelector('.head-basis')).toBeNull();
@@ -813,8 +861,8 @@ describe('allocation overlay on the map', () => {
     const { root, store } = await mount();
     store.set({ year: 2100, allocation: overlay() });
     store.set({ year: 2040 });
-    const num = root.querySelector('.map-headline-num')!;
-    expect(num.querySelector('.badge-official')!.textContent).toBe('公式推計');
+    const num = entryTitle(root);
+    expect(num.querySelector('[class^="badge-"]')).toBeNull(); // no mark of its own up to 2050, and not allocated for this year
     expect(num.querySelector('.badge-alloc')).toBeNull();
     expect(num.querySelector('.head-basis')).toBeNull();
   });
@@ -823,7 +871,7 @@ describe('allocation overlay on the map', () => {
     const { root, store } = await mount();
     store.set({ year: 2020, selectedPref: '30', allocation: overlay({ year: 2020 }) });
     await settle();
-    const num = root.querySelector('.map-headline-num')!;
+    const num = entryTitle(root);
     expect(num.querySelector('.badge-official')).toBeNull();
     expect(num.querySelector('.head-basis')!.textContent).toBe('国勢調査をもとにこのアプリが計算');
     expect(num.textContent).not.toContain('実績（国勢調査）');
@@ -837,9 +885,9 @@ describe('allocation overlay on the map', () => {
     store.set({ year: 2080 });
     const series = store.get().series;
     const codes = sample.filter((a) => a.prefCode === '30').map((a) => a.code);
-    expect(root.querySelector('.map-headline-num b')!.textContent).toBe(formatPop(codes.reduce((t, c) => t + total(series.get(c)![2080]), 0)));
-    expect(root.querySelector('.map-headline-num .badge-alloc')).toBeNull();
-    expect(root.querySelector('.map-headline-num')!.textContent).not.toContain('割り振り前');
+    expect(entryTitle(root).textContent).toContain(`2080年、和歌山県の人口は${approxPopulation(codes.reduce((t, c) => t + total(series.get(c)![2080]), 0))}`);
+    expect(entryTitle(root).querySelector('.badge-alloc')).toBeNull();
+    expect(entryTitle(root).textContent).not.toContain('割り振り前');
     const tanabe = root.querySelector('.map-host:not([hidden]) svg path.area[data-code="30206"]')!;
     expect(tanabe.getAttribute('aria-label')).toContain('割り振りによる変化 +10.0%（2100年の計算）');
     expect(tanabe.getAttribute('aria-label')).not.toContain('（割り振り後）');
@@ -873,9 +921,9 @@ describe('allocation overlay on the map', () => {
     expect(wakayama.getAttribute('fill')).toBe(ratioFill);
     expect(root.querySelector('.legend')!.textContent).toContain('2020年の人口に対して');
     expect(root.querySelector<HTMLElement>('.alloc-bar')!.hidden).toBe(true);
-    expect(root.querySelector('.map-headline-num [class^="badge-"]')!.textContent).toBe('試算');
-    expect(root.querySelector('.map-headline-num .badge-alloc')).toBeNull();
-    expect(document.activeElement).toBe(root.querySelector('.map-headline-name')); // focus does not stay on a hidden button
+    expect(entryTitle(root).querySelector('[class^="badge-"]')!.textContent).toBe('試算');
+    expect(entryTitle(root).querySelector('.badge-alloc')).toBeNull();
+    expect(document.activeElement).toBe(entryTitle(root)); // focus does not stay on a hidden button
 
     store.set({ allocation: overlay() });
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -1066,7 +1114,7 @@ describe('allocation overlay on the map', () => {
     expect(store.get().allocation).toBeDefined(); // cleared by the store, drawn again by the panel
     expect(root.querySelector<HTMLElement>('.alloc-bar')!.hidden).toBe(false);
     expect(legend.dataset.mode).toBe('allocation');
-    expect(root.querySelector('.map-headline-num .badge-alloc')).not.toBeNull();
+    expect(entryTitle(root).querySelector('.badge-alloc')).not.toBeNull();
   });
 
   test('count markers keep their screen size: on a map drawn at half its viewBox width they are scaled by 2', async () => {
@@ -1112,7 +1160,7 @@ describe('the map colour mode: the change since 2020 or the support ratio', () =
     const box = root.querySelector<HTMLElement>('.map-mode')!;
     const block = root.querySelector<HTMLElement>('.map-foot > .legend-block')!;
     expect(box.parentElement).toBe(block);
-    expect(box.nextElementSibling).toBe(root.querySelector('.legend')); // the choice, then the legend it switches
+    expect(box.previousElementSibling!.contains(root.querySelector('.legend'))).toBe(true); // the legend, then the small choice that switches it (2026-11-08)
     expect(root.querySelector('.map-stage')!.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); // under the map
     const group = box.querySelector('.choice')!;
     expect(group.getAttribute('role')).toBe('group');
@@ -1170,15 +1218,13 @@ describe('the map colour mode: the change since 2020 or the support ratio', () =
     const all = sample.map((a) => a.code);
     const japan = (y: number) => ratioOver(all.map((c) => series.get(c)![y]));
     store.set({ mapMode: 'support', year: 2020 });
-    const num = () => root.querySelector('.map-headline-num')!;
-    expect(root.querySelector('.map-headline-name')!.textContent).toBe('日本');
-    expect(num().querySelector('b')!.textContent).toBe(`${japan(2020).toFixed(1)}人`);
-    expect(num().textContent).toBe(`2020年 高齢者1人を支える現役世代 ${japan(2020).toFixed(1)}人　2020年は${japan(2020).toFixed(1)}人　実績（国勢調査）`);
+    const num = () => entryTitle(root);
+    expect(num().textContent).toBe(`2020年、日本で、高齢者1人を支える現役世代は${japan(2020).toFixed(1)}人です。`);
     store.set({ year: 2050 });
-    expect(num().textContent).toBe(`2050年 高齢者1人を支える現役世代 ${japan(2050).toFixed(1)}人　2020年は${japan(2020).toFixed(1)}人　公式推計`);
+    expect(num().textContent).toBe(`2050年、日本で、高齢者1人を支える現役世代は${japan(2050).toFixed(1)}人。2020年は${japan(2020).toFixed(1)}人です。`);
     store.set({ year: 2100 });
     expect(num().querySelector('.badge-estimate')!.textContent).toBe('試算');
-    expect(num().textContent).not.toContain('2020年比'); // the population figures are not mixed in
+    expect(num().textContent).not.toContain('人口は'); // the population figures are not mixed in
 
     const svg = root.querySelector('.map-host-national svg')!;
     const wk = (y: number) => ratioOver(codesOf('30').map((c) => series.get(c)![y]));
@@ -1216,7 +1262,7 @@ describe('the map colour mode: the change since 2020 or the support ratio', () =
     const tanabe2020 = svg.querySelector('path.area[data-code="30206"]')!.getAttribute('fill');
     store.set({ year: 2100 });
     expect(svg.querySelector('path.area[data-code="30206"]')!.getAttribute('fill')).not.toBe(tanabe2020);
-    expect(root.querySelector('.map-headline-num b')!.textContent).toBe(`${ratioOver(codesOf('30').map((c) => series.get(c)![2100])).toFixed(1)}人`);
+    expect(entryTitle(root).textContent).toContain(`2100年、和歌山県で、高齢者1人を支える現役世代は${ratioOver(codesOf('30').map((c) => series.get(c)![2100])).toFixed(1)}人`);
     // the national map, shown again, is in the same mode
     store.set({ selectedPref: undefined });
     await settle();
@@ -1244,12 +1290,12 @@ describe('the map colour mode: the change since 2020 or the support ratio', () =
     buttons(root)[1].focus(); // a keyboard user is on the choice when the allocation arrives
     store.set({ allocation: overlay() });
     expect(box.hidden).toBe(true);
-    expect(document.activeElement).toBe(root.querySelector('.map-headline-name')); // focus does not stay on a hidden button
+    expect(document.activeElement).toBe(entryTitle(root)); // focus does not stay on a hidden button
     expect(store.get().mapMode).toBe('support'); // kept for later
     expect(wakayama.getAttribute('fill')).toBe(allocationColor(10, 10));
     expect(root.querySelector<HTMLElement>('.legend')!.dataset.mode).toBe('allocation');
-    expect(root.querySelector('.map-headline-num .badge-alloc')!.textContent).toBe(ALLOC_BADGE);
-    expect(root.querySelector('.map-headline-num')!.textContent).toContain('2020年比');
+    expect(entryTitle(root).querySelector('.badge-alloc')!.textContent).toBe(ALLOC_BADGE);
+    expect(entryTitle(root).textContent).toContain('人口は'); // the allocation's heading is the population's
     expect(wakayama.getAttribute('aria-label')).toContain('割り振りによる変化 +10.0%');
     expect(wakayama.getAttribute('aria-label')).not.toContain('高齢者1人');
     store.set({ year: 2095 }); // a year change keeps the allocation colours
@@ -1261,7 +1307,7 @@ describe('the map colour mode: the change since 2020 or the support ratio', () =
     expect(pressed(root)).toEqual(['false', 'true']);
     expect(wakayama.getAttribute('fill')).toBe(supportFill);
     expect(root.querySelector<HTMLElement>('.legend')!.dataset.mode).toBe('support');
-    expect(root.querySelector('.map-headline-num')!.textContent).toContain('高齢者1人を支える現役世代');
+    expect(entryTitle(root).textContent).toContain('高齢者1人を支える現役世代');
 
     // the change mode under an allocation, too
     store.set({ mapMode: 'change', allocation: overlay() });
@@ -1271,12 +1317,84 @@ describe('the map colour mode: the change since 2020 or the support ratio', () =
     expect(root.querySelector<HTMLElement>('.legend')!.dataset.mode).toBe('ratio');
   });
 
-  test('the change mode is untouched by the new choice: same fills, labels and headline as before', async () => {
+  test('the change mode is untouched by the new choice: same fills, labels and heading as before', async () => {
     const { root, store } = await mount();
     store.set({ year: 2100 });
     const svg = root.querySelector('.map-host-national svg')!;
     const label = svg.querySelector('path.area[data-code="30"]')!.getAttribute('aria-label')!;
     expect(label).toMatch(/^和歌山県、2100年 [\d.,万]+人、2020年比 −[\d.]+%（このアプリの試算）$/);
-    expect(root.querySelector('.map-headline-num')!.textContent).toContain('2020年比');
+    expect(entryTitle(root).textContent).toMatch(/^2100年、日本の人口は約[\d,億万]+人。2020年の/);
+  });
+});
+
+describe('the choice screen (the third): the board\'s first row as two boxes of the same size', () => {
+    test('when the whole country has no row (the small sample world has none), the screen says so: no example label, no figure, no button', async () => {
+    const { root } = await mount();
+    const card = root.querySelector<HTMLElement>('#screen-choose .choose')!;
+    expect(card.querySelector<HTMLElement>('.choose-example')!.hidden).toBe(true);
+    expect(card.querySelector<HTMLElement>('.choose-figure')!.hidden).toBe(true);
+    expect(card.querySelector<HTMLElement>('.choose-actions')!.hidden).toBe(true);
+    const message = card.querySelector<HTMLElement>('.choose-message')!;
+    expect(message.hidden).toBe(false);
+    expect(message.textContent).toBe('2100年までに、主な8施設の人口の目安を新しく下回る町はありません。');
+  });
+
+  test('it never advises: no 勧め, べき, おすすめ, and the verbs are the board\'s (下回る)', async () => {
+    const { root } = await mount();
+    const text = root.querySelector('#screen-choose')!.textContent!;
+    for (const w of ['べき', 'おすすめ', '勧め', '推奨', '閉鎖', '撤退', '廃止']) expect(text, w).not.toContain(w);
+  });
+});
+
+describe('the town card (the fourth screen)', () => {
+  test('three facilities by id, named as the data names them, each with the year it falls below its guide, already below, or never', async () => {
+    const { root, store } = await mount();
+    store.set({ selectedArea: '30206' });
+    const rows = [...root.querySelectorAll('.town-card-row')];
+    const byId = new Map(loadFacilities().map((f) => [f.id, f.name] as const));
+    const names = ['clinic', 'post_office', 'bank'].map((id) => byId.get(id));
+    expect(rows.map((r) => r.querySelector('.town-card-name')!.textContent)).toEqual(names);
+    for (const r of rows) {
+      expect(r.querySelector('.town-card-when')!.textContent!.replace(/\s*試算$/, '')).toMatch(/^(\d{4}年に目安を下回る|2020年の時点で、すでに目安を下回る|2100年まで目安を下回らない)$/);
+    }
+    expect(root.querySelector('.town-card-facilities-lead')!.textContent).toBe('人口の目安を下回る年');
+  });
+
+  test('the heading and the card follow the place, and the chart\'s marker follows the year without redrawing the card', async () => {
+    const { root, store } = await mount();
+    store.set({ selectedArea: '30206' });
+    const card = root.querySelector('.town-card')!;
+    const svg = card.querySelector('svg')!;
+    const heading = root.querySelector('#screen-town-title')!.textContent;
+    store.set({ year: 2060 });
+    expect(card.querySelector('svg')).toBe(svg); // the same chart
+    expect(root.querySelector('#screen-town-title')!.textContent).toBe(heading); // the sentence is about 2100, whatever year the map shows
+    store.set({ selectedArea: '30201' });
+    expect(root.querySelector('#screen-town-title')!.textContent).not.toBe(heading);
+    store.set({ selectedArea: undefined, selectedPref: undefined });
+    expect(root.querySelector('#screen-town-title')!.textContent).toBe(TOWN_TITLE_NONE);
+    expect(card.hasAttribute('hidden')).toBe(true);
+  });
+
+  test('the sentence says the earliest facility to fall below its guide from the board\'s own crossings (the same year as the first row of the town\'s board)', async () => {
+    const { root, store } = await mount();
+    store.set({ selectedArea: '30206' });
+    const year = /のは(\d{4})年。/.exec(root.querySelector('#screen-town-title')!.textContent!)![1];
+    const years = [...root.querySelectorAll('#panel-board .board-row')].map((r) => (r as HTMLElement).dataset.year!);
+    expect(Math.min(...years.map(Number))).toBe(Number(year)); // the board lists the same year first among all its rows, folded or not
+  });
+});
+
+describe('the sixth screen: three sources at once, the rest behind a fold, then one line', () => {
+  test('the first three are 人口, 施設の目安 and 市町村の歳出; 境界 (with its approval line) and 歳出の公表値 are behind 「ほかの出典（2件）」', async () => {
+    const { root } = await mount();
+    const body = root.querySelector('#screen-sources .screen-body')!;
+    expect([...body.querySelectorAll(':scope > .src-list dt')].map((d) => d.textContent)).toEqual(['人口', '施設の目安', '市町村の歳出']);
+    const more = body.querySelector<HTMLDetailsElement>('details.src-more')!;
+    expect(more.open).toBe(false);
+    expect(more.querySelector('summary')!.textContent).toBe('ほかの出典（2件）');
+    expect([...more.querySelectorAll('dt')].map((d) => d.textContent)).toEqual(['境界', '歳出の公表値']);
+    expect(more.querySelector('.src-approval')!.textContent).toBe('測量法に基づく国土地理院長承認（複製）R2JHf 450');
+    expect(body.querySelector('.screen-sources-note')!.textContent).toBe('2050年より先の数字は、公式の前提を延ばした、このアプリの試算です。');
   });
 });
