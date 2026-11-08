@@ -3,6 +3,9 @@
 import { OFFICIAL_END_YEAR } from '../engine/scenarios';
 
 export const APP_TITLE = '2100年の日本';
+// APP_LEAD, APP_PROBLEM and FOOT_NOTE are no longer on screen: since 2026-11-08 (one message to a screen) the first screen
+// says its own heading and line (screens.ts) and the sixth screen has one sentence about 2050. The owner's wording is kept
+// here, with its checks, in case a screen asks for it again.
 export const APP_LEAD =
   '日本、都道府県、町の順に、2100年までの人口を地図で見る。2050年までは国立社会保障・人口問題研究所の公式推計、それより後はこのアプリの試算。';
 
@@ -15,8 +18,9 @@ export const APP_PROBLEM =
   'いま、何を残したいかを決めておかなければ、あとから選べなくなるかもしれません。わたしたちは何を残すのか。2100年の数字から考えます。';
 
 /**
- * The lower layer, under the board, headed 「くわしく見る」: the folded panels stand under it as light rows (the owner
- * asked for the first screen to show only what matters most, 2026-11-06, and for one way in, not two, 2026-11-07).
+ * The lower layer, under the sixth screen, headed 「くわしく見る」: the folded panels (the town's detail, the assumptions, the
+ * allocation) stand under it as light rows (the owner asked for the first screen to show only what matters most, 2026-11-06,
+ * and for one way in, not two, 2026-11-07; the AI and the sources left it for screens of their own, 2026-11-08).
  * A closed row shows the panel's name and a few words in grey (`NAV_SUMMARIES`); the fuller sentence (`NAV_DESCRIPTIONS`,
  * in the words the panel itself uses, saying what the panel does and never what to do with the result) is kept for a
  * screen reader as the row's description. Both keyed by the panel's id; the row's name is the panel's own title.
@@ -26,16 +30,12 @@ export const NAV_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'panel-town': '町や県を選ぶと、人口・年齢・施設の人口の目安が出ます',
   'panel-controls': '出生や人口の移動、インフラの前提を変えて試します',
   'panel-allocation': '全国の人口は変えずに、ある地域を増やすと、ほかはどうなるかを見ます',
-  'panel-ai': '日本語で聞くと、このアプリの計算を使って答えます',
-  'panel-sources': '人口・境界・施設の目安・歳出の出典と、2050年より後の数字の前提',
 };
 /** The few words in grey after a closed row's name. */
 export const NAV_SUMMARIES: Readonly<Record<string, string>> = {
   'panel-town': '選んだ町の人口・年齢・施設',
   'panel-controls': '出生・移動・インフラの前提を変えて試す',
   'panel-allocation': 'ある地域を増やすと、ほかはどうなるか',
-  'panel-ai': '日本語で聞くと、このアプリの計算で答える',
-  'panel-sources': '人口・境界・施設の目安・歳出の出典',
 };
 
 export { OFFICIAL_END_YEAR };
@@ -79,12 +79,15 @@ export interface SourceLine {
   retrieved: string;
   /** A line the provider asks to be kept with the data, shown last. */
   approval?: string;
+  /** Shown at once on the sixth screen; the others stand behind 「ほかの出典」 (the owner, 2026-11-08: three lines first). */
+  primary?: boolean;
 }
 
 /** The sources, in the footer's order. URLs and retrieval dates are those of docs/sources.md (read 2026-11-05 JST, the two 総務省 pages 2026-11-06). */
 export const SOURCES: readonly SourceLine[] = [
   {
     label: '人口',
+    primary: true,
     text: '国立社会保障・人口問題研究所「日本の地域別将来推計人口（令和5年推計）」を加工して作成（公共データ利用規約 第1.0版（PDL1.0））。国立社会保障・人口問題研究所がこのアプリの内容を保証するものではありません',
     url: 'https://www.ipss.go.jp/pp-shicyoson/j/shicyoson23/t-page.asp',
     retrieved: '2026年11月5日',
@@ -98,12 +101,14 @@ export const SOURCES: readonly SourceLine[] = [
   },
   {
     label: '施設の目安',
+    primary: true,
     text: '国土交通省国土政策局「サービス施設の立地する確率が50%・80%となる自治体の人口規模（三大都市圏を除く）」（2009〜2012年の統計）を加工して作成（図の数値を施設ごとの人口の目安として転記）',
     url: 'https://www.mlit.go.jp/common/001042019.pdf',
     retrieved: '2026年11月5日',
   },
   {
     label: '市町村の歳出',
+    primary: true,
     text: '総務省「令和6年度 市町村別決算状況調」（都市別・町村別の概況）を加工して作成（歳出総額を住民基本台帳人口（令和7年1月1日）で割り、人口の規模ごとに中央値と四分位を計算。令和6年度の決算の実績で、国が作成した数字ではありません）',
     url: 'https://www.soumu.go.jp/iken/zaisei/r06_shichouson.html',
     retrieved: '2026年11月6日',

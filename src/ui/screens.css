@@ -1,0 +1,439 @@
+/* The six screens (the owner, 2026-11-08: one message to a screen). A screen is a section as tall as the window
+   (`min-height: 100svh`; it grows when its content is taller, it never clips): one heading (an h2 in the mincho, large),
+   at most one line under it, and one thing to look at. Everything else is in a fold or on the next screen.
+   Tokens only: no colour, face, shadow or radius that theme.css does not already have. The look is the plain published
+   page: paper ground, ink text, the one indigo, a white card with a 1px edge (`.screen-card`) for the things that are
+   figures (the board, the choice, the town). Mobile first (390px); 600px and 1024px step the heading up. */
+
+.screens {
+  display: block;
+}
+.screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  padding: var(--sp-6) 0 var(--sp-5);
+  border-top: 1px solid var(--line);
+  scroll-margin-top: 0;
+}
+.screen-entry {
+  padding-top: var(--sp-4);
+  padding-bottom: var(--sp-3);
+  border-top: 0;
+}
+@media (min-width: 1024px) {
+  .screen {
+    width: 100%;
+    max-width: 1100px;
+    margin-inline: auto;
+    padding-top: var(--sp-7);
+    padding-bottom: var(--sp-6);
+  }
+  .screen-entry {
+    padding-top: var(--sp-5);
+    padding-bottom: var(--sp-4);
+  }
+}
+
+/* The heading: the screen's one message. Large mincho; a sentence breaks between its phrases. */
+.screen-title {
+  max-width: 30em;
+  font-size: var(--fs-26);
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  word-break: auto-phrase;
+}
+.screen-title:focus {
+  outline: none;
+}
+.screen-title:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+@media (min-width: 600px) {
+  .screen-title {
+    font-size: var(--fs-32);
+  }
+}
+@media (min-width: 1024px) {
+  .screen-title {
+    font-size: var(--fs-44);
+    line-height: 1.35;
+  }
+}
+.screen-title .badge-estimate,
+.screen-title .badge-alloc {
+  margin-left: var(--sp-1);
+  vertical-align: 0.5em;
+}
+.screen-title .head-before,
+.screen-title .head-basis {
+  margin-left: var(--sp-1);
+  color: var(--ink-2);
+  font-family: var(--font-body);
+  font-size: var(--fs-14);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+/* The one line under a heading. */
+.screen-lead {
+  max-width: 44em;
+  margin: var(--sp-2) 0 0;
+  color: var(--ink-2);
+  font-size: var(--fs-14);
+  line-height: 1.6;
+}
+@media (min-width: 1024px) {
+  .screen-lead {
+    font-size: var(--fs-16);
+  }
+}
+
+/* What the screen shows: centred in the room under the heading, never wider than a reading column. */
+.screen-body {
+  width: 100%;
+  max-width: 56rem;
+  margin: auto;
+  padding-top: var(--sp-5);
+}
+.screen-card {
+  padding: var(--sp-4);
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+}
+@media (min-width: 600px) {
+  .screen-card {
+    padding: var(--sp-5);
+  }
+}
+
+/* ---- 1. The entrance ------------------------------------------------------------------------------------------- */
+.screen-entry > .app-title {
+  margin-bottom: var(--sp-2);
+  color: var(--ink-2);
+  font-size: var(--fs-16);
+  letter-spacing: 0.04em;
+}
+.map-column {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+.map-column .screen-title {
+  margin-top: var(--sp-1);
+}
+.map-column .map-stage {
+  margin-top: var(--sp-3);
+}
+.screen-note {
+  margin: var(--sp-2) 0 0;
+  color: var(--muted);
+  font-size: var(--fs-13);
+  line-height: 1.5;
+  text-align: center;
+}
+.screen-next {
+  display: inline-flex;
+  align-self: center;
+  align-items: center;
+  min-height: var(--touch);
+  color: var(--accent);
+  font-size: var(--fs-14);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+/* ---- 2. The board: the card holds the bars, three rows and one fold -------------------------------------------- */
+.board-card {
+  padding: var(--sp-4);
+}
+@media (min-width: 600px) {
+  .board-card {
+    padding: var(--sp-5);
+  }
+}
+.screen-board .screen-body {
+  max-width: 48rem;
+}
+.board-card .board-heading {
+  margin-bottom: var(--sp-1);
+  color: var(--ink-2);
+  font-family: var(--font-body);
+  font-size: var(--fs-14);
+  font-weight: 600;
+}
+
+/* ---- 3. The choice: two boxes of the same size ------------------------------------------------------------------- */
+.choose {
+  display: grid;
+  gap: var(--sp-4);
+}
+.choose[hidden] {
+  display: none;
+}
+.choose-example {
+  margin: 0;
+}
+.choose-lead {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-15);
+}
+.choose-figure {
+  display: grid;
+  gap: var(--sp-3);
+}
+@media (min-width: 600px) {
+  .choose-figure {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--sp-5);
+  }
+}
+.choose-side {
+  padding: var(--sp-4);
+  background: var(--paper-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+}
+.choose-side-title {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-15);
+  font-weight: 600;
+}
+.choose-amount {
+  margin: var(--sp-1) 0 var(--sp-2);
+  font-family: var(--font-display);
+  font-size: var(--fs-32);
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.choose-bar {
+  display: block;
+  height: 10px;
+  border-radius: 2px;
+}
+.choose-bar.is-gain {
+  background: var(--growth);
+}
+.choose-bar.is-loss {
+  background: var(--decline);
+}
+.choose-who {
+  margin: var(--sp-2) 0 0;
+  color: var(--ink-2);
+  font-size: var(--fs-14);
+}
+.choose-same {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--fs-15);
+  text-align: center;
+}
+.choose-effect {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-18);
+  line-height: 1.5;
+  text-align: center;
+}
+.choose-actions {
+  align-items: center;
+  justify-content: center;
+}
+.choose-status {
+  margin: 0;
+}
+
+/* ---- 4. Your town: the search and one card --------------------------------------------------------------------- */
+.screen-town .search {
+  max-width: none;
+}
+.screen-town .search-input {
+  min-height: 52px;
+  font-size: var(--fs-18);
+}
+.town-card-slot {
+  margin-top: var(--sp-5);
+}
+.town-card {
+  display: grid;
+  gap: var(--sp-5);
+}
+.town-card[hidden] {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .town-card {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    align-items: center;
+    gap: var(--sp-6);
+  }
+}
+.town-card-chart .chart-figure {
+  margin: 0;
+}
+/* On a phone the card has to fit one screen: the chart already names its two parts at its top (公式推計 | このアプリの試算) and
+   labels its three numbers, so the legend and the sentence under it stay for a screen reader and leave the eye. */
+@media (max-width: 599.98px) {
+  .town-card-chart .chart-legend,
+  .town-card-chart .chart-summary {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+.town-card-facilities-lead {
+  margin: 0 0 var(--sp-2);
+  color: var(--ink-2);
+  font-size: var(--fs-14);
+  font-weight: 600;
+}
+.town-card-list {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.town-card-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--paper-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+}
+.town-card-name {
+  font-size: var(--fs-16);
+  font-weight: 600;
+}
+.town-card-when {
+  color: var(--ink-2);
+  font-size: var(--fs-15);
+}
+
+/* ---- 5. The AI: example questions, the box and the answers ------------------------------------------------------ */
+.screen-ai .screen-body {
+  max-width: 44rem;
+}
+.screen-ai .ai-lead-after {
+  display: none; /* the sixth screen says what the 2050 line is; each answer carries its own mark for figures after 2050 */
+}
+@media (max-width: 599.98px) {
+  .screen-ai .ai-sample {
+    padding-block: var(--sp-2);
+    font-size: var(--fs-14);
+    line-height: 1.4;
+  }
+}
+/* The two small section titles of the panel stay for a screen reader and leave the eye: the screen's heading says it. */
+.screen-ai .ai-panel .panel-section-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- 6. The sources: three at once, the rest behind a fold ----------------------------------------------------- */
+.screen-sources .screen-body {
+  max-width: 48rem;
+}
+.screen-sources .app-foot {
+  color: var(--ink-2);
+  font-size: var(--fs-14);
+}
+.screen-sources .src-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--sp-3) var(--sp-4);
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--line-2);
+}
+.screen-sources .src-more {
+  border-top: 1px solid var(--line-2);
+}
+.screen-sources .src-more .src-list {
+  border-top: 0;
+}
+.screen-sources-note {
+  margin: var(--sp-4) 0 0;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line-2);
+  color: var(--ink);
+  font-size: var(--fs-15);
+}
+@media (max-width: 599.98px) {
+  .screen-sources .app-foot {
+    font-size: var(--fs-13);
+    line-height: 1.55;
+  }
+  .screen-sources .src-list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .screen-sources .src-list dd {
+    margin-bottom: var(--sp-2);
+  }
+  .screen-sources .app-foot .src-where,
+  .screen-sources .app-foot .src-approval {
+    font-size: var(--fs-12);
+  }
+}
+
+/* ---- Under the sixth screen: 「くわしく見る」 -------------------------------------------------------------------- */
+.screens > .app-more {
+  width: 100%;
+  max-width: 56rem;
+  margin: var(--sp-6) auto 0;
+}
+
+/* ---- A phone (under 600px): each screen is made to hold in 844px --------------------------------------------------
+   Last in the file, so these win over the base rules above; the heights were measured in a real browser at 390x844. */
+@media (max-width: 599.98px) {
+  .screen {
+    padding-top: var(--sp-5);
+    padding-bottom: var(--sp-3);
+  }
+  .screen-body {
+    padding-top: var(--sp-4);
+  }
+  .screen-card,
+  .board-card {
+    padding: var(--sp-3);
+  }
+  .board-card .board-years-lead {
+    font-size: var(--fs-13);
+  }
+  .town-card {
+    gap: var(--sp-3);
+  }
+  .town-card-slot {
+    margin-top: var(--sp-3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

@@ -108,7 +108,8 @@ export interface PanelContext {
 export const YEAR_MIN = 2020;
 export const YEAR_MAX = 2100;
 export const YEAR_STEP = 5;
-export const DEFAULT_YEAR = 2050;
+/** The year the page opens on: 2100, so the first heading and the map say the same thing (2026-11-08, one message to a screen). */
+export const DEFAULT_YEAR = 2100;
 
 export function isValidYear(y: unknown): y is number {
   return typeof y === 'number' && Number.isInteger(y) && y >= YEAR_MIN && y <= YEAR_MAX && (y - YEAR_MIN) % YEAR_STEP === 0;

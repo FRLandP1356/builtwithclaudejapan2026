@@ -91,7 +91,7 @@ function h<K extends Tag>(tag: K, className?: string, text?: string): HTMLElemen
 }
 
 /** On a phone the map is above the panels: after the button, bring it into view (as the town panel's disclosure does). */
-function revealMap(): void {
+export function revealMap(): void {
   const map = document.querySelector('.map-column');
   if (!map || typeof map.scrollIntoView !== 'function') return;
   if (map.getBoundingClientRect().top < 0) map.scrollIntoView({ block: 'start' });

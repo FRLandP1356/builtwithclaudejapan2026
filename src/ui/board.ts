@@ -55,6 +55,9 @@ export const BOARD_OTHERS = 'その他の施設';
 export const BOARD_TABLE = '棒の数字を表で見る';
 export const BOARD_BAR_SUMMARY_NONE = 'どの年にも、新しく下回るものはありません。';
 
+/** The fold's summary when no row is left over (it still holds the notes, the famous places and the documents). */
+export const BOARD_MORE_PLAIN = '続きを見る';
+
 /** 「続きを見る（残り12件）」 */
 export function moreText(rest: number): string {
   return `続きを見る（残り${formatCount(rest)}件）`;

@@ -25,6 +25,7 @@ import {
   BOARD_ESSENTIAL_NOTE,
   BOARD_GUIDE_NOTE,
   BOARD_GUIDE_SUMMARY,
+  BOARD_MORE_PLAIN,
   BOARD_NONE,
   BOARD_NONE_ESSENTIAL,
   BOARD_OTHERS,
@@ -207,11 +208,12 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
   const list = h('ol', 'board-list');
   const none = h('p', 'board-none');
   none.hidden = true;
+  // 「続きを見る（残り59件）」: one fold under the first rows. It holds everything the first look leaves out: the rest of the
+  // rows, a town's other facilities, the famous places, the published documents, what is already below and the note on
+  // the guide (2026-11-08: the screen shows the bars, three rows and this fold).
   const more = h('details', 'board-more');
   const moreSummary = h('summary');
   const moreList = h('ol', 'board-list');
-  more.append(moreSummary, moreList);
-  more.hidden = true;
   const others = h('details', 'board-others');
   const othersSummary = h('summary');
   const othersList = h('ol', 'board-list');
@@ -225,7 +227,8 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
   const guide = h('p', 'note board-note');
   guide.replaceChildren(...phraseNodes(BOARD_GUIDE_NOTE));
   guideBox.append(essentialNote, guide);
-  root.append(heading, strip.root, list, none, more, others, landmarks.root, claims.root, already, guideBox);
+  more.append(moreSummary, moreList, others, landmarks.root, claims.root, already, guideBox);
+  root.append(heading, strip.root, list, none, more);
   el.append(root);
 
   let scope: TownScope | undefined;
@@ -265,12 +268,12 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
       const r = boardCrossings(totals, sc.areaCodes, data.facilities);
       bars = boardBars(r.crossings, totals.years, sc.level);
       const rows = townRows(r.crossings, data.facilities, sc.name);
-      fillList(list, rows.essential);
+      fillList(list, rows.essential.slice(0, BOARD_ROWS));
       none.textContent = BOARD_NONE_ESSENTIAL;
       none.hidden = rows.essential.length > 0;
-      more.hidden = true;
-      more.open = false;
-      moreList.replaceChildren();
+      const rest = rows.essential.slice(BOARD_ROWS);
+      moreSummary.textContent = rest.length + rows.others.length > 0 ? moreText(rest.length + rows.others.length) : BOARD_MORE_PLAIN;
+      fillList(moreList, rest);
       others.hidden = rows.others.length === 0;
       othersSummary.textContent = `${BOARD_OTHERS}（${formatCount(rows.others.length)}）`;
       fillList(othersList, rows.others);
@@ -285,9 +288,7 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
       none.textContent = BOARD_NONE;
       none.hidden = rows.length > 0;
       const rest = rows.slice(BOARD_ROWS);
-      more.hidden = rest.length === 0;
-      more.open = false;
-      moreSummary.textContent = moreText(rest.length);
+      moreSummary.textContent = rest.length > 0 ? moreText(rest.length) : BOARD_MORE_PLAIN;
       fillList(moreList, rest);
       others.hidden = true;
       others.open = false;
@@ -295,6 +296,7 @@ export function mountBoardPanel(el: HTMLElement, ctx: PanelContext): () => void 
       already.textContent = alreadyBelowText(sc.level, alreadyBelowAreas(r, data.facilities));
       essentialNote.hidden = false;
     }
+    more.open = false;
     paintStrip(strip, bars, sc.level, s.year);
     landmarks.render(sc.level, sc.key);
     claims.render(sc.level, sc.key);

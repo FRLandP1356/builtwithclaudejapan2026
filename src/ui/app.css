@@ -1,8 +1,7 @@
-/* 2100年の日本 — application shell: the band (title and question), map column, year slider, panel column, footer.
-   Mobile first (390px, one column). From 1024px the map column sticks on the left and panels scroll on the right.
-   The band runs from edge to edge of the window; what is inside it and under it keeps to the page width.
-   The first screen is only the band, the map with its year and legend, the board and (for a town) its four numbers;
-   the rest of the page is folded cards opened from the row 「くわしく見る」 (the owner's instruction, 2026-11-06). */
+/* 2100年の日本 — application shell: the map with its year and legend (the first screen, laid out here), the search, the
+   allocation bar, the lower layer 「くわしく見る」 and the loading and error states. The six screens themselves (their
+   heights, headings and bodies) are in screens.css (the owner, 2026-11-08: one message to a screen). Mobile first (390px, one
+   column); a screen keeps to the page width. */
 
 .app {
   margin: 0;
@@ -18,16 +17,13 @@
   padding-bottom: var(--sp-8);
 }
 
-/* The band: a faint warm field behind the title and the question. */
+/* The band of the loading and error screens: the title alone, in a faint warm field. On the loaded page the title is the
+   small h1 at the top left of the first screen (screens.css). */
 .app-head {
   background: var(--band);
   border-bottom: 1px solid var(--line);
 }
 .app-head-inner {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sp-1) var(--sp-5);
   padding-top: var(--sp-4);
   padding-bottom: var(--sp-3);
 }
@@ -35,18 +31,8 @@
   font-size: var(--fs-28);
   letter-spacing: 0.02em;
 }
-/* The question the app starts from: a row of its own under the title, in the body ink. On a phone it is 14px with a
-   tighter leading, so its four phrases take three rows at 390px, not four (2026-11-07); from 1024px it is 15px. */
-.app-problem {
-  flex: 1 0 100%;
-  max-width: 44em;
-  margin-top: 0;
-  color: var(--ink);
-  font-size: var(--fs-14);
-  line-height: 1.5;
-}
 
-/* The lower layer under the board, headed 「くわしく見る」: the folded cards stacked as light rows (theme.css
+/* The lower layer under the sixth screen, headed 「くわしく見る」: the folded cards stacked as light rows (theme.css
    .panel.is-collapsed), rules between them and under the last one; an open card keeps a breath above and below so its
    edge does not double a neighbour's rule. Nothing sticks and nothing scrolls sideways. */
 .app-more {
@@ -70,40 +56,17 @@
   margin-block: var(--sp-3);
 }
 
-/* Two columns from 1024px */
-.app-body {
-  display: grid;
-  gap: var(--sp-5);
-}
-@media (min-width: 1024px) {
-  .app-body {
-    grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr);
-    gap: var(--sp-7);
-    align-items: start;
-  }
-  .map-column {
-    position: sticky;
-    top: var(--sp-4);
-  }
-  .app-title {
-    font-size: var(--fs-32);
-  }
-}
-
-/* The top of the map column: the place bar (breadcrumbs and back; hidden on the whole country, where the headline
-   already says 日本), the search and the headline. One column on a phone: bar, search, headline. From 1024px the
-   search keeps the right of the first row and the bar and the headline stack on its left, so on the whole country the
-   headline is the first row (2026-11-07). */
+/* The top of the map column: the place bar (breadcrumbs and back; only once the reader has gone down to a prefecture or a
+   town: on the whole country there is nowhere to go back to), small, above the heading. */
 .map-top {
   display: grid;
-  gap: var(--sp-2) var(--sp-4);
-  padding: var(--sp-3) 0 0;
+  gap: var(--sp-1);
 }
 .map-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-2) var(--sp-4);
+  gap: var(--sp-1) var(--sp-3);
 }
 .map-bar[hidden] {
   display: none;
@@ -214,59 +177,6 @@
   font-size: var(--fs-14);
 }
 
-/* Headline for the current place */
-.map-headline {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sp-1) var(--sp-4);
-  padding: 0 0 var(--sp-2);
-  min-height: 2.2em;
-}
-@media (min-width: 1024px) {
-  .map-top {
-    grid-template-columns: minmax(0, 1fr) minmax(200px, 260px); /* the headline 「日本　2050年 1億469万人　2020年比 −17.0%　公式推計」 keeps one row beside the search */
-    grid-template-areas:
-      'bar search'
-      'headline search';
-    gap: var(--sp-1) var(--sp-4);
-    align-items: start;
-    padding-top: var(--sp-2);
-  }
-  .map-bar {
-    grid-area: bar;
-  }
-  .search {
-    grid-area: search;
-    justify-self: end;
-  }
-  .map-headline {
-    grid-area: headline;
-    align-self: center;
-  }
-}
-.map-headline-name {
-  font-family: var(--font-display);
-  font-size: var(--fs-22);
-  font-weight: 600;
-  line-height: 1.3;
-}
-.map-headline-num {
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-2);
-  font-size: var(--fs-15);
-}
-.map-headline-num .head-keep {
-  white-space: nowrap;
-}
-.map-headline-num b {
-  color: var(--ink);
-  font-weight: 600;
-}
-.map-headline .badge-estimate {
-  vertical-align: 0.1em;
-}
-
 /* Map */
 .map-stage {
   position: relative;
@@ -324,7 +234,7 @@
   display: block;
   width: 100%;
   height: auto;
-  max-height: min(74vh, 820px);
+  max-height: max(220px, calc(100svh - 600px));
   touch-action: manipulation;
 }
 .area {
@@ -620,6 +530,35 @@
   display: grid;
   gap: var(--sp-2);
 }
+/* On a phone the first screen has to hold its heading, the map, the legend and the year in 844px: the legend's title and the
+   year's numeral are a size smaller, and the year's note (a status region, rewritten when the year crosses 2050) leaves the
+   eye but not a screen reader: the 試算 mark by the heading and the line under the map say the same. */
+@media (max-width: 599.98px) {
+  .legend-title {
+    font-size: var(--fs-13);
+  }
+  .year {
+    margin-top: var(--sp-1);
+    padding-top: var(--sp-2);
+  }
+  .year-value {
+    font-size: var(--fs-32);
+  }
+  .year-controls {
+    margin-top: var(--sp-1);
+  }
+  .year-note {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
 
 /* Year slider: the memorable control. Large mincho year, solid track to 2050, dashed after; under them the note
    (「2050年まで公式推計（国立社会保障・人口問題研究所）」, or the 試算 sentence) on one row the width of the block. */
@@ -775,13 +714,6 @@
   color: var(--paper);
 }
 
-/* Panel column: the four panels are separate cards with a gap between them (theme.css .panel). */
-.panel-column {
-  min-width: 0;
-  display: grid;
-  gap: var(--sp-6);
-  align-content: start;
-}
 @media (max-width: 1023.98px) {
   .panel {
     --panel-inset: var(--sp-3);
@@ -792,30 +724,21 @@
   scroll-margin-top: var(--sp-3);
 }
 
-/* Desktop: the whole map column (bar, headline, map, legend, year) fits in one viewport height. */
+/* In a prefecture or a town the place bar (crumbs and the way back, 40px) stands above the heading: the map gives that up. */
+.map-column:has(.map-bar:not([hidden])) .map-svg {
+  max-height: max(200px, calc(100svh - 645px));
+}
+/* The size of the map: the first screen holds the small title, the heading (up to three lines on a phone, two from 1024px),
+   its line, the map, the legend, the year, the note and the cue in ONE window height (844px on a phone, 949px at 1512 wide,
+   the heights the owner's captures use), so the map takes what those leave. Measured on 2026-11-08 (appCss.test.ts holds the
+   constants). From 1024px the legend and the year stand side by side under the map. */
 @media (min-width: 1024px) {
-  .app-head-inner {
-    padding-top: var(--sp-3);
-    padding-bottom: var(--sp-2);
-  }
-  /* One line (about 930px at 15px) so the question costs the band one row of height. */
-  .app-problem {
-    max-width: none;
-    font-size: var(--fs-15);
-    line-height: var(--lh-body);
-  }
-  /* 340px: everything of the page but the map at a first, unscrolled view: the band (the title on one row, the
-     question on one row: about 92px), the headline beside the search (about 52px; the place bar is hidden on the
-     country), the foot (the colour choice, the legend and the year side by side: about 165px) and the page's bottom
-     padding. The colour choice left the top of the column for the foot and the place bar hides on the country
-     (2026-11-07; 395px before). Measured on 2026-11-07 at 1512x949 (see appCss.test.ts for the constant). Once the
-     band has scrolled away the sticky column is only its own height (about 230px plus the map). */
   .map-svg {
-    max-height: max(360px, calc(100vh - 340px));
+    max-height: max(320px, calc(100svh - 500px));
   }
-  /* The legend block (the colour choice, the title on one line, the bar, the ticks) on the left, the year on the
-     right; the legend's side is the wider one so the title 「色は2020年の人口に対して、どれだけ残るか（薄いほど少ない）」 keeps
-     one row from 1280px. The year stacks its numeral over the slider, so the slider keeps its length on the narrower side. */
+  .map-column:has(.map-bar:not([hidden])) .map-svg {
+    max-height: max(320px, calc(100svh - 520px));
+  }
   .map-foot {
     grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
     gap: var(--sp-5);
@@ -826,7 +749,7 @@
     padding-top: var(--sp-3);
   }
   .year-note {
-    font-size: var(--fs-13); /* one row on the year's side of the foot (about 316px from 1280px) */
+    font-size: var(--fs-13); /* one row on the year's side of the foot */
   }
   .legend-block {
     padding-top: var(--sp-3);
@@ -837,40 +760,17 @@
     font-size: var(--fs-14);
   }
 }
-/* Between 1024 and 1280px the headline and the legend's title wrap to two lines and the year's note too: the map gives
-   that up (60px), so a 1024x768 window still ends its first view on the legend and the year. */
-@media (min-width: 1024px) and (max-width: 1279.98px) {
-  .map-svg {
-    max-height: max(360px, calc(100vh - 400px));
-  }
-}
 
-/* The sources: a folded card like the rest of the lower layer (theme.css .panel, .panel-toggle), the last row under
-   「くわしく見る」. The small type and the muted ink are for its content; its title is the row's or the band's. */
-.app-foot {
-  font-size: var(--fs-13);
-  color: var(--muted);
-}
-.app-foot-lead {
-  margin-bottom: var(--sp-3);
-  color: var(--ink-2);
-  font-size: var(--fs-14);
-  max-width: 44em;
-}
-.app-foot dl {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: var(--sp-1) var(--sp-3);
-}
+/* The sources (the sixth screen, screens.css lays out the list): each is what it is, then its page (the URL is the link text,
+   so it may break anywhere) and when it was read, then the approval line the provider asks to keep. */
 .app-foot dt {
-  color: var(--ink-2);
+  color: var(--ink);
+  font-weight: 600;
 }
 .app-foot dd {
   min-width: 0;
   overflow-wrap: anywhere;
 }
-/* Each source: what it is; then its page (the URL is the link text, so it may break anywhere) and when it was read;
-   then the approval line the provider asks to keep. One line each on a wide screen, stacked on a phone. */
 .app-foot .src-text,
 .app-foot .src-where,
 .app-foot .src-approval {
@@ -884,14 +784,13 @@
 .app-foot .src-where,
 .app-foot .src-approval {
   margin-top: var(--sp-1);
+  color: var(--muted);
+  font-size: var(--fs-13);
 }
 .app-foot a {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-.app-foot p {
-  margin-top: var(--sp-3);
 }
 
 /* Loading and error states */

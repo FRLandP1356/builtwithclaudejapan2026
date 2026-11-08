@@ -1,16 +1,20 @@
-// Application shell: loads the data, creates the store and runner, mounts the maps, the year slider, the search,
-// the panel slots (#panel-facts, #panel-board, #panel-town, #panel-controls, #panel-allocation, #panel-ai; Ruling 25)
-// and the footer (#panel-sources).
-// The first screen shows only what matters most (the owner, 2026-11-06): the title and the question, the map with
-// its year and legend, the board (分かれ目) and, for a town, its four numbers. Everything else is the lower layer: the
-// town panel, the assumptions, the allocation, the AI and the sources are folded cards standing under the heading
-// 「くわしく見る」, each a light row (name and a few grey words) until its row is pressed; then it opens as a card.
+// Application shell: loads the data, creates the store and runner, mounts the maps, the year slider, the search and
+// the panels into SIX SCREENS, one message to a screen (the owner, 2026-11-08; the structure is in DESIGN.md「配置」):
+//   1. screen-entry   the heading made from the numbers (「2100年、日本の人口は約6,300万人。2020年の約半分です。」), the map, the year
+//                     and the legend. The title of the app is a small h1 at its top left.
+//   2. screen-board   「いつ、どこで、何が残せなくなるのか。」 and the board (#panel-board, boardPanel.ts).
+//   3. screen-choose  「どこかに人を残すと、別のどこかが残せなくなります。」 and the two-box figure (chooseScreen.ts).
+//   4. screen-town    the search and the town's card, under a heading made from the town's numbers (townCard.ts).
+//   5. screen-ai      「気になることは、AI に聞いてください。」 and the AI panel (#panel-ai).
+//   6. screen-sources 「数字の出どころ」: three sources at once, the rest behind 「ほかの出典」 (#panel-sources).
+// Under the sixth screen stands the lower layer, 「くわしく見る」: the town's detail, the assumptions and the allocation, each a
+// folded card (a light row until its title is pressed; the cards keep their own mount functions).
 // While `store.get().allocation` is set the maps colour by the allocation's change in percent, draw rings on the towns
-// that crossed a focused facility's guide and count markers per prefecture, and the headline says 割り振り後.
+// that crossed a focused facility's guide and count markers per prefecture, and the first heading says 割り振り後.
 // Otherwise a two-way choice in the legend row under the map (「色の見方」) chooses what the maps colour by
 // (`store.get().mapMode`): the change since 2020 (default) or the support ratio, people aged 15-64 per person aged
-// 65+; the headline, the tooltips, the areas' labels and the legend follow it. The choice is hidden while an allocation
-// is drawn (the allocation wins).
+// 65+; the first heading, the tooltips, the areas' labels and the legend follow it. The choice is hidden while an
+// allocation is drawn (the allocation wins).
 import type { Topology } from 'topojson-specification';
 import { loadAll, loadPrefGeo, type AppData, type LoadOptions } from '../data/loader';
 import { createRunner } from '../data/runner';
@@ -20,27 +24,26 @@ import { mountLegend } from '../map/legend';
 import { mountNationalMap } from '../map/nationalMap';
 import { mountPrefectureMap } from '../map/prefectureMap';
 import { mountAllocation } from './allocationPanel';
-import { BOARD_TITLE } from './board';
 import { mountBoardPanel } from './boardPanel';
+import { mountChooseScreen } from './chooseScreen';
 import { mountControls } from './controls';
 import { allocationLines, allocationView, changeOf, countMarkers, figureChanged, placeNumbers, type AllocationView, type PlaceKind, type PlaceNumbers } from './allocationView';
 import { deriveSupport, deriveTotals, ratioAt, yearIndex, type SupportRatios, type Totals } from './derive';
-import { formatPct, formatPop, formatSupport } from './format';
+import { formatPct, formatPop } from './format';
 import { breadcrumbs, buildSearchIndex, goUp, levelOf, pickArea, pickPref, prefOfArea, type Selection } from './nav';
 import { mountSearch } from './search';
-import { phrases } from './phrases';
+import { phraseNodes, phrases } from './phrases';
+import { AI_TITLE, BOARD_SCREEN_LEAD, BOARD_SCREEN_TITLE, CHOOSE_TITLE, ENTRY_LEAD, ENTRY_NEXT, ENTRY_NOTE, entryHeadline, entrySupportHeadline, SCREEN_IDS, SOURCES_NOTE, SOURCES_TITLE, type ScreenKey } from './screens';
 import { mountAIPanel } from './aiPanel';
-import { mountPlaceFacts } from './placeFacts';
-import { allocatedBasisNote, APP_LEAD, APP_PROBLEM, APP_TITLE, badgeFor, ESTIMATE_BADGE, FOOT_NOTE, NAV_DESCRIPTIONS, NAV_SUMMARIES, NAV_TITLE, SOURCES, type SourceLine } from './sources';
+import { allocatedBasisNote, APP_TITLE, badgeFor, ESTIMATE_BADGE, NAV_DESCRIPTIONS, NAV_SUMMARIES, NAV_TITLE, SOURCES, type SourceLine } from './sources';
 import { createAppStore, DEFAULT_YEAR, MAP_MODES, type AllocationOverlay, type AppState, type MapMode, type PanelContext, type Store } from './state';
-import { MAP_MODE_GROUP, MAP_MODE_LABELS, SUPPORT_LABEL, support2020Line, supportLine } from './support';
+import { MAP_MODE_GROUP, MAP_MODE_LABELS, support2020Line, supportLine } from './support';
+import { mountTownCard } from './townCard';
 import { mountTownPanel } from './townPanel';
 import { mountYearSlider } from './yearSlider';
+import './screens.css';
 
 export { DEFAULT_YEAR };
-
-/** The footer's id and title: the sources, folded like the other parts of the lower layer. */
-export const SOURCES_PANEL = { id: 'panel-sources', title: '出典' } as const;
 
 export interface AppOptions extends LoadOptions {
   /** Cache for prefecture topologies (tests pass their own so apps do not share state). */
@@ -53,47 +56,44 @@ export interface AppHandle {
   destroy(): void;
 }
 
-/** The panel slots, in mobile order. Each is a `<section class="panel">` that already holds its `h2.panel-title`. */
+/**
+ * The mount points. `board`, `ai` and `sources` stand in their screens; `choose` is the card of the third screen and
+ * `townScreen` the whole fourth screen (the heading is rewritten by townCard.ts); `town`, `controls` and `allocation` are
+ * the folded cards of the lower layer, each a `<section class="panel">` that already holds its `h2.panel-title`.
+ */
 export interface PanelSlots {
-  /** The four numbers of a town (hidden for the country and a prefecture), above the board. */
-  facts: HTMLElement;
-  /** 「分かれ目」: when, where and what falls below its population guide. The first card of the column. */
+  /** 「分かれ目」: when, where and what falls below its population guide (the second screen). */
   board: HTMLElement;
+  choose: HTMLElement;
+  townScreen: HTMLElement;
   town: HTMLElement;
   controls: HTMLElement;
   allocation: HTMLElement;
   ai: HTMLElement;
 }
 
-interface PanelSpec {
-  key: keyof PanelSlots;
-  id: string;
-  title: string;
-  /** The lower layer: folded at first, a light row under 「くわしく見る」 whose title is the button that opens it. */
-  folded: boolean;
-}
-
-const PANEL_TITLES: ReadonlyArray<PanelSpec> = [
-  { key: 'facts', id: 'panel-facts', title: '', folded: false },
-  { key: 'board', id: 'panel-board', title: BOARD_TITLE, folded: false },
-  { key: 'town', id: 'panel-town', title: '町の詳細', folded: true },
-  { key: 'controls', id: 'panel-controls', title: '前提を変える', folded: true },
-  { key: 'allocation', id: 'panel-allocation', title: '人口の割り振り', folded: true },
-  { key: 'ai', id: 'panel-ai', title: 'AIに質問', folded: true },
+/** The folded cards of the lower layer, in page order: folded at first, a light row whose title is the button that opens it. */
+const FOLDED_PANELS: ReadonlyArray<{ key: keyof PanelSlots; id: string; title: string }> = [
+  { key: 'town', id: 'panel-town', title: '町の詳細' },
+  { key: 'controls', id: 'panel-controls', title: '前提を変える' },
+  { key: 'allocation', id: 'panel-allocation', title: '人口の割り振り' },
 ];
 
 export const ALLOC_BADGE = '割り振り後';
 export const ALLOC_CLEAR = '割り振りを地図から消す';
 /** The skip link at the start of the map: a keyboard user can leave the map without tabbing through it. */
 export const SKIP_TO_YEAR = '地図をとばして、年の選択へ';
+/** The fold under the three sources of the sixth screen: the sources that are not the first three. */
+export const MORE_SOURCES = 'ほかの出典';
 
 // -----------------------------------------------------------------------------------------------------------------
 // Panel registry: one mount call per slot; each returns its teardown, which `destroy()` calls.
 // -----------------------------------------------------------------------------------------------------------------
 function mountPanels(ctx: PanelContext, slots: PanelSlots): Array<() => void> {
   const teardowns: Array<() => void> = [];
-  teardowns.push(mountPlaceFacts(slots.facts, ctx));
   teardowns.push(mountBoardPanel(slots.board, ctx));
+  teardowns.push(mountChooseScreen(slots.choose, ctx));
+  teardowns.push(mountTownCard(slots.townScreen, ctx));
   teardowns.push(mountTownPanel(slots.town, ctx));
   teardowns.push(mountControls(slots.controls, ctx));
   teardowns.push(mountAllocation(slots.allocation, ctx));
@@ -120,16 +120,16 @@ export function sourceHtml(s: SourceLine): string {
   return `<dt>${escapeHtml(s.label)}</dt><dd><span class="src-text">${phraseHtml(s.text)}</span><span class="src-where">${link} ${phraseHtml(`（${s.retrieved}取得）`)}</span>${approval}</dd>`;
 }
 
-/** The band: the title and the question the app starts from, nothing else (the one-line description is in the sources card). */
+/** The band of the loading and error screens: the title alone (on the loaded page the title is the small h1 of the first screen). */
 function headerHtml(): string {
-  return `<header class="app-head"><div class="app-head-inner"><h1 class="app-title">${APP_TITLE}</h1><p class="app-problem">${phraseHtml(APP_PROBLEM)}</p></div></header>`;
+  return `<header class="app-head"><div class="app-head-inner"><h1 class="app-title">${APP_TITLE}</h1></div></header>`;
 }
 
 /**
- * The lower layer under the board: the heading 「くわしく見る」 and, under it, the folded cards (`cards`, already
- * rendered) in page order, the sources last. Each card's one-line description for a screen reader stands right before
- * the card (`aria-describedby` from the card's title button; clipped from the screen), outside it, so no panel's own
- * content and no panel's name is touched by it, and the last card is the list's last child.
+ * The lower layer after the sixth screen: the heading 「くわしく見る」 and, under it, the folded cards (`cards`, already
+ * rendered) in page order. Each card's one-line description for a screen reader stands right before the card
+ * (`aria-describedby` from the card's title button; clipped from the screen), outside it, so no panel's own content and
+ * no panel's name is touched by it, and the last card is the list's last child.
  */
 function moreHtml(cards: ReadonlyArray<{ id: string; html: string }>): string {
   const items = cards.map((c) => `<span class="sr-only app-more-desc" id="${c.id}-more-desc">${escapeHtml(NAV_DESCRIPTIONS[c.id] ?? '')}</span>${c.html}`).join('');
@@ -137,31 +137,36 @@ function moreHtml(cards: ReadonlyArray<{ id: string; html: string }>): string {
 }
 
 /**
- * The title band of a card: a plain heading, or (folded parts) a button that opens and closes the card. The button's
- * name is the title alone; the few grey words after it are for the eye only (the fuller sentence is the button's
- * description, see `moreHtml`), so the card's own name stays its title.
+ * The title band of a folded card: a button that opens and closes the card. The button's name is the title alone; the
+ * few grey words after it are for the eye only (the fuller sentence is the button's description, see `moreHtml`), so the
+ * card's own name stays its title.
  */
-function panelTitleHtml(id: string, title: string, folded: boolean): string {
-  const inner = folded
-    ? `<button type="button" class="panel-toggle" aria-expanded="false" aria-describedby="${id}-more-desc"><span class="panel-toggle-name">${title}</span><span class="panel-toggle-line" aria-hidden="true">${escapeHtml(NAV_SUMMARIES[id] ?? '')}</span></button>`
-    : title;
+function panelTitleHtml(id: string, title: string): string {
+  const inner = `<button type="button" class="panel-toggle" aria-expanded="false" aria-describedby="${id}-more-desc"><span class="panel-toggle-name">${title}</span><span class="panel-toggle-line" aria-hidden="true">${escapeHtml(NAV_SUMMARIES[id] ?? '')}</span></button>`;
   return `<h2 class="panel-title" id="${id}-title">${inner}</h2>`;
 }
 
-function panelHtml(p: PanelSpec): string {
-  const cls = ['panel', p.folded ? 'is-collapsed' : '', p.key === 'facts' ? 'place-facts' : ''].filter(Boolean).join(' ');
-  const hidden = p.key === 'facts' ? ' hidden' : '';
-  return `<section class="${cls}" id="${p.id}" aria-labelledby="${p.id}-title"${hidden}>${panelTitleHtml(p.id, p.title, p.folded)}</section>`;
+function foldedPanelHtml(p: { id: string; title: string }): string {
+  return `<section class="panel is-collapsed" id="${p.id}" aria-labelledby="${p.id}-title">${panelTitleHtml(p.id, p.title)}</section>`;
 }
 
-/** The sources: a folded card like the rest of the lower layer, the last row under 「くわしく見る」. */
-function sourcesHtml(): string {
-  return `<footer class="app-foot panel is-collapsed" id="${SOURCES_PANEL.id}" aria-labelledby="${SOURCES_PANEL.id}-title">
-      ${panelTitleHtml(SOURCES_PANEL.id, SOURCES_PANEL.title, true)}
-      <p class="app-foot-lead">${APP_LEAD}</p>
-      <dl>${SOURCES.map(sourceHtml).join('')}</dl>
-      <p>${FOOT_NOTE}</p>
-    </footer>`;
+/** The heading of a screen: one `h2`, the only heading of its screen's own text (the board and the cards use smaller ones). */
+function screenTitleHtml(key: ScreenKey, text: string): string {
+  return `<h2 class="screen-title" id="${SCREEN_IDS[key]}-title">${escapeHtml(text)}</h2>`;
+}
+
+/** The sixth screen: the three sources at once, the others behind a fold, then the one line about 2050. */
+function sourcesScreenHtml(): string {
+  const first = SOURCES.filter((x) => x.primary);
+  const rest = SOURCES.filter((x) => !x.primary);
+  return `<section class="screen screen-sources" id="${SCREEN_IDS.sources}" aria-labelledby="${SCREEN_IDS.sources}-title">
+      ${screenTitleHtml('sources', SOURCES_TITLE)}
+      <div class="screen-body app-foot" id="panel-sources">
+        <dl class="src-list">${first.map(sourceHtml).join('')}</dl>
+        <details class="fold src-more"><summary>${MORE_SOURCES}（${rest.length}件）</summary><dl class="src-list">${rest.map(sourceHtml).join('')}</dl></details>
+        <p class="screen-sources-note">${SOURCES_NOTE}</p>
+      </div>
+    </section>`;
 }
 
 /** `<main>` stays a plain landmark; the live region is a child. */
@@ -240,51 +245,69 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   let totals: Totals = deriveTotals(store.get().series, data.groups);
   let supports: SupportRatios = deriveSupport(store.get().series, data.groups);
 
-  // The right column: the town's numbers, the board, then the lower layer (the folded cards and the sources under
-  // the heading 「くわしく見る」).
-  const column = [
-    ...PANEL_TITLES.filter((p) => !p.folded).map(panelHtml),
-    moreHtml([...PANEL_TITLES.filter((p) => p.folded).map((p) => ({ id: p.id, html: panelHtml(p) })), { id: SOURCES_PANEL.id, html: sourcesHtml() }]),
-  ].join('');
-  root.innerHTML = `${headerHtml()}
-    <div class="app-inner"><main class="app-body">
-      <section class="map-column" aria-label="地図">
-        <div class="map-top">
-          <div class="map-bar" hidden>
-            <nav class="crumbs" aria-label="場所"><ol></ol></nav>
-            <button type="button" class="btn btn-quiet back" hidden></button>
-          </div>
-          <div class="search-slot"></div>
-          <p class="sr-only place-status" role="status"></p>
-          <div class="map-headline">
-            <span class="map-headline-name" tabindex="-1"></span>
-            <span class="map-headline-num"></span>
-          </div>
-        </div>
-        <div class="alloc-bar" hidden>
-          <span class="alloc-bar-label">地図に反映中の割り振り：<b class="alloc-bar-name"></b></span>
-          <span class="alloc-bar-stale note" hidden></span>
-          <button type="button" class="btn btn-quiet alloc-clear">${ALLOC_CLEAR}</button>
-        </div>
-        <div class="map-stage">
-          <a class="skip-link" href="#year-range">${SKIP_TO_YEAR}</a>
-          <div class="map-host map-host-national"></div>
-          <div class="map-overlay" hidden></div>
-        </div>
-        <div class="map-foot">
-          <div class="legend-block">
-            <div class="map-mode">
-              <span class="map-mode-label" id="map-mode-label">${MAP_MODE_GROUP}</span>
-              <div class="choice" role="group" aria-labelledby="map-mode-label">${MAP_MODES.map(
-                (m) => `<button type="button" data-map-mode="${m}" aria-pressed="false">${MAP_MODE_LABELS[m]}</button>`,
-              ).join('')}</div>
+  // The screens, top to bottom, then the lower layer (the folded cards under the heading 「くわしく見る」).
+  const more = moreHtml(FOLDED_PANELS.map((p) => ({ id: p.id, html: foldedPanelHtml(p) })));
+  root.innerHTML = `<div class="app-inner"><main class="app-body screens">
+      <section class="screen screen-entry" id="${SCREEN_IDS.entry}" aria-labelledby="${SCREEN_IDS.entry}-title">
+        <h1 class="app-title">${APP_TITLE}</h1>
+        <div class="map-column">
+          <div class="map-top">
+            <div class="map-bar" hidden>
+              <nav class="crumbs" aria-label="場所"><ol></ol></nav>
+              <button type="button" class="btn btn-quiet back" hidden></button>
             </div>
-            <div class="legend-slot"></div>
+            <p class="sr-only place-status" role="status"></p>
           </div>
-          <div class="year-slot"></div>
+          <h2 class="screen-title" id="${SCREEN_IDS.entry}-title" tabindex="-1"></h2>
+          <p class="screen-lead">${ENTRY_LEAD}</p>
+          <div class="alloc-bar" hidden>
+            <span class="alloc-bar-label">地図に反映中の割り振り：<b class="alloc-bar-name"></b></span>
+            <span class="alloc-bar-stale note" hidden></span>
+            <button type="button" class="btn btn-quiet alloc-clear">${ALLOC_CLEAR}</button>
+          </div>
+          <div class="map-stage">
+            <a class="skip-link" href="#year-range">${SKIP_TO_YEAR}</a>
+            <div class="map-host map-host-national"></div>
+            <div class="map-overlay" hidden></div>
+          </div>
+          <div class="map-foot">
+            <div class="legend-block">
+              <div class="legend-slot"></div>
+              <div class="map-mode">
+                <span class="map-mode-label" id="map-mode-label">${MAP_MODE_GROUP}</span>
+                <div class="choice" role="group" aria-labelledby="map-mode-label">${MAP_MODES.map(
+                  (m) => `<button type="button" data-map-mode="${m}" aria-pressed="false">${MAP_MODE_LABELS[m]}</button>`,
+                ).join('')}</div>
+              </div>
+            </div>
+            <div class="year-slot"></div>
+          </div>
+        </div>
+        <p class="screen-note">${ENTRY_NOTE}</p>
+        <a class="screen-next" href="#${SCREEN_IDS.board}">${ENTRY_NEXT}</a>
+      </section>
+      <section class="screen screen-board" id="${SCREEN_IDS.board}" aria-labelledby="${SCREEN_IDS.board}-title">
+        ${screenTitleHtml('board', BOARD_SCREEN_TITLE)}
+        <p class="screen-lead">${BOARD_SCREEN_LEAD}</p>
+        <div class="screen-body"><div class="screen-card board-card" id="panel-board"></div></div>
+      </section>
+      <section class="screen screen-choose" id="${SCREEN_IDS.choose}" aria-labelledby="${SCREEN_IDS.choose}-title">
+        ${screenTitleHtml('choose', CHOOSE_TITLE)}
+        <div class="screen-body"><div class="screen-card choose-card"></div></div>
+      </section>
+      <section class="screen screen-town" id="${SCREEN_IDS.town}" aria-labelledby="${SCREEN_IDS.town}-title">
+        <h2 class="screen-title" id="${SCREEN_IDS.town}-title"></h2>
+        <div class="screen-body">
+          <div class="search-slot"></div>
+          <div class="town-card-slot"></div>
         </div>
       </section>
-      <section class="panel-column" aria-label="詳細">${column}</section>
+      <section class="screen screen-ai" id="${SCREEN_IDS.ai}" aria-labelledby="${SCREEN_IDS.ai}-title">
+        ${screenTitleHtml('ai', AI_TITLE)}
+        <div class="screen-body"><div class="ai-host" id="panel-ai"></div></div>
+      </section>
+      ${sourcesScreenHtml()}
+      ${more}
     </main></div>`;
 
   const q = <T extends Element>(sel: string) => root.querySelector<T>(sel)!;
@@ -292,8 +315,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   const crumbList = q<HTMLOListElement>('.crumbs ol');
   const backBtn = q<HTMLButtonElement>('.back');
   const placeStatus = q<HTMLParagraphElement>('.place-status');
-  const headName = q<HTMLSpanElement>('.map-headline-name');
-  const headNum = q<HTMLSpanElement>('.map-headline-num');
+  const headTitle = q<HTMLElement>(`#${SCREEN_IDS.entry}-title`);
   const allocBar = q<HTMLDivElement>('.alloc-bar');
   const allocName = q<HTMLElement>('.alloc-bar-name');
   const allocStale = q<HTMLElement>('.alloc-bar-stale');
@@ -538,83 +560,42 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   }
 
   /**
-   * Name, year, population, ratio and marks: the 試算 / 公式推計 / 実績 mark, plus 割り振り後 when the numbers include an
-   * allocation; up to 2050 that replaces the 公式推計 / 実績 mark with a note that it is this app's own calculation.
+   * The heading of the first screen, made from the figures of the place on screen (screens.ts): 「2100年、日本の人口は約6,300万人。
+   * 2020年の約半分です。」 It follows the year, the place and the colour mode (the support ratio has its own sentence). After
+   * 2050 the 試算 mark stands beside it; up to 2050 the line under the map says the figures are the official projection.
+   * While the numbers include an allocation, 割り振り後 follows, with the number without it kept in sight and, up to 2050,
+   * a note that the figure is this app's own calculation (the 公式推計 / 実績 wording would be wrong then).
    */
   function renderHeadline(s: AppState): void {
     const place = placeOf(s);
-    headName.textContent = place.name;
-    if (supportShown(s)) {
-      renderSupportHeadline(s, place);
-      return;
-    }
-    const n = numbersOf(place.kind, place.code);
-    if (!n) {
-      headNum.textContent = '';
-      return;
-    }
-    const b = document.createElement('b');
-    b.textContent = formatPop(n.pop);
-    const badgeInfo = badgeFor(s.year);
-    // While the numbers include the allocation, the number without it stays in sight (the town panel shows that one).
-    const before = beforeText(n); // the country's total does not change: no second number there
-    // Phrases that must not break inside (「2020年 / 比」 at 390px): each is one nowrap span; lines break between them.
-    const keep = (...nodes: Array<Node | string>) => {
+    const mark = (className: string, text: string) => {
       const span = document.createElement('span');
-      span.className = 'head-keep';
-      span.append(...nodes);
+      span.className = className;
+      span.textContent = text;
       return span;
     };
-    const parts: Node[] = [keep(`${s.year}年 `, b)];
-    if (before) parts.push(keep(before));
-    parts.push(document.createTextNode('　'), keep(`2020年比 ${formatPct(n.ratio)}`), document.createTextNode('　'));
-    // An allocation up to 2050 that changes this place's figure makes it this app's own calculation: the 公式推計 / 実績
-    // mark would be wrong, so 割り振り後 comes with a note on what it is based on instead. Where the figure cannot change
-    // (the whole country) the original mark stays. After 2050 the 試算 mark stays and 割り振り後 follows.
-    const basisNote = figureChanged(n) ? allocatedBasisNote(s.year) : undefined;
-    if (!basisNote) {
-      const badge = document.createElement('span');
-      badge.className = badgeInfo.estimate ? 'badge-estimate' : 'badge-official';
-      badge.textContent = badgeInfo.text;
-      parts.push(badge);
-    }
-    if (n.allocated) {
-      const alloc = document.createElement('span');
-      alloc.className = 'badge-alloc';
-      alloc.textContent = ALLOC_BADGE;
-      if (!basisNote) parts.push(document.createTextNode(' '));
-      parts.push(alloc);
-      if (basisNote) {
-        const note = keep(basisNote);
-        note.classList.add('head-basis');
-        parts.push(document.createTextNode(' '), note);
+    const kids: Array<Node | string> = [];
+    if (supportShown(s)) {
+      const r = supportOf(place.kind, place.code);
+      kids.push(...phraseNodes(entrySupportHeadline({ place: place.name, year: s.year, now: r.now, base: r.base })));
+      if (isEstimate()) kids.push(' ', mark('badge-estimate', ESTIMATE_BADGE));
+    } else {
+      const n = numbersOf(place.kind, place.code);
+      if (!n) {
+        headTitle.textContent = '';
+        return;
+      }
+      kids.push(...phraseNodes(entryHeadline({ place: place.name, year: s.year, pop: n.pop, ratio: n.ratio })));
+      const before = beforeText(n); // the country's total does not change: no second number there
+      if (before) kids.push(' ', mark('head-keep head-before', before));
+      if (isEstimate()) kids.push(' ', mark('badge-estimate', ESTIMATE_BADGE));
+      if (n.allocated) {
+        kids.push(' ', mark('badge-alloc', ALLOC_BADGE));
+        const basisNote = figureChanged(n) ? allocatedBasisNote(s.year) : undefined;
+        if (basisNote) kids.push(' ', mark('head-keep head-basis', basisNote));
       }
     }
-    headNum.replaceChildren(...parts);
-  }
-
-  /** In the support ratio mode: 「2050年 高齢者1人を支える現役世代 1.4人　2020年は2.1人　公式推計」 for the place shown. */
-  function renderSupportHeadline(s: AppState, place: { kind: PlaceKind; code: string }): void {
-    const r = supportOf(place.kind, place.code);
-    const b = document.createElement('b');
-    b.textContent = formatSupport(r.now);
-    const keep = (...nodes: Array<Node | string>) => {
-      const span = document.createElement('span');
-      span.className = 'head-keep';
-      span.append(...nodes);
-      return span;
-    };
-    const info = badgeFor(s.year);
-    const badge = document.createElement('span');
-    badge.className = info.estimate ? 'badge-estimate' : 'badge-official';
-    badge.textContent = info.text;
-    headNum.replaceChildren(
-      keep(`${s.year}年 ${SUPPORT_LABEL} `, b),
-      document.createTextNode('　'),
-      keep(support2020Line(r.base)),
-      document.createTextNode('　'),
-      badge,
-    );
+    headTitle.replaceChildren(...kids);
   }
 
   /** The colour-mode control: the pressed button follows the store; hidden while an allocation is drawn. */
@@ -625,7 +606,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     // Do not leave keyboard focus on a button that goes away.
     const hadFocus = hide && modeBox.contains(document.activeElement);
     modeBox.hidden = hide;
-    if (hadFocus) headName.focus({ preventScroll: true });
+    if (hadFocus) headTitle.focus({ preventScroll: true });
   }
 
   function renderAllocBar(s: AppState): void {
@@ -634,7 +615,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
       // The bar (and its clear button) goes away: do not leave keyboard focus on a hidden button.
       const hadFocus = allocBar.contains(document.activeElement);
       allocBar.hidden = true;
-      if (hadFocus) headName.focus({ preventScroll: true });
+      if (hadFocus) headTitle.focus({ preventScroll: true });
       return;
     }
     allocBar.hidden = false;
@@ -694,6 +675,23 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
       { signal: ac.signal },
     );
   }
+  // The cue at the foot of the first screen: go to the next screen (no change of the address) and land on its heading.
+  const nextLink = q<HTMLAnchorElement>('.screen-next');
+  nextLink.addEventListener(
+    'click',
+    (e) => {
+      e.preventDefault();
+      const target = root.querySelector<HTMLElement>(`#${SCREEN_IDS.board}`);
+      if (!target) return;
+      const win = root.ownerDocument.defaultView;
+      const reduce = typeof win?.matchMedia === 'function' && win.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      target.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+      const heading = target.querySelector<HTMLElement>('.screen-title');
+      heading?.setAttribute('tabindex', '-1');
+      heading?.focus({ preventScroll: true });
+    },
+    { signal: ac.signal },
+  );
   backBtn.addEventListener('click', () => store.set(goUp(store.get())), { signal: ac.signal });
   allocClear.addEventListener('click', () => store.set({ allocation: undefined }), { signal: ac.signal });
   for (const b of modeButtons) {
@@ -733,8 +731,9 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
   }
 
   const slots: PanelSlots = {
-    facts: q<HTMLElement>('#panel-facts'),
     board: q<HTMLElement>('#panel-board'),
+    choose: q<HTMLElement>('.choose-card'),
+    townScreen: q<HTMLElement>(`#${SCREEN_IDS.town}`),
     town: q<HTMLElement>('#panel-town'),
     controls: q<HTMLElement>('#panel-controls'),
     allocation: q<HTMLElement>('#panel-allocation'),
@@ -772,7 +771,7 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
     renderHeadline(s);
     if (selChanged) announcePlace(s);
     // The map was replaced (drill-down or back): keep keyboard focus in the map region instead of dropping it.
-    if (prefChanged) headName.focus({ preventScroll: true });
+    if (prefChanged) headTitle.focus({ preventScroll: true });
   });
 
   const s0 = store.get();
