@@ -1180,3 +1180,6 @@ svg text {
 
 /* long unbroken names (e.g. a long katakana event name) must wrap instead of widening the page */
 .wrap h1, .wrap h2, .wrap h3, .wrap p, .wrap li, .node, .card { overflow-wrap: anywhere; }
+
+/* the map is clipped to its own box: a prefecture drawn at a high zoom must not widen the page */
+.mapwrap svg, .map svg, svg.map { overflow: hidden; max-width: 100%; }
