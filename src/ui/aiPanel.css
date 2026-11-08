@@ -56,7 +56,7 @@
   gap: var(--sp-1) var(--sp-3);
 }
 .ai-help > span:first-child {
-  flex: 1 1 16em;
+  flex: 1 1 24em; /* wider than a phone leaves beside the counter, so the counter drops under the hint there */
 }
 .ai-counter {
   margin-left: auto;
