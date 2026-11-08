@@ -210,4 +210,4 @@ The AI proxy (Worker): see [worker/README.md](worker/README.md) for its behaviou
 
 ## Licence
 
-No LICENSE file is set in this repository. The code is published for judging, and the choice of licence is left open (whether the repository is public yet is in the "Repository" line at the top). The data sources keep their own terms, listed above.
+The code in this repository is released under the [MIT License](LICENSE) (copyright holder: the GitHub account name `FRLandP1356`). The data sources keep their own terms, listed above; for the processed data in `public/data`, the original provider's terms apply first.
