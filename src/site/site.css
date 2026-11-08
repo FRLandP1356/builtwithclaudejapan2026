@@ -1103,7 +1103,7 @@ svg text {
 .steps .node-t {
   font-family: var(--font-display);
   font-size: 18px;
-  white-space: nowrap;
+  white-space: normal;
 }
 .steps .node-v {
   font-size: 24px;
