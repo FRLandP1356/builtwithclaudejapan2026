@@ -342,7 +342,7 @@ function pageHome(site: Site): Page {
   };
   const html = `<section class="screen"><div class="wrap hero">
     <div><h1>${homeHeading(m)}</h1>
-    <p class="lead">人が減ると、すべては残せません。何を残すかを決める材料を、町ごとに並べています。色は人口（2025年は国勢調査の実績、2100年は${STANDARD_LABEL}）。点は、名勝・名物・観光地・食・建物・衣装など、日本らしいもののうち、各県の代表的な例 ${site.landmarks.length}件。点を押すと、その場所のページへ。</p>
+    <p class="lead">人が減ると、すべては残せません。何を残すかを決める材料を、町ごとに並べています。点（日本らしいものの、各県の代表例 ${site.landmarks.length}件）を押すと、その場所のページへ。</p>
     <div id="homeCtl" hidden>${yearControl('homeYear', END_YEAR, true)}</div></div>
     <div class="mapwrap" id="homeMap">${japanSvg(site, { year: startY, label: '日本の地図。2025年の実績から2100年の試算へ、人口の色が薄くなる' })}<div class="ro" id="ro" aria-live="polite">${readout(startY)}</div>${legendShare()}${legendShapes()}</div>
   </div></section>`;
