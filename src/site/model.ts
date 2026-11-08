@@ -319,7 +319,7 @@ export function nationalChangeLine(m: Pick<Model, 'nation' | 'nationOfficial' | 
 export function lowBirthLegend(m: Pick<Model, 'birthsFactor'>): string {
   return `2025年の実績から計算し直し、公式の前提のうち、子どもの生まれやすさだけ、2025年の実績の水準（公式の前提の約${m.birthsFactor.toFixed(2)}倍）のまま続くとしました。予測ではありません。`;
 }
-export const LOW_BIRTH_NOTE = '高齢の人の亡くなる割合や人の移動のずれは、一時的な出来事の影響を分けられないので、調整していません。';
+export const LOW_BIRTH_NOTE = '高齢の人の亡くなる割合や人の移動の変化は、一時的な出来事の影響を分けられないので、調整していません。';
 export const STANDARD_LABEL = '実績で直した試算';
 export const INTERIM_LABEL = '途中の段階（実績から、公式の前提のまま）';
 

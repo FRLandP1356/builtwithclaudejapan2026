@@ -342,7 +342,7 @@ function pageHome(site: Site): Page {
   };
   const html = `<section class="screen"><div class="wrap hero">
     <div><h1>${homeHeading(m)}</h1>
-    <p class="lead">色は人口（2025年は国勢調査の実績、2100年は${STANDARD_LABEL}）。点は、名勝・名物・観光地・食・建物・衣装など、日本らしいもののうち、各県の代表的な例 ${site.landmarks.length}件。点を押すと、その場所のページへ。</p>
+    <p class="lead">人が減ると、すべては残せません。何を残すかを決める材料を、町ごとに並べています。色は人口（2025年は国勢調査の実績、2100年は${STANDARD_LABEL}）。点は、名勝・名物・観光地・食・建物・衣装など、日本らしいもののうち、各県の代表的な例 ${site.landmarks.length}件。点を押すと、その場所のページへ。</p>
     <div id="homeCtl" hidden>${yearControl('homeYear', END_YEAR, true)}</div></div>
     <div class="mapwrap" id="homeMap">${japanSvg(site, { year: startY, label: '日本の地図。2025年の実績から2100年の試算へ、人口の色が薄くなる' })}<div class="ro" id="ro" aria-live="polite">${readout(startY)}</div>${legendShare()}${legendShapes()}</div>
   </div></section>`;
@@ -545,6 +545,7 @@ function pageLandmark(site: Site, id: string): Page {
     <p class="lead">全国の人口は変わりません。ある町の暮らしの場を保つ人数は、ほかの町から動くことになります。</p>
     <div id="keepBody"></div>
     <p class="sm" style="margin-top:12px">人数は「もし移ったら」を見るための計算で、実際の人の動きの予測ではありません。ほかの町からは人口に比例して減らしています。</p>
+    <p class="sm">人がいなくなる地域では、国防も別の形で考える必要があります。このアプリでは数えていません。</p>
   </div></section>`;
 
   const E = claims.length
@@ -778,21 +779,22 @@ function pageAwase(site: Site, townCode: string | undefined): Page {
   const pct = sm.national.pct;
   const c2020 = m.checks.census.national2020;
   const zoomSpan = 0.5; // the enlarged tip shows the last 0.5% of the bar
-  const one = `<section class="screen"><div class="wrap"><h1>2025年の全国の人口。推計と実績の差は、${Math.abs(pct).toFixed(2)}%でした。</h1>
-    <p class="lead">公式推計 <span class="num">${fmt(o)}</span>人（${fmt(m.checks.towns.length)}の町の合計）に対し、実績 <span class="num">${fmt(a)}</span>人。2020年の${fmt(c2020)}人から${signedPct(((a - c2020) / c2020) * 100)}（${fmt(a - c2020)}人）。</p>
+  const manJin = (n: number): string => `約${fmt(Math.round(Math.abs(n) / 1e4))}万人`;
+  const one = `<section class="screen"><div class="wrap"><h1>日本の人口は、国の推計より、すでに${manJin(diff)}${diff < 0 ? '少なく' : '多く'}なっています。</h1>
+    <p class="lead">2025年の日本の人口は <span class="num">${fmt(a)}</span>人（国勢調査）。国の推計 <span class="num">${fmt(o)}</span>人より ${fmt(Math.abs(diff))}人（${signedPct(pct)}）${diff < 0 ? '少ない' : '多い'}数でした。現実は、推計より厳しく、人が減っています。2020年からは ${fmt(Math.abs(a - c2020))}人減りました（${signedPct(((a - c2020) / c2020) * 100)}）。</p>
     <div class="bars" role="img" aria-label="全国 2025年の公式推計と実績の2本の棒">
       <div class="bar-row thin"><span>公式推計（2023年公表）</span><div class="track"><div class="fill" style="width:100%"></div></div><span></span><span class="val">${fmt(o)}人</span></div>
       <div class="bar-row"><span>実績（国勢調査）</span><div class="track"><div class="fill" style="width:${((a / o) * 100).toFixed(3)}%"></div></div><span></span><span class="val">${fmt(a)}人</span></div>
       <div class="bar-row"><span></span><div class="axis"><span>0</span><span>${fmt(o)}人</span></div></div>
-      <div class="zoom"><div>先端を拡大（差 ${fmt(Math.abs(diff))}人、${Math.abs(pct).toFixed(2)}%）</div><div class="track"><div class="fill" style="width:100%;background:#8da0bf"></div></div><div class="track"><div class="fill" style="width:${(100 - (Math.abs(pct) / zoomSpan) * 100).toFixed(1)}%;background:#2b4c7e"></div></div><div class="diff">${diff < 0 ? '−' : '+'}${fmt(Math.abs(diff))}人（右端の ${zoomSpan}% 分を拡大）</div></div>
+      <div class="zoom"><div>先端を拡大（推計より ${fmt(Math.abs(diff))}人、${Math.abs(pct).toFixed(2)}% ${diff < 0 ? '少ない' : '多い'}）</div><div class="track"><div class="fill" style="width:100%;background:#8da0bf"></div></div><div class="track"><div class="fill" style="width:${(100 - (Math.abs(pct) / zoomSpan) * 100).toFixed(1)}%;background:#2b4c7e"></div></div><div class="diff">推計より ${diff < 0 ? '−' : '+'}${fmt(Math.abs(diff))}人（右端の ${zoomSpan}% 分を拡大）</div></div>
     </div>
     <p class="sm" style="margin-top:16px">全国の2100年（全地域の合計）：公式の前提を延ばした試算 <span class="num">${approx(m.nationOfficial[END_YEAR])}</span>、${INTERIM_LABEL} <span class="num">${approx(m.nation[END_YEAR])}</span>（${signedPct(((m.nation[END_YEAR] - m.nationOfficial[END_YEAR]) / m.nationOfficial[END_YEAR]) * 100)}）、${STANDARD_LABEL} <span class="num">${approx(m.nationLowBirth[END_YEAR])}</span>（${signedPct(((m.nationLowBirth[END_YEAR] - m.nationOfficial[END_YEAR]) / m.nationOfficial[END_YEAR]) * 100)}）。${STANDARD_LABEL}は、${lowBirthLegend(m)}</p>
     <p class="sm">推計：国立社会保障・人口問題研究所「日本の地域別将来推計人口（令和5年推計）」（2020年を出発点に推計）。実績：総務省統計局「国勢調査」2025年 人口等基本集計（2026年9月29日公表・確定値）。</p></div></section>`;
   // bins
   const maxN = Math.max(...ac.bins.map((b) => b.count), 1);
-  const hist = `<div class="hist" role="img" aria-label="町ごとの、実績と推計のずれの分布。6つの段階の町の数">${ac.bins
+  const hist = `<div class="hist" role="img" aria-label="推計より少ない町・多い町の分布。6つの段階の町の数">${ac.bins
     .map((b, i) => `<div class="bar-row"><span>${DEVIATION_LABELS[i]}</span><div class="track"><div class="fill" style="width:${((b.count / maxN) * 80).toFixed(1)}%;background:${DEVIATION_COLORS[i]}"></div><span class="val num">${fmt(b.count)}町</span></div></div>`)
-    .join('')}<p class="hist-note">上＝推計より少なかった町（${fmt(sm.below)}）、下＝多かった町（${fmt(sm.above)}）。実績−推計を、推計に対する割合で。${HAMAMATSU_NOTE}</p></div>`;
+    .join('')}<p class="hist-note">上＝推計より人が減っていた町（${fmt(sm.below)}）、下＝増えていた町（${fmt(sm.above)}）。実績が推計よりどれだけ少ないか、多いかを、割合で6段階に。${HAMAMATSU_NOTE}</p></div>`;
   const notable = ['珠洲市', '輪島市', '球磨村'].map((n) => m.areas.find((x) => x.name === n)).filter((x): x is NonNullable<typeof x> => !!x);
   if (!notable.some((x) => x.code === code)) notable.push(area);
   const noteFor = (name: string): string => (name === '珠洲市' || name === '輪島市' ? '令和6年の能登半島地震を含む5年。' : name === '球磨村' ? '令和2年の水害のあと、戻った人がいた5年。' : '');
@@ -806,9 +808,9 @@ function pageAwase(site: Site, townCode: string | undefined): Page {
     })
     .join('');
   const prefSel = `<label class="awase-pick"><span class="sm">地図の県</span><select id="awasePref" aria-label="地図の県">${site.prefs.map((p) => `<option value="${p.code}"${p.code === area.prefCode ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>`;
-  const two = `<section class="screen"><div class="wrap"><h2>町ごとに見ると、推計より少なかった町が${fmt(sm.below)}、多かった町が${fmt(sm.above)}（${fmt(sm.n)}の町）。</h2>
-    <p class="lead">中央値は ${signedPct(sm.median)}。±1%以内が ${fmt(sm.within1)}町、±3%以内が ${fmt(sm.within3)}町。町の大きさで見ると、${sm.bySize.map((g) => `${g.label} ${signedPct(g.median)}`).join('、')}（中央値）。</p>
-    <div class="two"><div>${hist}<div class="mapwrap" id="awaseMap" style="margin-top:16px">${prefSel}${japanSvg(site, { viewBox: viewBoxOf(site.prefByCode.get(area.prefCode)!.bb, 30), sel: area.prefCode, dots: false, flat: true, label: `${area.prefName}の町ごとのずれの地図` })}<div class="lg"><span>実績−推計</span>${DEVIATION_LABELS.map((l, i) => `<span><i style="background:${DEVIATION_COLORS[i]}"></i>${l}</span>`).join('')}<span><i style="background:#d0c9c4"></i>実績なし</span></div><p class="map-note" id="awaseNote">町の境界を読み込んでいます。</p></div></div>
+  const two = `<section class="screen"><div class="wrap"><h2>推計より人が減っていた町 ${fmt(sm.below)}、増えていた町 ${fmt(sm.above)}（${fmt(sm.n)}の町）。</h2>
+    <p class="lead">真ん中の町で、推計より ${signedPct(sm.median)}。推計との開きが1%以内の町 ${fmt(sm.within1)}、3%以内 ${fmt(sm.within3)}。小さい町ほど、推計より減っていました（真ん中の町で、${sm.bySize.map((g) => `${g.label} ${signedPct(g.median)}`).join('、')}）。</p>
+    <div class="two"><div>${hist}<div class="mapwrap" id="awaseMap" style="margin-top:16px">${prefSel}${japanSvg(site, { viewBox: viewBoxOf(site.prefByCode.get(area.prefCode)!.bb, 30), sel: area.prefCode, dots: false, flat: true, label: `${area.prefName}の、推計より少ない町・多い町の地図` })}<div class="lg"><span>推計より</span>${DEVIATION_LABELS.map((l, i) => `<span><i style="background:${DEVIATION_COLORS[i]}"></i>${l}</span>`).join('')}<span><i style="background:#d0c9c4"></i>実績なし</span></div><p class="sm">赤茶＝推計より人が減っていた町、藍＝増えていた町。</p><p class="map-note" id="awaseNote">町の境界を読み込んでいます。</p></div></div>
     <div class="side"><h3>目立つ町</h3><ul>${notableHtml}</ul></div></div></div></section>`;
   // the deviation by age: the 2025 count against the official run, both sexes, 20 age groups (the engine's two series)
   const ageDiff = m.ages2025.count.map((c, i) => c - m.ages2025.official[i]);
@@ -824,8 +826,8 @@ function pageAwase(site: Site, townCode: string | undefined): Page {
   const short = ageDiff.filter((d) => d < 0).length;
   const mostShort = ageDiff.map((d, i) => [d, i] as const).sort((p, q) => p[0] - q[0]).slice(0, 2).map(([, i]) => AGE_LABELS[i]);
   const mostOver = ageDiff.map((d, i) => [d, i] as const).sort((p, q) => q[0] - p[0]).slice(0, 2).map(([, i]) => AGE_LABELS[i]);
-  const ages = `<section class="screen"><div class="wrap"><h2>ずれは、年齢で偏っていました。</h2>
-    <p class="lead">全国の2025年。実績 − 公式推計を、5歳階級ごとに（左＝実績が少ない、右＝多い）。足りなかったのは${mostShort.join('と')}を中心に${short}の階級、多かったのは${mostOver.join('と')}。この偏りが、2025年の実績から計算し直した結果に表れています（高齢の人が多くを占める年には先の人口がやや増え、生まれる人が少なかった分は2100年に向けてやや減ります）。</p>
+  const ages = `<section class="screen"><div class="wrap"><h2>推計より減っていたのは、${mostShort.join('と')}。多かったのは、${mostOver.join('と')}でした。</h2>
+    <p class="lead">全国の2025年。実績が推計よりどれだけ少ないか（左、赤茶）、多いか（右、藍）を、5歳階級ごとに。推計より少なかった階級は${short}。この偏りが、2025年の実績から計算し直した結果に表れています（高齢の人が多い年には先の人口がやや増え、生まれる人が少なかった分は2100年に向けて減ります）。</p>
     <div class="hist ages" role="img" aria-label="全国の2025年、年齢5歳階級ごとの実績と公式推計の差の横棒">${ageRows}</div>
     <p class="hist-note">公式推計の2025年は、2020年の実績から社人研の前提で計算した値（全地域の合計 ${fmt(m.nationOfficial[ACTUAL_YEAR])}人）。実績は国勢調査の確定値（不詳補完値）を町ごとに集計した値（${fmt(m.nation[ACTUAL_YEAR])}人。${HAMAMATSU_NOTE}）。</p>
   </div></section>`;
@@ -843,7 +845,7 @@ function pageAwase(site: Site, townCode: string | undefined): Page {
     <div class="leg2"><span><svg width="28" height="10"><circle cx="8" cy="5" r="4" fill="#1b2430"/></svg>実績（国勢調査）</span><span><svg width="28" height="10"><circle cx="8" cy="5" r="3.5" fill="#f6f5f0" stroke="#8a8378" stroke-width="1.5"/></svg>前回推計（平成30年）</span><span><svg width="28" height="10"><line x1="0" x2="28" y1="5" y2="5" stroke="#2b4c7e" stroke-width="1.5"/></svg>公式推計（令和5年）</span><span><svg width="28" height="10"><line x1="0" x2="28" y1="5" y2="5" stroke="#2b4c7e" stroke-width="1.5" stroke-dasharray="5 5"/></svg>公式の前提を延ばした試算</span><span><svg width="28" height="10"><line x1="0" x2="28" y1="5" y2="5" stroke="#1b2430" stroke-width="2.5" stroke-dasharray="6 5"/></svg>${STANDARD_LABEL}</span></div>
     <p class="sm">${STANDARD_LABEL}：${lowBirthLegend(m)}${INTERIM_LABEL}は、下の数字の一覧にだけ出しています。</p>
     <ul class="vals" id="vals"></ul>
-    <p class="sm">全国の2100年は、${nationalChangeLine(m)}。前回推計（10年先）のずれは平均 ${sm.mape2018.toFixed(1)}%、今回（5年先）は ${sm.mape2023.toFixed(1)}%。${HAMAMATSU_NOTE}</p></div></section>`;
+    <p class="sm">全国の2100年は、${nationalChangeLine(m)}。推計と実績の開きは、前回推計（10年先）で平均 ${sm.mape2018.toFixed(1)}%、今回（5年先）で ${sm.mape2023.toFixed(1)}%。${HAMAMATSU_NOTE}</p></div></section>`;
   const after: After = () => {
     // (2) the prefecture's towns, coloured by their deviation step
     const map = document.getElementById('awaseMap')!;
@@ -858,7 +860,7 @@ function pageAwase(site: Site, townCode: string | undefined): Page {
           if (token !== awaseToken) return;
           const svg = map.querySelector('svg');
           if (!svg) return;
-          svg.outerHTML = japanSvg(site, { viewBox: viewBoxOf(unionBB(towns), 10), towns, townFill: devFill, dots: false, flat: true, label: `${site.prefByCode.get(pc)?.name ?? ''}の町ごとのずれの地図` });
+          svg.outerHTML = japanSvg(site, { viewBox: viewBoxOf(unionBB(towns), 10), towns, townFill: devFill, dots: false, flat: true, label: `${site.prefByCode.get(pc)?.name ?? ''}の、推計より少ない町・多い町の地図` });
           map.querySelectorAll<SVGPathElement>('.pref[data-town]').forEach((el) => {
             el.setAttribute('fill', devFill(el.getAttribute('data-town')!));
             const ct = ac.byCode.get(el.getAttribute('data-town')!);
@@ -973,7 +975,7 @@ export function linesSvg(trial: Totals, official: Totals, lowBirth: Totals, ck: 
 }
 
 function pageAi(site: Site): Page {
-  const html = `<section class="screen"><div class="wrap"><h1>気になることは、AIに聞いてください。</h1><p class="lead">AIの計算は、公式の前提を延ばした試算（2020年の国勢調査から）です。サイトの標準の試算（2025年の実績から計算し直し、出生のずれを先にも当てはめたもの）とは、数字が少し違います。</p><div class="ai-host" id="aiHost"></div></div></section>`;
+  const html = `<section class="screen"><div class="wrap"><h1>気になることは、AIに聞いてください。</h1><p class="lead">AIの計算は、公式の前提を延ばした試算（2020年の国勢調査から）です。サイトの標準の試算（2025年の実績から計算し直し、出生の減りを先にも当てはめたもの）とは、数字が少し違います。</p><div class="ai-host" id="aiHost"></div></div></section>`;
   const after: After = () => {
     const host = document.getElementById('aiHost')!;
     const runner = createRunner(site.data);
@@ -991,20 +993,24 @@ function pageAbout(site: Site): Page {
     const s = by(label);
     return s ? `<li>${esc(s.label)}：${esc(s.text)}。<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url)}</a>（${esc(s.retrieved)}取得）${s.approval ? `。${esc(s.approval)}` : ''}</li>` : '';
   };
-  const html = `<section class="screen"><div class="wrap"><h1>出どころと、数えていないこと。</h1><ul class="src">
+  const html = `<section class="screen"><div class="wrap"><h1>出どころと、数えていないこと。</h1>
+  <h2>このアプリは何のために</h2>
+  <p class="approach">日本に暮らすわたしたちは、「何を残すか」を決めないといけない時に来ています。まだ、そのことが広く知られていません。<br>このアプリは、何を残せば何が残せなくなるか、何を残せば負担がどう増えるか、何を残さないと国防が危うくなる可能性があるか、を町ごとの数字で見せます。<br>理解したあとに決めるための、材料です。決めるのは使う人で、このアプリは勧めません。</p>
+  <h2 style="margin-top:32px">このアプリの考え方</h2>
+  <p class="approach">問いは「何を残すか」。残す対象は、名勝・名物・観光地・食・建物・衣装など、日本らしいもの。<br>それを残すのは人で、人が住み続けるには、暮らしと仕事の場が要ります。<br>人口が減ると、病院や店のような暮らしの場が成り立つ人口の目安を下回り、住みにくくなって、人の減りが速まります。<br>暮らしの場を残すには、町の収益で足りない分を、人口の多い地域と働く世代が負担します。人口が減るほど、1人あたりの費用は大きく、1人が支える人は増えます。<br>負担は有限なので、ここを残せば、ほかの町やほかの日本らしいものを残す余力が減ります。重くなりすぎれば、次の世代の重荷になります。</p>
+  <h2 style="margin-top:32px">数えていないこと</h2>
+  <p>人がいなくなる地域の国防は、別の形で考える必要があります。このアプリでは数えていません（数字は出せません）。ほかに、国土の管理、災害への備え、水源や森林の手入れも数えていません。</p>
+  <h2 style="margin-top:32px">数字の出どころ</h2>
+  <ul class="src">
     ${line('人口')}
     ${line('人口の実績')}
     ${line('前回の推計')}
-    <li>${ESTIMATE_LINE}2025年の実績がある町は、実績の年齢構成を出発点に計算し直しています（${STANDARD_LABEL}：${lowBirthLegend(m)}${LOW_BIRTH_NOTE}全国の2100年は ${nationalChangeLine(m)}）。実績・公式推計・試算は、濃い実線・細い実線・破線で分けています。${HAMAMATSU_NOTE}</li>
+    <li>${ESTIMATE_LINE}2025年の実績がある町は、実績の年齢構成を出発点に計算し直しています（${STANDARD_LABEL}：${lowBirthLegend(m)}${LOW_BIRTH_NOTE}全国の2100年は ${nationalChangeLine(m)}）。</li>
     ${line('境界')}
     <li>残す対象は、名勝・名物・観光地・食・建物・衣装など、日本らしいもの（日本全体の対象と、各都道府県の対象）。名所のデータ ${site.model.landmarks.length}件のうち、表示は各県の代表的な例 ${site.landmarks.length}件（名物・食・衣装は、まだ入っていません）。名所と公表資料の言葉 ${(site.data.claims ?? []).length}件は、各公式サイトと公表資料から。地図の形は簡略化していて、測量には使えません。</li>
     ${line('市町村の歳出')}
     ${line('歳出の公表値')}
   </ul>
-  <h2 style="margin-top:40px">このアプリの考え方</h2>
-  <p class="approach">問いは「何を残すか」。残す対象は、名勝・名物・観光地・食・建物・衣装など、日本らしいもの。<br>それを残すのは人で、人が住み続けるには、暮らしと仕事の場が要ります。<br>人口が減ると、病院や店のような暮らしの場が成り立つ人口の目安を下回り、住みにくくなって、人の減りが速まります。<br>暮らしの場を残すには、町の収益で足りない分を、人口の多い地域と働く世代が負担します。人口が減るほど、1人あたりの費用は大きく、1人が支える人は増えます。<br>負担は有限なので、ここを残せば、ほかの町やほかの日本らしいものを残す余力が減ります。重くなりすぎれば、次の世代の重荷になります。</p>
-  <h2 style="margin-top:32px">数えていないこと</h2>
-  <p>人がいなくなる地域で別に考える必要があること（国防、国土の管理、災害への備え、水源や森林の手入れ）は、このアプリでは数えていません。数字は出していません。</p>
   </div></section>`;
   return { html, title: '出どころ' };
 }
