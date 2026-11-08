@@ -50,10 +50,16 @@
 }
 .ai-help {
   display: flex;
+  flex-wrap: wrap; /* a narrow screen: the hint takes its own line(s) and the counter sits under it, at the right */
   justify-content: space-between;
-  gap: var(--sp-3);
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-3);
+}
+.ai-help > span:first-child {
+  flex: 1 1 16em;
 }
 .ai-counter {
+  margin-left: auto;
   white-space: nowrap;
 }
 .ai-counter.is-over {

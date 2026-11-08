@@ -164,7 +164,7 @@ function sourcesScreenHtml(): string {
       <div class="screen-body app-foot" id="panel-sources">
         <dl class="src-list">${first.map(sourceHtml).join('')}</dl>
         <details class="fold src-more"><summary>${MORE_SOURCES}（${rest.length}件）</summary><dl class="src-list">${rest.map(sourceHtml).join('')}</dl></details>
-        <p class="screen-sources-note">${SOURCES_NOTE}</p>
+        <p class="screen-sources-note">${phraseHtml(SOURCES_NOTE)}</p>
       </div>
     </section>`;
 }

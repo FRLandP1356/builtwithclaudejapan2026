@@ -31,7 +31,7 @@ function h<K extends Tag>(tag: K, className?: string, text?: string): HTMLElemen
 /** The three facilities of daily life the card lists, by id (the names printed are the data's: Ruling 16, never typed here). */
 export const CARD_FACILITY_IDS: readonly string[] = ['clinic', 'post_office', 'bank'];
 
-export const CARD_FACILITIES_LEAD = '人口の目安を下回る年';
+export const CARD_FACILITIES_LEAD = '主な施設が人口の目安を下回る年';
 export const CARD_ALREADY = '2020年の時点で、すでに目安を下回る';
 export const CARD_NEVER = '2100年まで目安を下回らない';
 export const cardWhen = (year: number): string => `${year}年に目安を下回る`;

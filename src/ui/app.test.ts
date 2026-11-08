@@ -1357,7 +1357,7 @@ describe('the town card (the fourth screen)', () => {
     for (const r of rows) {
       expect(r.querySelector('.town-card-when')!.textContent!.replace(/\s*試算$/, '')).toMatch(/^(\d{4}年に目安を下回る|2020年の時点で、すでに目安を下回る|2100年まで目安を下回らない)$/);
     }
-    expect(root.querySelector('.town-card-facilities-lead')!.textContent).toBe('人口の目安を下回る年');
+    expect(root.querySelector('.town-card-facilities-lead')!.textContent).toBe('主な施設が人口の目安を下回る年');
   });
 
   test('the heading and the card follow the place, and the chart\'s marker follows the year without redrawing the card', async () => {
