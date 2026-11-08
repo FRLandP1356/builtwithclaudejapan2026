@@ -94,9 +94,11 @@ function esc(s: unknown): string {
 
 const reduced = (): boolean => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+const PLAIN: Readonly<Record<Status, string>> = { jisseki: '実際', suikei: '計算', shisan: '計算' };
 function chip(status: Status): string {
-  return `<span class="chip ${status}">${STATUS_LABEL[status]}</span>`;
+  return `<span class="chip ${status}">${PLAIN[status]}</span>`;
 }
+const more = (key: string): string => `<p class="more"><a href="#/kuwashiku/${key}">くわしく</a></p>`;
 
 // -----------------------------------------------------------------------------------------------------------------
 // Site state (built once after the data is loaded)
@@ -328,6 +330,16 @@ interface Page {
   html: string;
   after?: After;
   title?: string;
+  /** The answer check's one-town chart, served at #/kuwashiku/awase-line. */
+  detail?: string;
+}
+
+/** The one sentence of the home page, from the standard 2100 figure against 2020 (never a fixed sentence). */
+function homeLine(m: Model): string {
+  const n = standardNation(m);
+  const r = n[END_YEAR] / n[BASE_YEAR];
+  const how = r < 0.48 ? '今の半分より少なくなります' : r >= 0.52 ? '今の半分より多く残ります' : '今の約半分になります';
+  return `計算では、2100年に日本の人口は、${how}。全部は残せません。あなたは、何を残しますか。`;
 }
 
 function pageHome(site: Site): Page {
@@ -336,15 +348,14 @@ function pageHome(site: Site): Page {
   const startY = reduced() ? END_YEAR : ACTUAL_YEAR;
   const readout = (y: number): string => {
     const s = statusOf(y, true);
-    const label = s === 'jisseki' ? '実績（国勢調査）' : STATUS_LABEL[s];
+    const label = PLAIN[s];
     const pop = y === ACTUAL_YEAR ? `${fmt(national2025)}人` : figure(stdNation(m)[y], s);
     return `<div class="y">${y}年</div><div class="s">${label}</div><div class="p">${pop}</div>`;
   };
   const html = `<section class="screen"><div class="wrap hero">
-    <div><h1>${homeHeading(m)}</h1>
-    <p class="lead">人が減ると、すべては残せません。何を残すかを決める材料を、町ごとに並べています。点（日本らしいものの、各県の代表例 ${site.landmarks.length}件）を押すと、その場所のページへ。</p>
+    <div><h1>${homeLine(m)}</h1>
     <div id="homeCtl" hidden>${yearControl('homeYear', END_YEAR, true)}</div></div>
-    <div class="mapwrap" id="homeMap">${japanSvg(site, { year: startY, label: '日本の地図。2025年の実績から2100年の試算へ、人口の色が薄くなる' })}<div class="ro" id="ro" aria-live="polite">${readout(startY)}</div>${legendShare()}${legendShapes()}</div>
+    <div class="mapwrap" id="homeMap">${japanSvg(site, { year: startY, label: '日本の地図。2025年の実績から2100年の試算へ、人口の色が薄くなる' })}<div class="ro" id="ro" aria-live="polite">${readout(startY)}</div>${legendShare()}${legendShapes()}${more('home')}</div>
   </div></section>`;
   const after: After = () => {
     const wrap = document.getElementById('homeMap')!;
@@ -395,7 +406,7 @@ function pageMeisho(site: Site, slug: string | undefined): Page {
   const list = site.landmarks.filter((l) => !g || groupOf(l.kind) === g).sort((a, b) => a.prefCode.localeCompare(b.prefCode));
   const html = `<section class="screen"><div class="wrap">
     <h1>${g ? `${esc(g.name)} ${cnt.get(g.slug) ?? 0}件。` : `日本らしいところ ${site.landmarks.length}件。`}地図の点の形は、この4つの種類です。</h1>
-    <p class="lead">残す対象は、名勝・名物・観光地・食・建物・衣装など、日本らしいもの。日本全体の対象と、各都道府県の対象があります。ここに載せているのは、各県の代表的な例（データ ${site.model.landmarks.length}件のうち、表示は ${site.landmarks.length}件）で、名物・食・衣装は、まだ入っていません。</p>
+    <p class="lead">残す対象は、名勝・名物・観光地・食・建物・衣装など、日本らしいもの。</p>${more('meisho')}
     <div class="kinds" role="group" aria-label="名所の種類">${GROUPS.map(
       (x) => `<button type="button" data-slug="${x.slug}" aria-pressed="${g === x}"><svg viewBox="0 0 48 48" aria-hidden="true">${ICONS[x.slug]}</svg><span class="n">${x.name}</span><span class="c">${cnt.get(x.slug) ?? 0}件 ${shapeHtml(x.shape)}</span></button>`,
     ).join('')}</div>
@@ -428,7 +439,14 @@ function populationAtYear(site: Site, year: number): PopulationAt {
   return { popByArea, areaPref };
 }
 
-const WORKING = '働く世代（15〜64歳）';
+const WORKING = '働く人（15〜64歳）';
+
+/** 「今の約6分の1（17%）」 or 「今の約70%」 for a ratio to 2025. */
+function fractionText(ratio: number): string {
+  const pct = Math.round(ratio * 100);
+  if (ratio >= 0.5) return `今の約${pct}%`;
+  return `今の約${Math.round(1 / ratio)}分の1（${pct}%）`;
+}
 
 function pageLandmark(site: Site, id: string): Page {
   const l = site.lmById.get(id);
@@ -465,13 +483,11 @@ function pageLandmark(site: Site, id: string): Page {
   const band25 = bandIndexFor(fin.bands, Math.round(s[ACTUAL_YEAR]));
 
   const A = `<section class="screen" id="sec-people"><div class="wrap">
-    <h1>${esc(l.name)}は、${esc(area.prefName)}${esc(area.name)}にあります。${esc(area.name)}の人は、2025年の100人が、2100年には約${share2100}人（試算）。</h1>
-    <p class="lead">残すのは、人です。人が住み続けるには、暮らしと仕事の場が要ります。</p>
+    <h1>${esc(l.name)}のある${esc(area.name)}（${esc(area.prefName)}）は、2100年に人が${fractionText(s[END_YEAR] / s[ACTUAL_YEAR])}になります。</h1>
+    <p class="lead">残すのは、人です。</p>
     <div class="two"><div class="mapwrap" id="lmMap">${japanSvg(site, { viewBox: viewBoxOf(pref.bb, 30), sel: l.prefCode, filter: (o) => o.id === l.id, dotScale: 2.2, label: `${pref.name}の地図` })}${legendShare()}<p class="map-note" id="lmMapNote">町の境界を読み込んでいます。</p></div>
     <div><div class="people" id="people" aria-label="100人の並び">${Array.from({ length: 100 }, (_, i) => `<span class="p" data-i="${i}">${personSvg()}</span>`).join('')}</div>
-    <p style="margin:16px 0 0"><span class="bign num" id="lmPop">${figure(s[ACTUAL_YEAR], statusOf(ACTUAL_YEAR, t.hasActual))}</span> <span id="lmChip">${chip(statusOf(ACTUAL_YEAR, t.hasActual))}</span><br><span class="sm">1人の記号＝2025年の人口の1%。${
-      t.hasActual ? `2025年は国勢調査の実績。先は「${STANDARD_LABEL}」＝${lowBirthLegend(m)}` : `2025年の実績がありません（${HAMAMATSU_NOTE}）。`
-    }</span></p></div></div>
+    <p style="margin:16px 0 0"><span class="bign num" id="lmPop">${figure(s[ACTUAL_YEAR], statusOf(ACTUAL_YEAR, t.hasActual))}</span> <span id="lmChip">${chip(statusOf(ACTUAL_YEAR, t.hasActual))}</span><br><span class="sm">1人＝2025年の人口の1%。2025年までは実際、その先は計算。</span></p>${more('hito')}</div></div>
   </div></section>`;
 
   const ICO: Record<string, string> = {
@@ -491,61 +507,57 @@ function pageLandmark(site: Site, id: string): Page {
     .map((y) => `<span class="yb" data-y="${y}" style="height:${Math.max(4, Math.round((s[y] / s[ACTUAL_YEAR]) * 100))}%" title="${y}年 ${figure(s[y], statusOf(y, t.hasActual))}"></span>`)
     .join('');
   const CHAIN = `<section class="screen" id="sec-chain"><div class="wrap">
-    <h2>人が減ると、暮らしの場、流出、負担へとつながります。</h2>
-    <p class="lead">${esc(area.name)}の数字で、つながりを1枚に。年のつまみで動きます。押すと、その説明へ。</p>
+    <h2>人が減ると、病院や店などが成り立たなくなり、人がさらに減り、残った人の負担が増えます。</h2>
+    <p class="lead">${esc(area.name)}の数字で、つながりを1枚に。段を押すと、その説明へ。</p>
     <div class="chain-wrap"><ol class="steps">
       ${node('sec-people', 'place', esc(l.name), 'nd-place', '残すのは、人')}
       ${arrow('担い手')}
       ${node('sec-people', 'people', '人', 'nd-pop', `${esc(area.name)}の人口`)}
-      ${arrow('暮らしの場が成り立つか')}
-      ${node('sec-places', 'places', '暮らしの場', 'nd-places', '8種のうち、人口の目安を下回る数')}
+      ${arrow('成り立つか')}
+      ${node('sec-places', 'places', '病院や店など', 'nd-places', '8種のうち、成り立たなくなる数')}
       ${arrow('足りなければ', dimFrom)}
-      ${node('sec-places', 'out', '流出が速まる', 'nd-out', '2100年の人口（弱〜強。仮定）', dimFrom)}
+      ${node('sec-places', 'out', '人がさらに減る', 'nd-out', '2100年の人口（計算、弱〜強）', dimFrom)}
       ${arrow('残すなら', dimFrom)}
-      ${node('sec-support', 'load', '負担', 'nd-load', `${WORKING}1人が支える人`, dimFrom)}
+      ${node('sec-support', 'load', '働く人1人の負担', 'nd-load', `${WORKING}1人が支える人の数`, dimFrom)}
       ${arrow('費用は', dimFrom)}
-      ${node('sec-cost', 'cost', '1人あたりの費用', 'nd-cost', '同じ規模の町（令和6年度、実績）', dimFrom)}
+      ${node('sec-cost', 'cost', '町が1人に使うお金', 'nd-cost', '同じ大きさの町の実際（1年）', dimFrom)}
       ${arrow('そのぶん', dimFrom)}
-      ${node('sec-keep', 'keep', 'ほかを残す余力', 'nd-keep', '動かす人数と、ほかの何町', dimFrom)}
+      ${node('sec-keep', 'keep', 'ほかを残す余力', 'nd-keep', 'ここを保つ人数と、ほかの何町', dimFrom)}
     </ol>
-    <div class="trend" aria-label="${esc(area.name)}の人口、2025年から2100年"><div class="sm">人口の推移（2025年＝100）</div><div class="ybars">${strip}</div><div class="ticks"><span>2025</span><span>2050</span><span>2075</span><span>2100</span></div><div class="sm" id="trendNote"></div></div></div>
+    <div class="trend" aria-label="${esc(area.name)}の人口、2025年から2100年"><div class="sm">人口の推移（2025年＝100）</div><div class="ybars">${strip}</div><div class="ticks"><span>2025</span><span>2050</span><span>2075</span><span>2100</span></div><div class="sm" id="trendNote"></div></div></div>${more('tsunagari')}
   </div></section>`;
 
   const PLACES = `<section class="screen" id="sec-places"><div class="wrap">
-    <h2>暮らしの場が成り立たなくなると、住みにくくなり、人の減りが速まります。</h2>
-    <p class="lead">病院・店・郵便のような暮らしの場には、成り立つ人口の目安（その場がある市町村の人口の中央値、国土交通省）があります。${esc(area.name)}の人口が目安を下回ると、明かりが消えます。</p>
+    <h2>病院や店などが成り立たなくなると、住みにくくなり、人がさらに減ります。</h2>
+    <p class="lead">明かりは、${esc(area.name)}の人口で成り立つかどうか。年を動かすと消えます。</p>
     <div class="lamps" id="lamps">${m.facilities
-      .map((f) => `<div class="lamp" data-id="${esc(f.id)}"><svg viewBox="0 0 48 60" aria-hidden="true"><circle class="bulb" cx="24" cy="22" r="16"/><path d="M18 42h12M20 48h8M24 38v4" stroke="#5b6470" stroke-width="1.5" fill="none"/></svg>${esc(f.name)}<span class="th">目安 ${fmt(f.p50)}人</span></div>`)
+      .map((f) => `<div class="lamp" data-id="${esc(f.id)}"><svg viewBox="0 0 48 60" aria-hidden="true"><circle class="bulb" cx="24" cy="22" r="16"/><path d="M18 42h12M20 48h8M24 38v4" stroke="#5b6470" stroke-width="1.5" fill="none"/></svg>${esc(f.name)}<span class="th">${fmt(f.p50)}人で成り立つ</span></div>`)
       .join('')}</div>
-    ${chain ? `<div class="three"><div class="box"><div class="sm">2100年 ${STANDARD_LABEL}</div><div class="v num">${approx(s[END_YEAR])}</div></div><div class="box"><div class="sm">流出が速まる場合・弱</div><div class="v num dec">${approx(chain.weak)}</div></div><div class="box"><div class="sm">流出が速まる場合・強</div><div class="v num dec">${approx(chain.strong)}</div></div></div>` : `<p class="sm">${esc(area.name)}は前提の公表がない村で、流出が速まる場合の試算はありません。</p>`}
-    <p class="sm" style="margin-top:12px">目安を下回ると、住みたい人が減り、流出が速まる、と考えられます。速まり方は、このアプリの仮定で、測った根拠はありません。2050年以降に当てはめています。</p>
+    ${chain ? `<div class="three"><div class="box"><div class="sm">2100年の人（計算）</div><div class="v num">${approx(s[END_YEAR])}</div></div><div class="box"><div class="sm">人がさらに減る場合・弱</div><div class="v num dec">${approx(chain.weak)}</div></div><div class="box"><div class="sm">人がさらに減る場合・強</div><div class="v num dec">${approx(chain.strong)}</div></div></div>` : `<p class="sm">${esc(area.name)}は、人がさらに減る場合の計算ができない村です。</p>`}${more('mise')}
   </div></section>`;
 
   const SUPPORT = `<section class="screen" id="sec-support"><div class="wrap">
-    <h2>人が減ると、${WORKING}の1人が支える人が増えます。</h2>
-    <p class="lead">${esc(area.name)}で、${WORKING}の1人が支える人（0〜14歳と65歳以上）の数。2025年は実績、先は${STANDARD_LABEL}。</p>
+    <h2>人が減ると、${WORKING}1人が支える人が増えます。</h2>
+    <p class="lead">${esc(area.name)}で、${WORKING}1人が支える人（0〜14歳と65歳以上）の数。</p>
     <div class="carry"><div class="carry-side"><div class="people ten" aria-hidden="true">${Array.from({ length: 10 }, () => `<span class="p">${personSvg()}</span>`).join('')}</div><div class="sm">${WORKING}の10人が</div></div>
     <div class="carry-side"><div class="people ten carried" id="carried" aria-hidden="true"></div><div class="sm" id="carriedLabel"></div></div></div>
     <p style="margin:16px 0 0"><span class="bign num" id="loadN"></span> <span id="loadChip"></span><br><span class="sm" id="loadDetail"></span></p>
-    <p class="sm">全国：2025年 ${nat25.toFixed(2)}人 → 2100年 ${nat100.toFixed(2)}人（1人が支える人。2100年は${STANDARD_LABEL}）。</p>
+    <p class="sm">全国：2025年 ${nat25.toFixed(2)}人 → 2100年 ${nat100.toFixed(2)}人。</p>${more('futan')}
   </div></section>`;
 
   const COST = `<section class="screen" id="sec-cost"><div class="wrap">
-    <h2>いま、人口が少ない町ほど、1人あたりの費用が大きくなっています。</h2>
-    <p class="lead">人口の規模ごとの、市町村が1年に使ったお金（歳出総額 ÷ 住民基本台帳人口）の中央値。令和${fin.fiscalYear - 2018}年度の決算（実績）。${esc(area.name)}の2025年の規模と、年のつまみの年の規模に印。</p>
+    <h2>いま、人口が少ない町ほど、町が1人に使うお金が大きくなっています。</h2>
+    <p class="lead">町の大きさごとの、町が1人に1年に使うお金（${fin.fiscalYear}年度、実際）。${esc(area.name)}の大きさに印。</p>
     <div class="hist fin" id="fin" role="img" aria-label="人口の規模別、1人あたりの歳出の中央値（千円）">${rows
       .map((r, i) => `<div class="bar-row" data-band="${i}"><span>${esc(r.label)}</span><div class="track"><div class="fill" style="width:${(r.widthPct * 0.7).toFixed(1)}%"></div><span class="val num">${fmt(r.median)}千円</span><span class="mark" id="finMark${i}"></span></div></div>`)
       .join('')}</div>
-    <p class="sm" style="margin-top:12px">いまの町どうしの比較で、この町の将来の費用の予測ではありません。原因を示すものでもありません。出典：総務省「令和${fin.fiscalYear - 2018}年度 市町村別決算状況調」。</p>
-    <div class="opinion"><div class="sm">作者の考え</div><p>文化を残すには、人が暮らし続けられることが前提です。暮らしの場を、その町の収益だけでまかなえないなら、足りない分は人口の多い地域が負担します。それが続くと、将来の世代の負担が重くなる、とわたしは考えています。</p></div>
+    ${more('okane')}<p>文化を残すには、人が暮らし続けられることが前提です。暮らしの場を、その町の収益だけでまかなえないなら、足りない分は人口の多い地域が負担します。それが続くと、将来の世代の負担が重くなる、とわたしは考えています。</p></div>
   </div></section>`;
 
   const KEEP = `<section class="screen" id="sec-keep"><div class="wrap">
     <h2>ここを残すと、ほかを残す余力が減ります。</h2>
-    <p class="lead">全国の人口は変わりません。ある町の暮らしの場を保つ人数は、ほかの町から動くことになります。</p>
-    <div id="keepBody"></div>
-    <p class="sm" style="margin-top:12px">人数は「もし移ったら」を見るための計算で、実際の人の動きの予測ではありません。ほかの町からは人口に比例して減らしています。</p>
-    <p class="sm">人がいなくなる地域では、国防も別の形で考える必要があります。このアプリでは数えていません。</p>
+    <p class="lead">日本全体の人は変わらないので、ここを保つ人は、ほかの町から来ることになります。</p>
+    <div id="keepBody"></div>${more('yoryoku')}
   </div></section>`;
 
   const E = claims.length
@@ -588,15 +600,15 @@ function pageLandmark(site: Site, id: string): Page {
       setText('carriedLabel', `支える人：${k}人`);
       setText('loadN', Number.isFinite(load.perWorker) ? `1人が支える人 ${load.perWorker.toFixed(2)}人` : `${WORKING}がいません`);
       q('loadChip')!.innerHTML = chip(st);
-      setText('loadDetail', `0〜14歳 ${figure(load.young, st)}と65歳以上 ${figure(load.old, st)}を、${WORKING} ${figure(load.working, st)}で。`);
+      setText('loadDetail', `0〜14歳 ${figure(load.young, st)}と65歳以上 ${figure(load.old, st)}を、${WORKING}${figure(load.working, st)}で。`);
       // the cost band
       const bandY = bandIndexFor(fin.bands, Math.round(p));
       fin.bands.forEach((_, i) => {
         const mark = q(`finMark${i}`);
         if (!mark) return;
         const tags: string[] = [];
-        if (i === band25) tags.push('2025年の規模');
-        if (i === bandY && y !== ACTUAL_YEAR) tags.push(`${y}年の規模`);
+        if (i === band25) tags.push('2025年の大きさ');
+        if (i === bandY && y !== ACTUAL_YEAR) tags.push(`${y}年の大きさ`);
         mark.textContent = tags.join('・');
         mark.closest('.bar-row')?.classList.toggle('here', tags.length > 0);
       });
@@ -606,14 +618,14 @@ function pageLandmark(site: Site, id: string): Page {
       let keepHtml: string;
       let keepShort: string;
       if (!target) {
-        keepHtml = `<p>${y}年の${esc(area.name)}は、暮らしの場の人口の目安を下回っていません。動かす人数はありません。</p>`;
-        keepShort = '下回る場がない';
+        keepHtml = `<p>${y}年の${esc(area.name)}では、病院や店などの8種はすべて成り立ちます。動かす人はいません。</p>`;
+        keepShort = 'すべて成り立つ';
       } else if (keep && keep.outcome.kind === 'ok') {
         const eff = keep.outcome.effects;
-        keepHtml = `<div class="swap"><div class="box"><div class="sm">${esc(area.name)}に</div><div class="v num">+${approx(keep.outcome.people)}</div><div class="sm">いれば、${esc(target.name)}の目安（${fmt(target.p50)}人）を保てます</div></div><svg class="arrow" width="64" height="44" viewBox="0 0 64 44" aria-hidden="true"><path d="M60 14H8m0 0l8-8M8 14l8 8" stroke="#2b4c7e" stroke-width="2" fill="none"/><path d="M4 30h52m0 0l-8-8m8 8l-8 8" stroke="#a43d2b" stroke-width="2" fill="none"/></svg><div class="box"><div class="sm">ほかの町から</div><div class="v num dec">−${approx(keep.outcome.people)}</div><div class="sm">${eff.areaCount === 0 ? 'そのとき、ほかの町で新しく目安を下回る場はありません' : `そのとき、ほかの${fmt(eff.areaCount)}町で、新しく目安を下回る場が出ます`}</div></div></div>`;
+        keepHtml = `<div class="swap"><div class="box"><div class="sm">${esc(area.name)}に</div><div class="v num">+${approx(keep.outcome.people)}</div><div class="sm">いれば、${esc(target.name)}が成り立つ人数（${fmt(target.p50)}人）になります</div></div><svg class="arrow" width="64" height="44" viewBox="0 0 64 44" aria-hidden="true"><path d="M60 14H8m0 0l8-8M8 14l8 8" stroke="#2b4c7e" stroke-width="2" fill="none"/><path d="M4 30h52m0 0l-8-8m8 8l-8 8" stroke="#a43d2b" stroke-width="2" fill="none"/></svg><div class="box"><div class="sm">ほかの町から</div><div class="v num dec">−${approx(keep.outcome.people)}</div><div class="sm">${eff.areaCount === 0 ? 'そのとき、ほかの町で新しく成り立たなくなるものはありません' : `そのとき、ほかの${fmt(eff.areaCount)}町で、新しく成り立たなくなるものが出ます`}</div></div></div>`;
         keepShort = `${approx(keep.outcome.people)}を動かすと、ほか${fmt(eff.areaCount)}町`;
       } else if (keep) {
-        keepHtml = `<p>${esc(target.name)}の目安（${fmt(target.p50)}人）まで、あと${approx(keep.needs.need50)}。人数が大きすぎて、ほかの町への影響は計算できません。</p>`;
+        keepHtml = `<p>${esc(target.name)}が成り立つ人数（${fmt(target.p50)}人）まで、あと${approx(keep.needs.need50)}。人数が大きすぎて、ほかの町への影響は計算できません。</p>`;
         keepShort = `あと${approx(keep.needs.need50)}`;
       } else {
         keepHtml = '<p>計算できませんでした。</p>';
@@ -623,7 +635,7 @@ function pageLandmark(site: Site, id: string): Page {
       // the chain's nodes
       setText('nd-place', '');
       setText('nd-pop', figure(p, st));
-      setText('nd-places', dimFrom ? '2100年まで、8種とも目安を下回りません' : nb === 0 ? `0 / 8（${firstBelow!.year}年に${firstBelow!.n}種が下回る）` : `${nb} / 8 が目安を下回る`);
+      setText('nd-places', dimFrom ? '2100年まで、8種とも成り立ちます' : nb === 0 ? `0 / 8（${firstBelow!.year}年に${firstBelow!.n}種）` : `${nb} / 8 が成り立たない`);
       document.querySelectorAll<HTMLElement>('.ybars .yb').forEach((el) => el.classList.toggle('on', Number(el.dataset.y) === y));
       setText('trendNote', `${y}年 ${figure(p, st)}`);
       setText('nd-out', chain ? `${approx(chain.weak)}〜${approx(chain.strong).replace('約', '')}` : '前提なし');
@@ -682,10 +694,10 @@ function pageChizu(site: Site, pc: string | undefined, townCode: string | undefi
   }</div>`;
   const options = m.areas.map((a) => `<option value="${esc(a.name)}（${esc(a.prefName)}）"></option>`).join('');
   const html = `<section class="screen"><div class="wrap">
-    <h1>日本から県へ、県から町へ。年を動かすと、2025年に対する人口の割合で色が変わります。</h1>
+    <h1>県を押すと県へ、町を押すと町へ。年を動かすと、色が変わります。</h1>
     <div class="search" role="search"><input id="townQ" list="townList" placeholder="町名か県名で探す（例：田辺市）" aria-label="町名か県名で探す"><datalist id="townList">${options}</datalist><button type="button" class="btn" id="townGo">探す</button></div>
     ${crumb}
-    <div class="two"><div class="mapwrap" id="chizuMap">${japanSvg(site, opts)}${legendShare()}${pref ? '<p class="map-note" id="chizuNote">町の境界を読み込んでいます。</p>' : ''}${yearControl('chizuYear', ACTUAL_YEAR, true)}</div>${side}</div>
+    <div class="two"><div class="mapwrap" id="chizuMap">${japanSvg(site, opts)}${legendShare()}${pref ? '<p class="map-note" id="chizuNote">町の境界を読み込んでいます。</p>' : ''}${yearControl('chizuYear', ACTUAL_YEAR, true)}</div>${side}</div>${more('chizu')}
   </div></section>`;
   const after: After = () => {
     const map = document.getElementById('chizuMap')!;
@@ -706,10 +718,7 @@ function pageChizu(site: Site, pc: string | undefined, townCode: string | undefi
       pop.textContent = figure(v, st);
       ch.innerHTML = chip(st);
       let text = '';
-      if (st === 'jisseki') text = y === ACTUAL_YEAR ? '国勢調査（2026年9月29日公表の確定値）。' : '国勢調査。';
-      else if (st === 'suikei') text = `公式推計の値です。${HAMAMATSU_NOTE}`;
-      else text = `${STANDARD_LABEL}。${lowBirthLegend(m)}`;
-      if (!t && !pc && y === ACTUAL_YEAR && national2025 !== undefined && national2025 !== ser[y]) text += `地図の県の合計は${fmt(ser[y])}人（${HAMAMATSU_NOTE}）。`;
+      text = st === 'jisseki' ? '実際（国勢調査）。' : '計算。';
       note.textContent = text;
     };
     wireYear('chizuYear', show, hasA);
@@ -748,8 +757,8 @@ function pageChizu(site: Site, pc: string | undefined, townCode: string | undefi
       void townsOf(site, pc).then(
         (towns) => {
           if (token !== routeToken) return;
-          const svg = map.querySelector('svg');
-          if (!svg) return;
+          const svg = map?.querySelector('svg');
+          if (!svg || !map) return;
           svg.outerHTML = japanSvg(site, { viewBox: viewBoxOf(unionBB(towns), 10), towns, selTown: townCode, filter: (o) => o.prefCode === pc, dotScale: 2.2, year, label: `${pref!.name}の町の地図。町を押すと、その町に絞ります` });
           document.getElementById('chizuNote')?.remove();
         },
@@ -780,21 +789,20 @@ function pageAwase(site: Site, townCode: string | undefined): Page {
   const c2020 = m.checks.census.national2020;
   const zoomSpan = 0.5; // the enlarged tip shows the last 0.5% of the bar
   const manJin = (n: number): string => `約${fmt(Math.round(Math.abs(n) / 1e4))}万人`;
-  const one = `<section class="screen"><div class="wrap"><h1>日本の人口は、国の推計より、すでに${manJin(diff)}${diff < 0 ? '少なく' : '多く'}なっています。</h1>
-    <p class="lead">2025年の日本の人口は <span class="num">${fmt(a)}</span>人（国勢調査）。国の推計 <span class="num">${fmt(o)}</span>人より ${fmt(Math.abs(diff))}人（${signedPct(pct)}）${diff < 0 ? '少ない' : '多い'}数でした。現実は、推計より厳しく、人が減っています。2020年からは ${fmt(Math.abs(a - c2020))}人減りました（${signedPct(((a - c2020) / c2020) * 100)}）。</p>
+  const one = `<section class="screen"><div class="wrap"><h1>日本の人口は、国の計算より${manJin(diff)}${diff < 0 ? '少なく' : '多く'}なりました。人は、思ったより早く減っています。</h1>
+    <p class="lead">2025年の日本の人口は ${fmt(a)}人（実際）。国の計算は ${fmt(o)}人でした（${signedPct(pct)}）。</p>
     <div class="bars" role="img" aria-label="全国 2025年の公式推計と実績の2本の棒">
-      <div class="bar-row thin"><span>公式推計（2023年公表）</span><div class="track"><div class="fill" style="width:100%"></div></div><span></span><span class="val">${fmt(o)}人</span></div>
-      <div class="bar-row"><span>実績（国勢調査）</span><div class="track"><div class="fill" style="width:${((a / o) * 100).toFixed(3)}%"></div></div><span></span><span class="val">${fmt(a)}人</span></div>
+      <div class="bar-row thin"><span>国の計算（2023年）</span><div class="track"><div class="fill" style="width:100%"></div></div><span></span><span class="val">${fmt(o)}人</span></div>
+      <div class="bar-row"><span>実際（国勢調査）</span><div class="track"><div class="fill" style="width:${((a / o) * 100).toFixed(3)}%"></div></div><span></span><span class="val">${fmt(a)}人</span></div>
       <div class="bar-row"><span></span><div class="axis"><span>0</span><span>${fmt(o)}人</span></div></div>
       <div class="zoom"><div>先端を拡大（推計より ${fmt(Math.abs(diff))}人、${Math.abs(pct).toFixed(2)}% ${diff < 0 ? '少ない' : '多い'}）</div><div class="track"><div class="fill" style="width:100%;background:#8da0bf"></div></div><div class="track"><div class="fill" style="width:${(100 - (Math.abs(pct) / zoomSpan) * 100).toFixed(1)}%;background:#2b4c7e"></div></div><div class="diff">推計より ${diff < 0 ? '−' : '+'}${fmt(Math.abs(diff))}人（右端の ${zoomSpan}% 分を拡大）</div></div>
     </div>
-    <p class="sm" style="margin-top:16px">全国の2100年（全地域の合計）：公式の前提を延ばした試算 <span class="num">${approx(m.nationOfficial[END_YEAR])}</span>、${INTERIM_LABEL} <span class="num">${approx(m.nation[END_YEAR])}</span>（${signedPct(((m.nation[END_YEAR] - m.nationOfficial[END_YEAR]) / m.nationOfficial[END_YEAR]) * 100)}）、${STANDARD_LABEL} <span class="num">${approx(m.nationLowBirth[END_YEAR])}</span>（${signedPct(((m.nationLowBirth[END_YEAR] - m.nationOfficial[END_YEAR]) / m.nationOfficial[END_YEAR]) * 100)}）。${STANDARD_LABEL}は、${lowBirthLegend(m)}</p>
-    <p class="sm">推計：国立社会保障・人口問題研究所「日本の地域別将来推計人口（令和5年推計）」（2020年を出発点に推計）。実績：総務省統計局「国勢調査」2025年 人口等基本集計（2026年9月29日公表・確定値）。</p></div></section>`;
+    ${more('awase')}</div></section>`;
   // bins
   const maxN = Math.max(...ac.bins.map((b) => b.count), 1);
   const hist = `<div class="hist" role="img" aria-label="推計より少ない町・多い町の分布。6つの段階の町の数">${ac.bins
     .map((b, i) => `<div class="bar-row"><span>${DEVIATION_LABELS[i]}</span><div class="track"><div class="fill" style="width:${((b.count / maxN) * 80).toFixed(1)}%;background:${DEVIATION_COLORS[i]}"></div><span class="val num">${fmt(b.count)}町</span></div></div>`)
-    .join('')}<p class="hist-note">上＝推計より人が減っていた町（${fmt(sm.below)}）、下＝増えていた町（${fmt(sm.above)}）。実績が推計よりどれだけ少ないか、多いかを、割合で6段階に。${HAMAMATSU_NOTE}</p></div>`;
+    .join('')}<p class="hist-note">上＝国の計算より減っていた町、下＝増えていた町。</p></div>`;
   const notable = ['珠洲市', '輪島市', '球磨村'].map((n) => m.areas.find((x) => x.name === n)).filter((x): x is NonNullable<typeof x> => !!x);
   if (!notable.some((x) => x.code === code)) notable.push(area);
   const noteFor = (name: string): string => (name === '珠洲市' || name === '輪島市' ? '令和6年の能登半島地震を含む5年。' : name === '球磨村' ? '令和2年の水害のあと、戻った人がいた5年。' : '');
@@ -804,14 +812,14 @@ function pageAwase(site: Site, townCode: string | undefined): Page {
       if (!t || t.census2025 === null) return `<li>${esc(x.name)}（${esc(x.prefName)}）　${HAMAMATSU_NOTE}</li>`;
       const d = deviationPct(t)!;
       const n = noteFor(x.name);
-      return `<li>${esc(x.name)}（${esc(x.prefName)}）　推計 ${fmt(t.ipss23_2025)}人 → 実績 ${fmt(t.census2025)}人（${signedPct(d, Math.abs(d) >= 10 ? 1 : 2)}）${n ? `<br><span class="sm">${n}</span>` : ''}</li>`;
+      return `<li>${esc(x.name)}（${esc(x.prefName)}）　国の計算 ${fmt(t.ipss23_2025)}人 → 実際 ${fmt(t.census2025)}人（${signedPct(d, Math.abs(d) >= 10 ? 1 : 2)}）${n ? `<br><span class="sm">${n}</span>` : ''}</li>`;
     })
     .join('');
   const prefSel = `<label class="awase-pick"><span class="sm">地図の県</span><select id="awasePref" aria-label="地図の県">${site.prefs.map((p) => `<option value="${p.code}"${p.code === area.prefCode ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>`;
-  const two = `<section class="screen"><div class="wrap"><h2>推計より人が減っていた町 ${fmt(sm.below)}、増えていた町 ${fmt(sm.above)}（${fmt(sm.n)}の町）。</h2>
-    <p class="lead">真ん中の町で、推計より ${signedPct(sm.median)}。推計との開きが1%以内の町 ${fmt(sm.within1)}、3%以内 ${fmt(sm.within3)}。小さい町ほど、推計より減っていました（真ん中の町で、${sm.bySize.map((g) => `${g.label} ${signedPct(g.median)}`).join('、')}）。</p>
-    <div class="two"><div>${hist}<div class="mapwrap" id="awaseMap" style="margin-top:16px">${prefSel}${japanSvg(site, { viewBox: viewBoxOf(site.prefByCode.get(area.prefCode)!.bb, 30), sel: area.prefCode, dots: false, flat: true, label: `${area.prefName}の、推計より少ない町・多い町の地図` })}<div class="lg"><span>推計より</span>${DEVIATION_LABELS.map((l, i) => `<span><i style="background:${DEVIATION_COLORS[i]}"></i>${l}</span>`).join('')}<span><i style="background:#d0c9c4"></i>実績なし</span></div><p class="sm">赤茶＝推計より人が減っていた町、藍＝増えていた町。</p><p class="map-note" id="awaseNote">町の境界を読み込んでいます。</p></div></div>
-    <div class="side"><h3>目立つ町</h3><ul>${notableHtml}</ul></div></div></div></section>`;
+  const two = `<section class="screen"><div class="wrap"><h2>国の計算より人が減っていた町が${fmt(sm.below)}、増えていた町が${fmt(sm.above)}です（${fmt(sm.n)}の町）。</h2>
+    <p class="lead">小さい町ほど、国の計算より減っていました。</p>
+    <div class="two"><div>${hist}<div class="mapwrap" id="awaseMap" style="margin-top:16px">${prefSel}${japanSvg(site, { viewBox: viewBoxOf(site.prefByCode.get(area.prefCode)!.bb, 30), sel: area.prefCode, dots: false, flat: true, label: `${area.prefName}の、推計より少ない町・多い町の地図` })}<div class="lg"><span>国の計算より</span>${DEVIATION_LABELS.map((l, i) => `<span><i style="background:${DEVIATION_COLORS[i]}"></i>${l}</span>`).join('')}<span><i style="background:#d0c9c4"></i>実績なし</span></div><p class="map-note" id="awaseNote">町の境界を読み込んでいます。</p></div></div>
+    <div class="side"><h3>目立つ町</h3><ul>${notableHtml}</ul></div></div>${more('awase')}</div></section>`;
   // the deviation by age: the 2025 count against the official run, both sexes, 20 age groups (the engine's two series)
   const ageDiff = m.ages2025.count.map((c, i) => c - m.ages2025.official[i]);
   const ageMax = Math.max(...ageDiff.map((d) => Math.abs(d)), 1);
@@ -826,30 +834,25 @@ function pageAwase(site: Site, townCode: string | undefined): Page {
   const short = ageDiff.filter((d) => d < 0).length;
   const mostShort = ageDiff.map((d, i) => [d, i] as const).sort((p, q) => p[0] - q[0]).slice(0, 2).map(([, i]) => AGE_LABELS[i]);
   const mostOver = ageDiff.map((d, i) => [d, i] as const).sort((p, q) => q[0] - p[0]).slice(0, 2).map(([, i]) => AGE_LABELS[i]);
-  const ages = `<section class="screen"><div class="wrap"><h2>推計より減っていたのは、${mostShort.join('と')}。多かったのは、${mostOver.join('と')}でした。</h2>
-    <p class="lead">全国の2025年。実績が推計よりどれだけ少ないか（左、赤茶）、多いか（右、藍）を、5歳階級ごとに。推計より少なかった階級は${short}。この偏りが、2025年の実績から計算し直した結果に表れています（高齢の人が多い年には先の人口がやや増え、生まれる人が少なかった分は2100年に向けて減ります）。</p>
+  const ages = `<section class="screen"><div class="wrap"><h2>国の計算より減っていたのは、${mostShort.join('と')}。多かったのは、${mostOver.join('と')}でした。</h2>
+    <p class="lead">全国の2025年。年齢ごとに、国の計算よりどれだけ少ないか（左、赤茶）、多いか（右、藍）。</p>
     <div class="hist ages" role="img" aria-label="全国の2025年、年齢5歳階級ごとの実績と公式推計の差の横棒">${ageRows}</div>
-    <p class="hist-note">公式推計の2025年は、2020年の実績から社人研の前提で計算した値（全地域の合計 ${fmt(m.nationOfficial[ACTUAL_YEAR])}人）。実績は国勢調査の確定値（不詳補完値）を町ごとに集計した値（${fmt(m.nation[ACTUAL_YEAR])}人。${HAMAMATSU_NOTE}）。</p>
+    ${more('awase')}
   </div></section>`;
   // the one town's lines
   const t = m.town.get(code)!;
   const ck = ac.byCode.get(code);
-  const three = `<section class="screen"><div class="wrap"><h2>出発点を2025年の実績に置き直すと、先の試算も変わります。</h2>
+  const three = `<section class="screen"><div class="wrap"><h2>2025年の実際の人数から計算し直すと、先の人数も変わります。</h2>
     <div class="awase-pick"><input id="awaseQ" list="awaseList" placeholder="ほかの町を見る（例：高野町）" aria-label="町名で探す"><datalist id="awaseList">${m.areas.map((x) => `<option value="${esc(x.name)}（${esc(x.prefName)}）"></option>`).join('')}</datalist><button type="button" class="btn" id="awaseGo">見る</button></div>
-    <p class="lead">${esc(area.name)}（${esc(area.prefName)}）。${
-      t.hasActual
-        ? `直した点：2025年の実績の年齢構成を出発点に、社人研と同じ前提で計算し直し、子どもの生まれやすさだけ2025年の実績の水準のまま続くとしました。${LOW_BIRTH_NOTE}`
-        : HAMAMATSU_NOTE
-    }</p>
+    <p class="lead">${esc(area.name)}（${esc(area.prefName)}）。実際の点、国の計算の線、このアプリの計算の線。</p>
     <div id="lines"></div>
     <div class="leg2"><span><svg width="28" height="10"><circle cx="8" cy="5" r="4" fill="#1b2430"/></svg>実績（国勢調査）</span><span><svg width="28" height="10"><circle cx="8" cy="5" r="3.5" fill="#f6f5f0" stroke="#8a8378" stroke-width="1.5"/></svg>前回推計（平成30年）</span><span><svg width="28" height="10"><line x1="0" x2="28" y1="5" y2="5" stroke="#2b4c7e" stroke-width="1.5"/></svg>公式推計（令和5年）</span><span><svg width="28" height="10"><line x1="0" x2="28" y1="5" y2="5" stroke="#2b4c7e" stroke-width="1.5" stroke-dasharray="5 5"/></svg>公式の前提を延ばした試算</span><span><svg width="28" height="10"><line x1="0" x2="28" y1="5" y2="5" stroke="#1b2430" stroke-width="2.5" stroke-dasharray="6 5"/></svg>${STANDARD_LABEL}</span></div>
-    <p class="sm">${STANDARD_LABEL}：${lowBirthLegend(m)}${INTERIM_LABEL}は、下の数字の一覧にだけ出しています。</p>
     <ul class="vals" id="vals"></ul>
-    <p class="sm">全国の2100年は、${nationalChangeLine(m)}。推計と実績の開きは、前回推計（10年先）で平均 ${sm.mape2018.toFixed(1)}%、今回（5年先）で ${sm.mape2023.toFixed(1)}%。${HAMAMATSU_NOTE}</p></div></section>`;
+    <p class="sm">全国の2100年は、${nationalChangeLine(m)}。${HAMAMATSU_NOTE}</p></div></section>`;
   const after: After = () => {
     // (2) the prefecture's towns, coloured by their deviation step
-    const map = document.getElementById('awaseMap')!;
-    const sel = document.getElementById('awasePref') as HTMLSelectElement;
+    const map = document.getElementById('awaseMap');
+    const sel = document.getElementById('awasePref') as HTMLSelectElement | null;
     const devFill = (c: string): string => deviationColorOf(ac.byCode.get(c)) ?? '#d0c9c4';
     const drawPref = (pc: string): void => {
       const token = ++awaseToken;
@@ -858,8 +861,8 @@ function pageAwase(site: Site, townCode: string | undefined): Page {
       void townsOf(site, pc).then(
         (towns) => {
           if (token !== awaseToken) return;
-          const svg = map.querySelector('svg');
-          if (!svg) return;
+          const svg = map?.querySelector('svg');
+          if (!svg || !map) return;
           svg.outerHTML = japanSvg(site, { viewBox: viewBoxOf(unionBB(towns), 10), towns, townFill: devFill, dots: false, flat: true, label: `${site.prefByCode.get(pc)?.name ?? ''}の、推計より少ない町・多い町の地図` });
           map.querySelectorAll<SVGPathElement>('.pref[data-town]').forEach((el) => {
             el.setAttribute('fill', devFill(el.getAttribute('data-town')!));
@@ -876,16 +879,19 @@ function pageAwase(site: Site, townCode: string | undefined): Page {
         },
       );
     };
-    sel.addEventListener('change', () => drawPref(sel.value));
-    drawPref(area.prefCode);
-    map.addEventListener('click', (e) => {
+    if (map && sel) {
+      sel.addEventListener('change', () => drawPref(sel.value));
+      drawPref(area.prefCode);
+    }
+    map?.addEventListener('click', (e) => {
       const el = (e.target as Element).closest?.('.pref[data-town]');
       if (el) location.hash = `#/awase/${el.getAttribute('data-town')}`;
     });
     // (3) the lines, drawn at the width of the box so type stays 12px
-    const box = document.getElementById('lines')!;
-    const vals = document.getElementById('vals')!;
+    const box = document.getElementById('lines');
+    const vals = document.getElementById('vals');
     const draw = (): void => {
+      if (!box || !vals) return;
       const w = Math.max(320, Math.floor(box.clientWidth || 760));
       const r = linesSvg(t.trial, t.official, t.lowBirth, ck ? { c2020: ck.census2020, c2025: ck.census2025, h30_2020: ck.ipss18_2020, h30_2025: ck.ipss18_2025, o2025: ck.ipss23_2025 } : undefined, t.hasActual, area.name, w);
       box.innerHTML = r.svg;
@@ -895,19 +901,19 @@ function pageAwase(site: Site, townCode: string | undefined): Page {
     const onResize = (): void => draw();
     window.addEventListener('resize', onResize);
     players.push(() => window.removeEventListener('resize', onResize));
-    const q = document.getElementById('awaseQ') as HTMLInputElement;
+    const q = document.getElementById('awaseQ') as HTMLInputElement | null;
     const go = (): void => {
-      const v = q.value.trim();
+      const v = q?.value.trim() ?? '';
       if (!v) return;
       const name = v.replace(/（.*$/, '');
       const hit = m.areas.find((x) => `${x.name}（${x.prefName}）` === v) ?? m.areas.find((x) => x.name === name);
       if (hit) location.hash = `#/awase/${hit.code}`;
-      else q.setCustomValidity('見つかりません');
+      else q?.setCustomValidity('見つかりません');
     };
-    document.getElementById('awaseGo')!.addEventListener('click', go);
-    q.addEventListener('change', go);
+    document.getElementById('awaseGo')?.addEventListener('click', go);
+    q?.addEventListener('change', go);
   };
-  return { html: one + two + ages + three, after, title: '答え合わせ' };
+  return { html: one + two + ages, after, title: '答え合わせ', detail: three };
 }
 let awaseToken = 0;
 
@@ -975,7 +981,7 @@ export function linesSvg(trial: Totals, official: Totals, lowBirth: Totals, ck: 
 }
 
 function pageAi(site: Site): Page {
-  const html = `<section class="screen"><div class="wrap"><h1>気になることは、AIに聞いてください。</h1><p class="lead">AIの計算は、公式の前提を延ばした試算（2020年の国勢調査から）です。サイトの標準の試算（2025年の実績から計算し直し、出生の減りを先にも当てはめたもの）とは、数字が少し違います。</p><div class="ai-host" id="aiHost"></div></div></section>`;
+  const html = `<section class="screen"><div class="wrap"><h1>聞きたいことを聞いてください。</h1><div class="ai-host" id="aiHost"></div>${more('ai')}</div></section>`;
   const after: After = () => {
     const host = document.getElementById('aiHost')!;
     const runner = createRunner(site.data);
@@ -1049,6 +1055,7 @@ export function routePage(site: Site, hash: string): { top: string; page: Page }
   if (top === 'awase') return { top, page: pageAwase(site, parts[1]) };
   if (top === 'ai') return { top, page: pageAi(site) };
   if (top === 'about') return { top, page: pageAbout(site) };
+  if (top === 'kuwashiku') return { top: 'about', page: pageAbout(site) }; // the detail pages open the about page until they are written
   return { top, page: page404() };
 }
 
