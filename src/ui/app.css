@@ -739,6 +739,10 @@
   .map-column:has(.map-bar:not([hidden])) .map-svg {
     max-height: max(320px, calc(100svh - 520px));
   }
+  /* A what-if drawn on the map adds its own row (what is drawn, and the way to clear it) under the heading. */
+  .map-column:has(.map-bar:not([hidden])):has(.alloc-bar:not([hidden])) .map-svg {
+    max-height: max(300px, calc(100svh - 575px));
+  }
   .map-foot {
     grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
     gap: var(--sp-5);

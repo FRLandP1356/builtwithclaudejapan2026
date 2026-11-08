@@ -12,7 +12,7 @@ import { total } from '../engine/aggregate';
 import type { Facility } from '../engine/types';
 import { deriveTotals } from './derive';
 import { levelOf } from './nav';
-import { phraseNodes } from './phrases';
+import { phraseNodes, withTail } from './phrases';
 import { boardFirstRow, townHeadline } from './screens';
 import { mountSeriesChart, seriesPoints, type SeriesChartView, type SeriesPointsInput } from './seriesChart';
 import { badgeFor, ESTIMATE_BADGE } from './sources';
@@ -91,8 +91,8 @@ export function mountTownCard(el: HTMLElement, ctx: PanelContext): () => void {
     const row = scope.level === 'area' ? totals.area.get(scope.key) : scope.level === 'pref' ? totals.pref.get(scope.key) : totals.japan;
     const pop2100 = row ? row[totals.years.indexOf(2100)] : NaN;
     const first = boardFirstRow(data, totals, s.series, scope, names);
-    title.replaceChildren(...phraseNodes(townHeadline({ level, name: scope.name, pop2100, first })));
-    if (level !== 'japan') title.append(' ', h('span', 'badge-estimate', ESTIMATE_BADGE));
+    const tail: Array<Node | string> = level !== 'japan' ? [' ', h('span', 'badge-estimate', ESTIMATE_BADGE)] : [];
+    title.replaceChildren(...withTail(phraseNodes(townHeadline({ level, name: scope.name, pop2100, first })), ...tail));
   }
 
   function renderCard(s: AppState): void {

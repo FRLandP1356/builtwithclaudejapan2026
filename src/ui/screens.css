@@ -42,6 +42,7 @@
   line-height: 1.4;
   letter-spacing: 0.01em;
   word-break: auto-phrase;
+  text-wrap: pretty; /* fill the line and avoid a lone last word; theme.css's balance would narrow every line of a long sentence and leave the 試算 mark alone on a line */
 }
 .screen-title:focus {
   outline: none;

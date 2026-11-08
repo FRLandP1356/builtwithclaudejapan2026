@@ -32,7 +32,7 @@ import { deriveSupport, deriveTotals, ratioAt, yearIndex, type SupportRatios, ty
 import { formatPct, formatPop } from './format';
 import { breadcrumbs, buildSearchIndex, goUp, levelOf, pickArea, pickPref, prefOfArea, type Selection } from './nav';
 import { mountSearch } from './search';
-import { phraseNodes, phrases } from './phrases';
+import { phraseNodes, phrases, withTail } from './phrases';
 import { AI_TITLE, BOARD_SCREEN_LEAD, BOARD_SCREEN_TITLE, CHOOSE_TITLE, ENTRY_LEAD, ENTRY_NEXT, ENTRY_NOTE, entryHeadline, entrySupportHeadline, SCREEN_IDS, SOURCES_NOTE, SOURCES_TITLE, type ScreenKey } from './screens';
 import { mountAIPanel } from './aiPanel';
 import { allocatedBasisNote, APP_TITLE, badgeFor, ESTIMATE_BADGE, NAV_DESCRIPTIONS, NAV_SUMMARIES, NAV_TITLE, SOURCES, type SourceLine } from './sources';
@@ -574,26 +574,28 @@ function buildShell(root: HTMLElement, ctx: PanelContext, options: AppOptions): 
       span.textContent = text;
       return span;
     };
-    const kids: Array<Node | string> = [];
+    let kids: Array<Node | string>;
     if (supportShown(s)) {
       const r = supportOf(place.kind, place.code);
-      kids.push(...phraseNodes(entrySupportHeadline({ place: place.name, year: s.year, now: r.now, base: r.base })));
-      if (isEstimate()) kids.push(' ', mark('badge-estimate', ESTIMATE_BADGE));
+      const tail: Array<Node | string> = isEstimate() ? [' ', mark('badge-estimate', ESTIMATE_BADGE)] : [];
+      kids = withTail(phraseNodes(entrySupportHeadline({ place: place.name, year: s.year, now: r.now, base: r.base })), ...tail);
     } else {
       const n = numbersOf(place.kind, place.code);
       if (!n) {
         headTitle.textContent = '';
         return;
       }
-      kids.push(...phraseNodes(entryHeadline({ place: place.name, year: s.year, pop: n.pop, ratio: n.ratio })));
+      // The marks stand inside the last phrase, so a long last phrase never leaves them alone on a line.
+      const tail: Array<Node | string> = [];
       const before = beforeText(n); // the country's total does not change: no second number there
-      if (before) kids.push(' ', mark('head-keep head-before', before));
-      if (isEstimate()) kids.push(' ', mark('badge-estimate', ESTIMATE_BADGE));
+      if (before) tail.push(' ', mark('head-keep head-before', before));
+      if (isEstimate()) tail.push(' ', mark('badge-estimate', ESTIMATE_BADGE));
       if (n.allocated) {
-        kids.push(' ', mark('badge-alloc', ALLOC_BADGE));
+        tail.push(' ', mark('badge-alloc', ALLOC_BADGE));
         const basisNote = figureChanged(n) ? allocatedBasisNote(s.year) : undefined;
-        if (basisNote) kids.push(' ', mark('head-keep head-basis', basisNote));
+        if (basisNote) tail.push(' ', mark('head-keep head-basis', basisNote));
       }
+      kids = withTail(phraseNodes(entryHeadline({ place: place.name, year: s.year, pop: n.pop, ratio: n.ratio })), ...tail);
     }
     headTitle.replaceChildren(...kids);
   }

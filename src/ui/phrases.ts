@@ -19,3 +19,16 @@ export function phraseNodes(textOrParts: string | readonly string[]): HTMLSpanEl
     return span;
   });
 }
+
+/**
+ * Put `extra` (a mark after a heading, say) at the end of the last phrase of `spans`, inside it. A long last phrase wraps
+ * inside its own inline-block, which makes the box as wide as the line: a mark placed after it as a sibling would fall to a
+ * line of its own, away from the sentence. Returns `spans`; with no phrase there is nothing to attach to and `extra` is
+ * returned after it.
+ */
+export function withTail(spans: HTMLSpanElement[], ...extra: Array<Node | string>): Array<Node | string> {
+  const last = spans.at(-1);
+  if (!last) return [...spans, ...extra];
+  last.append(...extra);
+  return spans;
+}
