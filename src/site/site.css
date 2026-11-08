@@ -1177,3 +1177,6 @@ svg text {
 .ybars .yb.on {
   background: var(--accent);
 }
+
+/* long unbroken names (e.g. a long katakana event name) must wrap instead of widening the page */
+.wrap h1, .wrap h2, .wrap h3, .wrap p, .wrap li, .node, .card { overflow-wrap: anywhere; }
