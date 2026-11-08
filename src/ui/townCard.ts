@@ -11,6 +11,7 @@ import { boardCrossings, type NameLookup } from './board';
 import { total } from '../engine/aggregate';
 import type { Facility } from '../engine/types';
 import { deriveTotals } from './derive';
+import { evaluateFacilities } from './facilityPanel';
 import { levelOf } from './nav';
 import { phraseNodes, withTail } from './phrases';
 import { boardFirstRow, townHeadline } from './screens';
@@ -57,6 +58,11 @@ export function mountTownCard(el: HTMLElement, ctx: PanelContext): () => void {
   facilitiesLead.id = 'town-card-facilities-lead';
   const list = h('ul', 'town-card-list');
   list.setAttribute('aria-labelledby', facilitiesLead.id);
+  /** How many of the facility kinds `pop` is below the guide of (the same count the town panel's summary gives). */
+  const kindsBelow = (pop: number) => {
+    const e = evaluateFacilities(pop, data.facilities);
+    return { below: e.belowCount, total: e.total };
+  };
   const cardFacilities: Facility[] = CARD_FACILITY_IDS.flatMap((id) => data.facilities.filter((x) => x.id === id));
   const rows = cardFacilities.map((f) => {
     const li = h('li', 'town-card-row');
@@ -91,8 +97,9 @@ export function mountTownCard(el: HTMLElement, ctx: PanelContext): () => void {
     const row = scope.level === 'area' ? totals.area.get(scope.key) : scope.level === 'pref' ? totals.pref.get(scope.key) : totals.japan;
     const pop2100 = row ? row[totals.years.indexOf(2100)] : NaN;
     const first = boardFirstRow(data, totals, s.series, scope, names);
+    const kinds = level === 'area' && Number.isFinite(pop2100) ? kindsBelow(pop2100) : undefined;
     const tail: Array<Node | string> = level !== 'japan' ? [' ', h('span', 'badge-estimate', ESTIMATE_BADGE)] : [];
-    title.replaceChildren(...withTail(phraseNodes(townHeadline({ level, name: scope.name, pop2100, first })), ...tail));
+    title.replaceChildren(...withTail(phraseNodes(townHeadline({ level, name: scope.name, pop2100, first, kinds })), ...tail));
   }
 
   function renderCard(s: AppState): void {

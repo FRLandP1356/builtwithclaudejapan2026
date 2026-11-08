@@ -278,3 +278,22 @@ describe('the choice screen on the real maps (the third screen)', () => {
     await settle();
   }, 30_000);
 });
+
+describe('the fourth screen\'s sentence on the real data', () => {
+  test('a town with an essential crossing (美浜町, bank, 2025) names that facility and the year of the first row of its board', async () => {
+    handle.store.set({ selectedPref: '30', selectedArea: '30381' });
+    await settle();
+    const m = /^美浜町は、2100年に約[\d,.万]+人。(.+)が人口の目安を下回るのは(\d{4})年。/.exec(root.querySelector('#screen-town-title')!.textContent!);
+    expect(m).not.toBeNull();
+    expect(root.querySelector<HTMLElement>('#panel-board .board-row')!.dataset.year).toBe(m![2]); // the essential rows come first
+    handle.store.set({ selectedArea: undefined, selectedPref: undefined });
+    await settle();
+  }, 30_000);
+  test('a town whose eight essential facilities never cross (田辺市): how many of the 48 kinds are below in 2100, as the town panel counts', async () => {
+    handle.store.set({ selectedPref: '30', selectedArea: '30206' });
+    await settle();
+    expect(root.querySelector('#screen-town-title')!.textContent).toMatch(/^田辺市は、2100年に約1\.2万人。全48種類の施設のうち、2100年に29種類が人口の目安を下回ります。/);
+    handle.store.set({ selectedArea: undefined, selectedPref: undefined });
+    await settle();
+  }, 30_000);
+});

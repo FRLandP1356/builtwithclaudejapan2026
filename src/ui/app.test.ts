@@ -338,7 +338,7 @@ describe('the lower layer: the folded cards as light rows under the heading 「�
     expect(card.hidden).toBe(true);
     expect(root.querySelector('#screen-town .search-input')).not.toBeNull(); // the search stands on this screen now
     store.set({ selectedArea: '30206' });
-    expect(title.textContent).toMatch(/^田辺市は、2100年に約[\d,.万]+人。.+が人口の目安を下回るのは\d{4}年。\s*試算$/);
+    expect(title.textContent).toMatch(/^田辺市は、2100年に約[\d,.万]+人。全48種類の施設のうち、2100年に\d+種類が人口の目安を下回ります。\s*試算$/); // none of its eight essential facilities has a crossing to name
     expect(title.querySelector('.badge-estimate')!.textContent).toBe('試算'); // the 2100 figure is this app's estimate
     expect(card.hidden).toBe(false);
     expect(card.querySelectorAll('.town-card-row')).toHaveLength(3);
@@ -1376,13 +1376,6 @@ describe('the town card (the fourth screen)', () => {
     expect(card.hasAttribute('hidden')).toBe(true);
   });
 
-  test('the sentence says the earliest facility to fall below its guide from the board\'s own crossings (the same year as the first row of the town\'s board)', async () => {
-    const { root, store } = await mount();
-    store.set({ selectedArea: '30206' });
-    const year = /のは(\d{4})年。/.exec(root.querySelector('#screen-town-title')!.textContent!)![1];
-    const years = [...root.querySelectorAll('#panel-board .board-row')].map((r) => (r as HTMLElement).dataset.year!);
-    expect(Math.min(...years.map(Number))).toBe(Number(year)); // the board lists the same year first among all its rows, folded or not
-  });
 });
 
 describe('the sixth screen: three sources at once, the rest behind a fold, then one line', () => {

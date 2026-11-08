@@ -131,11 +131,9 @@ export function boardFirstRow(data: Pick<AppData, 'facilities'>, totals: Totals,
   if (scope.level === 'area') {
     const r = boardCrossings(totals, scope.areaCodes, data.facilities);
     const rows = townRows(r.crossings, data.facilities, scope.name);
-    // The earliest of all the town's facilities (the board lists the eight essential ones first, then the others folded away);
-    // the same year goes to the essential one.
-    const e = rows.essential[0];
-    const o = rows.others[0];
-    out = { row: e && o ? (o.year < e.year ? o : e) : (e ?? o), alreadyBelow: r.alreadyBelow.length };
+    // The earliest of the eight essential facilities, the ones the board and the town card show first (the others are
+    // folded away there), so the heading, the board and the card never disagree about what comes first.
+    out = { row: rows.essential[0], alreadyBelow: r.alreadyBelow.length };
   } else {
     const r = boardCrossings(totals, scope.areaCodes, essentialFacilities(data.facilities));
     const rows = scopeRows(scopeGroups(r.crossings, data.facilities), data.facilities, names, scope.level);
@@ -158,12 +156,22 @@ export function japanScope(data: Parameters<typeof resolveScope>[0], areaByCode:
  * 「田辺市は、2100年に約3.4万人。（施設の名前）が人口の目安を下回るのは2035年。」 for a town; the same for a prefecture with the
  * town that comes first left out (「…下回る町が出るのは…」); nothing selected: a question. `pop2100` is the place's 2100 population.
  */
-export function townHeadline(p: { level: ReturnType<typeof levelOf>; name: string; pop2100: number; first: FirstRow }): string {
+export function townHeadline(p: {
+  level: ReturnType<typeof levelOf>;
+  name: string;
+  pop2100: number;
+  first: FirstRow;
+  /** A town: how many of the facility kinds the 2100 population is below the guide of (the town panel's own count). */
+  kinds?: { below: number; total: number };
+}): string {
   if (p.level === 'japan') return TOWN_TITLE_NONE;
   const lead = `${p.name}は、2100年に${approxPopulation(p.pop2100)}。`;
   const row = p.first.row;
   if (row) return `${lead}${row.facilityName}が人口の目安を下回る${p.level === 'pref' ? '町が出る' : ''}のは${row.year}年。`;
   if (p.level === 'pref') return `${lead}${BOARD_NONE}`;
+  // None of the eight essential facilities has a crossing to name: say how many kinds of facility are below in 2100 (the
+  // same count the town panel gives), never 「ありません」 while some other kind is below.
+  if (p.kinds && p.kinds.below > 0) return `${lead}全${p.kinds.total}種類の施設のうち、2100年に${p.kinds.below}種類が人口の目安を下回ります。`;
   if (p.first.alreadyBelow > 0) return `${lead}2020年の時点で、人口の目安を下回る施設が${formatCount(p.first.alreadyBelow)}種類あります。`;
   return `${lead}${TOWN_NONE_AT_ALL}`;
 }

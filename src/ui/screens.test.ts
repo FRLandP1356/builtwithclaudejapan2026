@@ -95,6 +95,14 @@ describe('townHeadline', () => {
   test('a town with no new crossing and nothing already below: the plain sentence', () => {
     expect(townHeadline({ level: 'area', name: '田辺市', pop2100: 34_000, first: none })).toBe(`田辺市は、2100年に約3.4万人。${TOWN_NONE_AT_ALL}`);
   });
+  test('a town whose eight essential facilities have no crossing to name: how many kinds are below in 2100', () => {
+    const text = townHeadline({ level: 'area', name: '田辺市', pop2100: 12_000, first: { alreadyBelow: 0 }, kinds: { below: 29, total: 48 } });
+    expect(text).toBe('田辺市は、2100年に約1.2万人。全48種類の施設のうち、2100年に29種類が人口の目安を下回ります。');
+    expect(text).not.toContain('ありません');
+  });
+  test('a town with no kind below in 2100 and no crossing: the plain sentence', () => {
+    expect(townHeadline({ level: 'area', name: '田辺市', pop2100: 34_000, first: none, kinds: { below: 0, total: 48 } })).toBe(`田辺市は、2100年に約3.4万人。${TOWN_NONE_AT_ALL}`);
+  });
   test('a town with no new crossing but facilities already below in 2020 does not say 「ありません」', () => {
     const text = townHeadline({ level: 'area', name: '売木村', pop2100: 120, first: { alreadyBelow: 4 } });
     expect(text).toBe('売木村は、2100年に約120人。2020年の時点で、人口の目安を下回る施設が4種類あります。');
