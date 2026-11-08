@@ -6,7 +6,7 @@ import { loadFinance } from '../../test/helpers/loadFinance';
 import { repoPath } from '../../test/helpers/paths';
 import type { Claim } from './claims';
 import type { Landmark } from './landmarks';
-import { CLAIMS_PATH, DataLoadError, dataUrl, LANDMARKS_PATH, loadAll, loadPrefGeo, PREF_CODES } from './loader';
+import { ACTUAL_PATH, CHECKS_PATH, CLAIMS_PATH, DataLoadError, dataUrl, LANDMARKS_PATH, loadAll, loadPrefGeo, PREF_CODES } from './loader';
 
 const sample = loadSampleAreas();
 const facilities = loadFacilities();
@@ -15,6 +15,9 @@ const finance = loadFinance();
 const landmarksRaw = JSON.parse(readFileSync(repoPath('public/data/landmarks.json'), 'utf8')) as { items: Landmark[] };
 /** The real claims file as served: the loader keeps the items whose prefectures are all in the sample. */
 const claimsRaw = JSON.parse(readFileSync(repoPath('public/data/claims.json'), 'utf8')) as { items: Claim[] };
+/** The real checks file as served: the loader keeps the towns of the sample. */
+const checksRaw = JSON.parse(readFileSync(repoPath('public/data/checks.json'), 'utf8')) as unknown;
+const actualRaw = JSON.parse(readFileSync(repoPath('public/data/actual2025.json'), 'utf8')) as unknown;
 const topo = { type: 'Topology', objects: { prefectures: { type: 'GeometryCollection', geometries: [] } }, arcs: [] };
 const prefTopo = { type: 'Topology', objects: { areas: { type: 'GeometryCollection', geometries: [] } }, arcs: [] };
 
@@ -44,6 +47,8 @@ function makeFetch(overrides: Record<string, unknown> = {}) {
     if (url.endsWith('data/finance.json')) return new Response(JSON.stringify(finance), { status: 200 });
     if (url.endsWith(LANDMARKS_PATH)) return new Response(JSON.stringify(landmarksRaw), { status: 200 });
     if (url.endsWith(CLAIMS_PATH)) return new Response(JSON.stringify(claimsRaw), { status: 200 });
+    if (url.endsWith(CHECKS_PATH)) return new Response(JSON.stringify(checksRaw), { status: 200 });
+    if (url.endsWith(ACTUAL_PATH)) return new Response(JSON.stringify(actualRaw), { status: 200 });
     if (url.endsWith('data/geo/japan.topo.json')) return new Response(JSON.stringify(topo), { status: 200 });
     if (/data\/geo\/pref\/\d\d\.topo\.json$/.test(url)) return new Response(JSON.stringify(prefTopo), { status: 200 });
     return new Response('not found', { status: 404 });
@@ -71,6 +76,8 @@ describe('loadAll', () => {
     expect(calls).toContain('/data/finance.json');
     expect(calls).toContain('/data/landmarks.json');
     expect(calls).toContain('/data/claims.json');
+    expect(calls).toContain('/data/checks.json');
+    expect(calls).toContain('/data/actual2025.json');
     expect(calls).toContain('/data/geo/japan.topo.json');
     expect(data.areas.length).toBe(sample.length);
     expect(data.facilities.length).toBe(facilities.length);
@@ -281,5 +288,66 @@ describe('loadPrefGeo', () => {
   test('rejects a code that is not a prefecture', async () => {
     const { fetchStub } = makeFetch();
     await expect(loadPrefGeo('99', { fetch: fetchStub as unknown as typeof fetch, base: '/', cache: new Map() })).rejects.toThrow();
+  });
+});
+
+describe('loadAll: checks.json is optional', () => {
+  test('keeps the towns of the areas it was given', async () => {
+    const { fetchStub } = makeFetch();
+    const data = await loadAll({ fetch: fetchStub as unknown as typeof fetch, base: '/' });
+    expect(data.checks).toBeDefined();
+    expect(data.checks!.towns.map((t) => t.code).sort()).toEqual(sample.map((a) => a.code).sort());
+    expect(data.checks!.census.national).toBe(122972528);
+  });
+
+  test('a missing file is left out with a warning; the rest still loads', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { fetchStub } = makeFetch({ '/data/checks.json': 404 });
+    const data = await loadAll({ fetch: fetchStub as unknown as typeof fetch, base: '/' });
+    expect(data.checks).toBeUndefined();
+    expect(data.areas.length).toBe(sample.length);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain('data/checks.json');
+    warn.mockRestore();
+  });
+
+  test('a file out of shape is left out with a warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { fetchStub } = makeFetch({ '/data/checks.json': { version: 1 } });
+    const data = await loadAll({ fetch: fetchStub as unknown as typeof fetch, base: '/' });
+    expect(data.checks).toBeUndefined();
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+});
+
+describe('loadAll: actual2025.json is optional', () => {
+  test('attaches the 2025 census count to the areas it has', async () => {
+    const { fetchStub } = makeFetch();
+    const data = await loadAll({ fetch: fetchStub as unknown as typeof fetch, base: '/' });
+    const withCount = data.areas.filter((a) => a.actual);
+    expect(withCount.length).toBe(sample.length); // the six sample towns all have a count
+    const tanabe = data.areas.find((a) => a.code === '30206');
+    if (tanabe) expect([...tanabe.actual!.M, ...tanabe.actual!.F].reduce((x, y) => x + y, 0)).toBe(64288);
+  });
+
+  test('a missing file is left out with a warning; the rest still loads', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { fetchStub } = makeFetch({ '/data/actual2025.json': 404 });
+    const data = await loadAll({ fetch: fetchStub as unknown as typeof fetch, base: '/' });
+    expect(data.areas.every((a) => a.actual === undefined)).toBe(true);
+    expect(data.areas.length).toBe(sample.length);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain('data/actual2025.json');
+    warn.mockRestore();
+  });
+
+  test('a file out of shape is left out with a warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { fetchStub } = makeFetch({ '/data/actual2025.json': { version: 1, areas: { '30206': { M: [1], F: [1] } } } });
+    const data = await loadAll({ fetch: fetchStub as unknown as typeof fetch, base: '/' });
+    expect(data.areas.every((a) => a.actual === undefined)).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 });

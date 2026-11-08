@@ -121,5 +121,22 @@ export const SOURCES: readonly SourceLine[] = [
   },
 ];
 
+/** The 2025 census (the count the site starts from since 2026-11-08) and the earlier projection the answer check compares. */
+export const CENSUS_SOURCE: SourceLine = {
+  label: '人口の実績',
+  primary: true,
+  text: '総務省統計局「令和7年国勢調査 人口等基本集計」（2025年10月1日現在、2026年9月29日公表の確定値、不詳補完値）を加工して作成（市区町村の男女・5歳階級の人口を、国立社会保障・人口問題研究所の地域に合わせて集計。2020年の実績は同「令和2年国勢調査」）',
+  url: 'https://www.e-stat.go.jp/stat-search/files?page=1&layout=datalist&lid=000001491012',
+  retrieved: '2026年11月8日',
+};
+export const PREVIOUS_PROJECTION_SOURCE: SourceLine = {
+  label: '前回の推計',
+  text: '国立社会保障・人口問題研究所「日本の地域別将来推計人口（平成30年推計）」を加工して作成（2020年と2025年の市区町村の総人口を、答え合わせの比較に転記）。国立社会保障・人口問題研究所がこのアプリの内容を保証するものではありません',
+  url: 'https://www.ipss.go.jp/pp-shicyoson/j/shicyoson18/2gaiyo_hyo/gaiyo.asp',
+  retrieved: '2026年11月8日',
+};
+/** The sources the site's 「出どころ」 page lists (src/site/site.ts): the footer's five and the two above. */
+export const SITE_SOURCES: readonly SourceLine[] = [...SOURCES, CENSUS_SOURCE, PREVIOUS_PROJECTION_SOURCE];
+
 export const FOOT_NOTE =
   '2050年より後の数字は、このアプリが前提を置いて計算した試算です。何を残すかを勧めるものではなく、決めるための事実を見せます。';

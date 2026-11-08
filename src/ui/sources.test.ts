@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { allocatedBasisNote, APP_PROBLEM, badgeFor, NAV_DESCRIPTIONS, NAV_TITLE, SOURCES } from './sources';
+import { allocatedBasisNote, APP_PROBLEM, badgeFor, CENSUS_SOURCE, NAV_DESCRIPTIONS, NAV_TITLE, PREVIOUS_PROJECTION_SOURCE, SITE_SOURCES, SOURCES } from './sources';
 
 describe('APP_PROBLEM: the question the app starts from', () => {
   test('it is the sentence the owner chose, with the first person in hiragana', () => {
@@ -106,5 +106,18 @@ describe('SOURCES: the footer attributions', () => {
     expect(SOURCES[4].text).toContain('令和5年度');
     // docs/sources.md ("画面と README の出典の書き方"): the IPSS line says the institute does not vouch for this app
     expect(SOURCES[0].text.endsWith('。国立社会保障・人口問題研究所がこのアプリの内容を保証するものではありません')).toBe(true);
+  });
+});
+
+describe('SITE_SOURCES: the site adds the 2025 census and the earlier projection', () => {
+  test('seven lines: the footer five, then the census count and the 2018 projection, both processed and dated', () => {
+    expect(SITE_SOURCES.slice(0, 5)).toEqual(SOURCES);
+    expect(SITE_SOURCES.map((s) => s.label)).toEqual(['人口', '境界', '施設の目安', '市町村の歳出', '歳出の公表値', '人口の実績', '前回の推計']);
+    expect(CENSUS_SOURCE.text).toContain('2026年9月29日公表');
+    expect(CENSUS_SOURCE.text).toContain('を加工して作成');
+    expect(CENSUS_SOURCE.retrieved).toBe('2026年11月8日');
+    expect(PREVIOUS_PROJECTION_SOURCE.text).toContain('平成30年推計');
+    expect(PREVIOUS_PROJECTION_SOURCE.text).toContain('を加工して作成');
+    for (const s of SITE_SOURCES) expect(s.text).not.toContain('予測');
   });
 });

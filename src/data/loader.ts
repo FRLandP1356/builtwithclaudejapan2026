@@ -4,6 +4,8 @@
 // All URLs are relative to import.meta.env.BASE_URL so the app works at any mount path.
 import type { Topology } from 'topojson-specification';
 import type { Area, Facility, Groups } from '../engine/types';
+import { attachActual, parseActual } from './actual';
+import { parseChecks, type Checks } from './checks';
 import { parseClaims, type Claim } from './claims';
 import { parseFinance, type Finance } from './finance';
 import { parseLandmarks, type Landmark } from './landmarks';
@@ -30,6 +32,11 @@ export interface AppData {
    * everything else runs as before.
    */
   claims?: Claim[];
+  /**
+   * The 2025 census count against the official projection, town by town (checks.json), kept to the towns in `areas`.
+   * Undefined when the file is absent or not in shape: the answer-check page shows nothing, everything else runs as before.
+   */
+  checks?: Checks;
 }
 
 /** The 47 prefecture codes, "01".."47". */
@@ -107,6 +114,8 @@ function resolveFetch(opts: LoadOptions): typeof fetch {
 
 export const LANDMARKS_PATH = 'data/landmarks.json';
 export const CLAIMS_PATH = 'data/claims.json';
+export const CHECKS_PATH = 'data/checks.json';
+export const ACTUAL_PATH = 'data/actual2025.json';
 
 /**
  * Load everything the app needs to start: 47 area files, groups, facilities, spending per resident and the national
@@ -126,13 +135,23 @@ export async function loadAll(opts: LoadOptions = {}): Promise<AppData> {
     console.warn(`${CLAIMS_PATH} could not be loaded; the quotations from published documents are left out`, e);
     return undefined;
   });
-  const [groups, facilities, financeRaw, japanTopo, landmarksRaw, claimsRaw, ...areaLists] = await Promise.all([
+  const checksFile = fetchJson<unknown>(url(CHECKS_PATH), f, timeoutMs).catch((e: unknown) => {
+    console.warn(`${CHECKS_PATH} could not be loaded; the answer check is left out`, e);
+    return undefined;
+  });
+  const actualFile = fetchJson<unknown>(url(ACTUAL_PATH), f, timeoutMs).catch((e: unknown) => {
+    console.warn(`${ACTUAL_PATH} could not be loaded; the 2025 census count is left out`, e);
+    return undefined;
+  });
+  const [groups, facilities, financeRaw, japanTopo, landmarksRaw, claimsRaw, checksRaw, actualRaw, ...areaLists] = await Promise.all([
     fetchJson<Groups>(url('data/groups.json'), f, timeoutMs),
     fetchJson<Facility[]>(url('data/facilities.json'), f, timeoutMs),
     fetchJson<unknown>(url('data/finance.json'), f, timeoutMs),
     fetchJson<Topology>(url('data/geo/japan.topo.json'), f, timeoutMs),
     landmarksFile,
     claimsFile,
+    checksFile,
+    actualFile,
     ...areaFiles,
   ]);
 
@@ -168,6 +187,21 @@ export async function loadAll(opts: LoadOptions = {}): Promise<AppData> {
       data.claims = parseClaims(claimsRaw, (p) => prefNames.has(p));
     } catch (e) {
       console.warn(`${CLAIMS_PATH} is not in shape; the quotations from published documents are left out`, e);
+    }
+  }
+  if (actualRaw !== undefined) {
+    try {
+      attachActual(areas, parseActual(actualRaw));
+    } catch (e) {
+      console.warn(`${ACTUAL_PATH} is not in shape; the 2025 census count is left out`, e);
+    }
+  }
+  if (checksRaw !== undefined) {
+    const codes = new Set(areas.map((a) => a.code));
+    try {
+      data.checks = parseChecks(checksRaw, (c) => codes.has(c));
+    } catch (e) {
+      console.warn(`${CHECKS_PATH} is not in shape; the answer check is left out`, e);
     }
   }
   return data;

@@ -60,28 +60,114 @@ export function projectArea(
   const infraFacilities = s.infraStrength > 0 ? facilities : undefined; // checked above: defined when needed
 
   const out: Series = { [BASE_YEAR]: clonePop(area.base) };
-  let pop = area.base;
-  for (let year = BASE_YEAR; year + PERIOD <= endYear; year += PERIOD) {
+  advance(out, area.base, BASE_YEAR, endYear, periods, s, infraFacilities);
+  return out;
+}
+
+/** Run the 5-year steps from `startYear` (population `start`) to `endYear`, writing each result into `out`. */
+function advance(
+  out: Series,
+  start: Pop,
+  startYear: number,
+  endYear: number,
+  periods: Assumption[],
+  s: Scenario,
+  infraFacilities: Facility[] | undefined,
+  cwrFactor = 1,
+): void {
+  let pop = start;
+  for (let year = startYear; year + PERIOD <= endYear; year += PERIOD) {
     const idx = Math.min((year - BASE_YEAR) / PERIOD, periods.length - 1);
     const official: Assumption = periods[idx];
     const lost = infraFacilities && year >= OFFICIAL_END_YEAR ? lostEssentialCount(total(pop), infraFacilities) : 0;
     const a = adjustAssumption(official, migMultiplier(s, year), lost, s.infraStrength);
-    pop = step(pop, a, cwrMultiplier(s, year));
+    pop = step(pop, a, cwrMultiplier(s, year) * cwrFactor);
     out[year + PERIOD] = pop;
   }
+}
+
+/** The year of the census count that `Area.actual` holds. */
+export const ACTUAL_YEAR = 2025;
+
+/**
+ * Project an area that has official assumptions, starting again from the 2025 census count.
+ *
+ * 2020 is the 2020 census, 2025 is the 2025 census (an actual count, not a projection), and every later period uses
+ * the same official rates as `projectArea` (periods 2025->30 ... 2045->50, then the held and scenario-adjusted rates),
+ * applied to the real 2025 population by sex and age. The official projection started from 2020; this one replaces its
+ * 2025 value with the count, so the five years of drift between the two are not carried forward.
+ *
+ * `cwrFactor` (default 1) multiplies the child-woman ratio of every period from 2025 on. With 1 the official births
+ * assumption is kept; with the factor from `observedBirthsFactor` the births shortfall seen in 2020-2025 is assumed to
+ * continue (a scenario, not a forecast).
+ *
+ * Throws when the area has no `actual` (the seven Hamamatsu wards); callers fall back to `projectArea`.
+ */
+export function projectAreaFromActual(
+  area: Area,
+  s: Scenario,
+  endYear: number = DEFAULT_END_YEAR,
+  facilities?: Facility[],
+  cwrFactor = 1,
+): Series {
+  checkEndYear(endYear);
+  checkScenario('projectAreaFromActual', s, facilities);
+  const periods = area.assumptions;
+  if (periods === null || periods.length === 0) {
+    throw new Error(`projectAreaFromActual: area ${area.code} has no assumptions; use projectAll for villages`);
+  }
+  if (!area.actual) throw new Error(`projectAreaFromActual: area ${area.code} has no 2025 census count`);
+  const infraFacilities = s.infraStrength > 0 ? facilities : undefined;
+  const out: Series = { [BASE_YEAR]: clonePop(area.base) };
+  if (endYear < ACTUAL_YEAR) return out;
+  out[ACTUAL_YEAR] = clonePop(area.actual);
+  advance(out, area.actual, ACTUAL_YEAR, endYear, periods, s, infraFacilities, cwrFactor);
+  return out;
+}
+
+/**
+ * An area without a 2025 count (the seven Hamamatsu wards) in a run "from the actual": the official projection up to
+ * 2025, then the same `cwrFactor` as every other area from 2025 on, so one national births assumption holds everywhere.
+ */
+function projectAreaFactorFrom2025(
+  area: Area,
+  s: Scenario,
+  endYear: number,
+  facilities: Facility[] | undefined,
+  cwrFactor: number,
+): Series {
+  const periods = area.assumptions;
+  if (periods === null || periods.length === 0 || endYear < ACTUAL_YEAR) return projectArea(area, s, endYear, facilities);
+  const infraFacilities = s.infraStrength > 0 ? facilities : undefined;
+  const out = projectArea(area, s, ACTUAL_YEAR, facilities);
+  advance(out, out[ACTUAL_YEAR], ACTUAL_YEAR, endYear, periods, s, infraFacilities, cwrFactor);
   return out;
 }
 
 /** Official ages to 2050, then the prefecture's period-by-period change applied to both sexes uniformly. */
-function projectVillage(area: Area, refTotals: Map<number, number> | undefined, endYear: number): Series {
+function projectVillage(
+  area: Area,
+  refTotals: Map<number, number> | undefined,
+  endYear: number,
+  fromActual = false,
+): Series {
   const ages = area.officialAges;
   if (!ages) throw new Error(`projectAll: area ${area.code} has neither assumptions nor officialAges`);
   const out: Series = { [BASE_YEAR]: clonePop(area.base) };
+  // From the 2025 count: 2025 is the count, and the official ages after it are scaled by actual / official (2025).
+  const official25 = ages[ACTUAL_YEAR];
+  const factor25 = fromActual && area.actual && official25 ? total(area.actual) / total(official25) : undefined;
   let lastYear = BASE_YEAR;
   for (let year = BASE_YEAR + PERIOD; year <= endYear; year += PERIOD) {
     const official = ages[year];
     if (!official) break;
-    out[year] = clonePop(official);
+    if (factor25 === undefined) {
+      out[year] = clonePop(official);
+    } else if (year === ACTUAL_YEAR) {
+      out[year] = clonePop(area.actual as Pop);
+    } else {
+      out[year] = { M: official.M.map((x) => x * factor25), F: official.F.map((x) => x * factor25) };
+    }
     lastYear = year;
   }
 
@@ -102,6 +188,9 @@ function projectVillage(area: Area, refTotals: Map<number, number> | undefined, 
  * assumptions follow the official ages to 2050, then the same prefecture's change (summed over the areas
  * that do have assumptions, under the same scenario). The map keeps the order of `areas`.
  *
+ * With `fromActual`, every area that has a 2025 census count (`Area.actual`) is projected from that count instead of from 2020
+ * (see projectAreaFromActual, including `cwrFactor`); the others run as before.
+ *
  * `facilities` is required when `s.infraStrength > 0` (see projectArea). The villages do not lose facilities
  * of their own; they follow their prefecture, which already includes the infra effect on the other areas.
  */
@@ -110,6 +199,8 @@ export function projectAll(
   s: Scenario,
   endYear: number = DEFAULT_END_YEAR,
   facilities?: Facility[],
+  fromActual = false,
+  cwrFactor = 1,
 ): Map<string, Series> {
   checkEndYear(endYear);
   checkScenario('projectAll', s, facilities);
@@ -118,7 +209,12 @@ export function projectAll(
 
   for (const area of areas) {
     if (area.assumptions === null) continue;
-    const series = projectArea(area, s, endYear, facilities);
+    const series =
+      fromActual && area.actual
+        ? projectAreaFromActual(area, s, endYear, facilities, cwrFactor)
+        : fromActual && cwrFactor !== 1
+          ? projectAreaFactorFrom2025(area, s, endYear, facilities, cwrFactor)
+          : projectArea(area, s, endYear, facilities);
     projected.set(area.code, series);
     let byYear = prefTotals.get(area.prefCode);
     if (!byYear) prefTotals.set(area.prefCode, (byYear = new Map()));
@@ -132,7 +228,7 @@ export function projectAll(
   for (const area of areas) {
     out.set(
       area.code,
-      projected.get(area.code) ?? projectVillage(area, prefTotals.get(area.prefCode), endYear),
+      projected.get(area.code) ?? projectVillage(area, prefTotals.get(area.prefCode), endYear, fromActual),
     );
   }
   return out;

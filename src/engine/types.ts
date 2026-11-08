@@ -24,6 +24,8 @@ export interface Area {
   prefName: string;
   kind: AreaKind;
   base: Pop; // 2020 census
+  /** 2025 census (actual count, 2025-10-01), same 20 age groups. Absent for the 7 Hamamatsu wards. */
+  actual?: Pop;
   official: Record<number, number>; // 2025..2050 official totals
   officialAges?: Record<number, Pop>; // only when assumptions === null
   assumptions: Assumption[] | null; // 6 periods: 2020->25 ... 2045->50; null for 13 villages
